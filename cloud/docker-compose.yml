@@ -58,6 +58,40 @@ services:
       redis:
         condition: service_healthy
 
+  mqtt_writer:
+    build:
+      context: services/mqtt_writer
+      dockerfile: Dockerfile
+    environment:
+      MQTT_BROKER: emqx
+      MQTT_PORT: 1883
+      DATABASE_URL: postgresql://livestockguard:${POSTGRES_PASSWORD:-livestockguard_dev}@postgres:5432/livestockguard
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      emqx:
+        condition: service_started
+
+  alert_engine:
+    build:
+      context: services/alert_engine
+      dockerfile: Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      AWS_REGION: af-south-1
+      SES_SENDER_EMAIL: ${SES_SENDER_EMAIL:-alerts@livestockguard.co.za}
+      ALERT_EMAIL_RECIPIENTS: ${ALERT_EMAIL_RECIPIENTS:-}
+      FIREBASE_CREDENTIALS_PATH: /app/config/firebase-credentials.json
+      WEBHOOK_URLS: ${WEBHOOK_URLS:-}
+    volumes:
+      - ${FIREBASE_CREDENTIALS_FILE:-./config/firebase-credentials.json}:/app/config/firebase-credentials.json:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+
 volumes:
   pgdata:
   redisdata:

@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useRealtimeStore } from '@/stores/realtimeStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useWebSocket } from '@/hooks/useWebSocket';
 
 const navItems = [
   { path: '/map', label: 'Map', icon: '🗺️' },
@@ -13,8 +14,12 @@ const navItems = [
 
 export default function AppLayout() {
   const alerts = useRealtimeStore((state) => state.alerts);
+  const wsConnected = useRealtimeStore((state) => state.wsConnected);
   const logout = useAuthStore((state) => state.logout);
   const activeAlerts = alerts.filter((a) => a.status === 'active').length;
+
+  // Establish WebSocket connection for real-time updates
+  useWebSocket();
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -50,6 +55,10 @@ export default function AppLayout() {
         </nav>
 
         <div className="p-4 border-t border-brand-800">
+          <div className="flex items-center gap-2 mb-3 text-xs text-brand-300">
+            <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-400' : 'bg-red-400'}`}></span>
+            {wsConnected ? 'Live' : 'Connecting...'}
+          </div>
           <button
             onClick={logout}
             className="w-full px-3 py-2 text-sm text-brand-200 hover:text-white hover:bg-brand-800 rounded-lg transition-colors"

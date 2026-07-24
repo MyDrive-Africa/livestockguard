@@ -9,6 +9,7 @@ This is the critical bridge between devices (or simulator) and the database.
 """
 
 import asyncio
+import json
 import os
 import struct
 import time
@@ -17,6 +18,7 @@ from typing import Optional
 
 import asyncpg
 import paho.mqtt.client as mqtt
+import redis.asyncio as aioredis
 import click
 
 # Configuration
@@ -26,6 +28,7 @@ DATABASE_URL = os.environ.get(
     "DATABASE_URL",
     "postgresql://livestockguard:livestockguard_dev@localhost:5432/livestockguard"
 )
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
 # Protocol constants
 PROTOCOL_VERSION = 0x01
@@ -36,6 +39,7 @@ MSG_HEARTBEAT = 0x04
 
 # Globals
 db_pool: Optional[asyncpg.Pool] = None
+redis_client: Optional[aioredis.Redis] = None
 loop: Optional[asyncio.AbstractEventLoop] = None
 stats = {"positions": 0, "alerts": 0, "errors": 0}
 
@@ -101,8 +105,19 @@ def decode_position_record(data: bytes, offset: int = 0) -> dict:
     }
 
 
+async def publish_realtime(channel: str, message: dict):
+    """Publish a real-time event to Redis pub/sub for WebSocket distribution."""
+    global redis_client
+    if redis_client is None:
+        return
+    try:
+        await redis_client.publish(channel, json.dumps(message))
+    except Exception as e:
+        print(f"  WARN Redis publish failed: {e}")
+
+
 async def write_position(device_id: int, position: dict):
-    """Write a position record to TimescaleDB."""
+    """Write a position record to TimescaleDB and publish to Redis for real-time push."""
     global db_pool, stats
 
     if db_pool is None:
@@ -112,9 +127,15 @@ async def write_position(device_id: int, position: dict):
         async with db_pool.acquire() as conn:
             device_uuid = await get_device_uuid(conn, device_id)
             # Look up linked animal
-            animal_id = await conn.fetchval(
-                "SELECT animal_id FROM devices WHERE id = $1", device_uuid
+            row = await conn.fetchrow(
+                "SELECT d.animal_id, d.farm_id, a.name as animal_name "
+                "FROM devices d LEFT JOIN animals a ON d.animal_id = a.id "
+                "WHERE d.id = $1", device_uuid
             )
+            animal_id = row["animal_id"] if row else None
+            farm_id = row["farm_id"] if row else None
+            animal_name = row["animal_name"] if row else f"Device-{device_id:04X}"
+
             await conn.execute("""
                 INSERT INTO positions (time, device_id, animal_id, location, latitude, longitude,
                                        speed, heading, hdop, battery_mv)
@@ -131,14 +152,32 @@ async def write_position(device_id: int, position: dict):
                 position["hdop"],
                 3700,  # Default battery mV
             )
+
         stats["positions"] += 1
+
+        # Publish to Redis for real-time WebSocket distribution
+        if farm_id:
+            await publish_realtime(f"farm:{farm_id}", {
+                "type": "position.update",
+                "payload": {
+                    "animalId": str(animal_id) if animal_id else str(device_uuid),
+                    "animalName": animal_name,
+                    "position": {
+                        "latitude": position["latitude"],
+                        "longitude": position["longitude"],
+                        "speed": position["speed"],
+                        "heading": position["heading"],
+                    },
+                    "batteryLevel": int(3700 / 37),  # Convert mV to %
+                },
+            })
     except Exception as e:
         stats["errors"] += 1
         print(f"  ERROR writing position: {e}")
 
 
 async def write_alert(device_id: int, alert_type: str, severity: str, message: str):
-    """Write an alert record."""
+    """Write an alert record and publish to Redis for real-time push."""
     global db_pool, stats
 
     if db_pool is None:
@@ -147,18 +186,55 @@ async def write_alert(device_id: int, alert_type: str, severity: str, message: s
     try:
         async with db_pool.acquire() as conn:
             device_uuid = await get_device_uuid(conn, device_id)
-            # Get farm_id from device
-            farm_id = await conn.fetchval(
-                "SELECT farm_id FROM devices WHERE id = $1", device_uuid
+            # Get farm_id and animal info from device
+            row = await conn.fetchrow(
+                "SELECT d.farm_id, d.animal_id, a.name as animal_name "
+                "FROM devices d LEFT JOIN animals a ON d.animal_id = a.id "
+                "WHERE d.id = $1", device_uuid
             )
+            farm_id = row["farm_id"] if row else None
+            animal_name = row["animal_name"] if row else None
+
             if farm_id is None:
                 return
 
-            await conn.execute("""
+            alert_id = await conn.fetchval("""
                 INSERT INTO alerts (farm_id, device_id, alert_type, severity, status, message)
                 VALUES ($1, $2, $3, $4, 'active', $5)
+                RETURNING id
             """, farm_id, device_uuid, alert_type, severity, message)
+
         stats["alerts"] += 1
+
+        # Publish alert to Redis for WebSocket distribution
+        if farm_id:
+            await publish_realtime(f"farm:{farm_id}", {
+                "type": "alert.created",
+                "payload": {
+                    "id": str(alert_id),
+                    "alert_type": alert_type,
+                    "severity": severity,
+                    "status": "active",
+                    "message": message,
+                    "animal_name": animal_name,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                },
+            })
+
+            # Also publish to alert engine channel for email/push/SMS dispatch
+            await publish_realtime("alerts:incoming", {
+                "alert_type": alert_type,
+                "severity": severity,
+                "device_id": f"{device_id:04X}",
+                "farm_id": str(farm_id),
+                "animal_id": str(row["animal_id"]) if row and row["animal_id"] else None,
+                "message": message,
+                "metadata": {
+                    "alert_id": str(alert_id),
+                    "animal_name": animal_name,
+                },
+                "timestamp": datetime.now(timezone.utc).timestamp(),
+            })
     except Exception as e:
         stats["errors"] += 1
         print(f"  ERROR writing alert: {e}")
@@ -263,13 +339,19 @@ async def print_stats():
 
 async def main_async(broker: str, port: int, db_url: str):
     """Async main loop."""
-    global db_pool, loop
+    global db_pool, redis_client, loop
     loop = asyncio.get_event_loop()
 
     # Connect to database
     print(f"Connecting to database: {db_url.split('@')[1] if '@' in db_url else db_url}")
     db_pool = await asyncpg.create_pool(db_url, min_size=2, max_size=10)
     print("Database connected")
+
+    # Connect to Redis for real-time pub/sub
+    print(f"Connecting to Redis: {REDIS_URL}")
+    redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
+    await redis_client.ping()
+    print("Redis connected")
 
     # Start MQTT client
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="lg-mqtt-writer")
