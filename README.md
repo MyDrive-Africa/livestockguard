@@ -190,21 +190,30 @@ livestockguard/
 
 ## Key Features
 
-| Feature | Status |
-|---------|--------|
-| Real-time GPS tracking | ✅ Working |
-| On-device geofencing (point-in-polygon) | ✅ Firmware complete |
-| Multi-protocol (NB-IoT, LoRaWAN, Satellite, BLE) | ✅ Architecture + HAL |
-| Theft detection (transport speed + night movement) | ✅ Firmware + alerts |
-| Herd health monitoring (activity classification) | ✅ Firmware |
-| Web dashboard with live map | ✅ MapLibre GL |
-| Geofence polygon overlays | ✅ Dashboard |
-| Movement trail visualisation | ✅ Dashboard |
-| Satellite/terrain tile switching | ✅ Dashboard |
-| Geofence drawing tools | ✅ Dashboard |
-| Multi-channel alerts (SMS, WhatsApp, Push) | 🔧 Framework ready |
-| Virtual fencing deterrents | 🔧 Firmware hooks ready |
-| OTA firmware updates | 🔧 Module structure ready |
+| Feature | Status | Evidence |
+|---------|--------|----------|
+| Real-time GPS tracking | ✅ Demo verified | Simulator → MQTT → TimescaleDB → API → map markers update live |
+| Theft detection (vehicle speed alert) | ✅ Demo verified | `make simulate-theft` → alert in DB + MQTT Writer logs `🚨 THEFT ALERT` |
+| Geofence breach alerts | ✅ Demo verified | `make simulate-breach` → alert in DB + MQTT Writer logs `🚨 GEOFENCE BREACH` |
+| Web dashboard with live map | ✅ Demo verified | MapLibre GL map with OpenStreetMap tiles, animal markers at real coords |
+| Geofence polygon overlays | ✅ Demo verified | 3 polygons visible (Paddock North, South, Dam exclusion zone) |
+| Satellite/terrain tile switching | ✅ Demo verified | Street / Satellite / Terrain toggle buttons work |
+| JWT authentication | ✅ Demo verified | Real bcrypt + JWT login, protected routes |
+| REST API (animals, devices, alerts) | ✅ Demo verified | FastAPI with Swagger docs at /docs |
+| Movement trail visualisation | ✅ Code complete | Click marker → 24h trail from `/history` endpoint (needs time to accumulate data) |
+| Geofence drawing tools | ✅ Code complete | Click-to-draw polygon on map, visual preview (saves to alert, not yet to DB/devices) |
+| On-device geofencing (point-in-polygon) | 📄 Code present | Firmware C implementation, not compiled/tested on hardware |
+| Multi-protocol (NB-IoT, LoRaWAN, Satellite, BLE) | 📄 Architecture | HAL interfaces defined, no real radio drivers |
+| Herd health monitoring (activity classification) | 📄 Code present | Algorithm in firmware, not exercised end-to-end |
+| Multi-channel alerts (SMS, WhatsApp, Push) | 🔧 Framework ready | Alert engine scaffold, dispatch hooks not wired to providers |
+| Virtual fencing deterrents | 🔧 Firmware hooks ready | Audio/vibration trigger points, no hardware |
+| OTA firmware updates | 🔧 Module structure ready | Module skeleton only |
+
+**Legend:**
+- ✅ Demo verified — tested end-to-end in local dev environment
+- ✅ Code complete — feature code works but requires specific conditions to demonstrate
+- 📄 Code present — implementation written but not testable without hardware/integration
+- 🔧 Framework ready — scaffolding and interfaces only
 
 ---
 
