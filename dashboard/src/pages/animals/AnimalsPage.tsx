@@ -8,10 +8,10 @@ function BatteryBadge({ level }: { level: number | null | undefined }) {
   if (level == null) return <span className="text-xs text-gray-400">—</span>;
   const color =
     level > 70
-      ? 'bg-green-100 text-green-800'
+      ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
       : level > 30
-        ? 'bg-yellow-100 text-yellow-800'
-        : 'bg-red-100 text-red-800';
+        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300'
+        : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300';
   return (
     <span className={`px-2 py-0.5 text-xs rounded-full ${color}`}>
       {level}%
@@ -82,12 +82,12 @@ export default function AnimalsPage() {
   );
 
   return (
-    <div className="p-6 h-full overflow-y-auto">
+    <div className="p-6 h-full overflow-y-auto bg-gray-50 dark:bg-gray-900 theme-transition">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Animals</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Animals</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             {animals.length} registered{' '}
             {animals.filter((a) => a.last_latitude).length} with GPS
           </p>
@@ -104,7 +104,7 @@ export default function AnimalsPage() {
           placeholder="Search by name, tag, or breed..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+          className="w-full max-w-md px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
         />
       </div>
 
@@ -127,23 +127,23 @@ export default function AnimalsPage() {
 
       {/* Table */}
       {!loading && !error && (
-        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden theme-transition">
           <table className="w-full">
-            <thead className="bg-gray-50 border-b">
+            <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
               <tr>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Name</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Tag ID</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Breed</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Last Position</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Speed</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Battery</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Status</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Name</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Tag ID</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Breed</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Last Position</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Speed</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Battery</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
               {filteredAnimals.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                     {search ? 'No animals match your search' : 'No animals registered yet'}
                   </td>
                 </tr>
@@ -152,22 +152,22 @@ export default function AnimalsPage() {
                 <tr
                   key={animal.id}
                   onClick={() => setSelectedAnimal(animal)}
-                  className="hover:bg-gray-50 cursor-pointer transition-colors"
+                  className="hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition-colors"
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <span className="text-lg">🐄</span>
-                      <span className="font-medium text-gray-900">{animal.name}</span>
+                      <span className="font-medium text-gray-900 dark:text-white">{animal.name}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-gray-600 font-mono text-sm">{animal.tag_id}</td>
-                  <td className="px-4 py-3 text-gray-600">{animal.breed || '—'}</td>
-                  <td className="px-4 py-3 text-gray-600 text-sm font-mono">
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400 font-mono text-sm">{animal.tag_id}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{animal.breed || '—'}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-sm font-mono">
                     {animal.last_latitude != null
                       ? `${animal.last_latitude.toFixed(5)}, ${animal.last_longitude!.toFixed(5)}`
                       : '—'}
                   </td>
-                  <td className="px-4 py-3 text-gray-600 text-sm">
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-sm">
                     {animal.last_speed != null ? `${animal.last_speed.toFixed(1)} km/h` : '—'}
                   </td>
                   <td className="px-4 py-3">
@@ -193,7 +193,7 @@ export default function AnimalsPage() {
           onClick={() => setSelectedAnimal(null)}
         >
           <div
-            className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 overflow-hidden"
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full mx-4 overflow-hidden theme-transition"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="bg-brand-600 text-white px-6 py-4">
@@ -205,31 +205,31 @@ export default function AnimalsPage() {
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Species</p>
-                  <p className="font-medium text-gray-900">{selectedAnimal.species}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Species</p>
+                  <p className="font-medium text-gray-900 dark:text-white">{selectedAnimal.species}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Breed</p>
-                  <p className="font-medium text-gray-900">{selectedAnimal.breed || '—'}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Breed</p>
+                  <p className="font-medium text-gray-900 dark:text-white">{selectedAnimal.breed || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Device</p>
-                  <p className="font-medium text-gray-900 font-mono text-sm">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Device</p>
+                  <p className="font-medium text-gray-900 dark:text-white font-mono text-sm">
                     {selectedAnimal.device_serial || 'Unassigned'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">Battery</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Battery</p>
                   <BatteryBadge level={selectedAnimal.battery_level} />
                 </div>
               </div>
 
               {selectedAnimal.last_latitude != null && (
-                <div className="border-t pt-4">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">
+                <div className="border-t dark:border-gray-700 pt-4">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
                     Last Known Position
                   </p>
-                  <div className="bg-gray-50 rounded-lg p-3 font-mono text-sm">
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 font-mono text-sm text-gray-900 dark:text-gray-100">
                     <p>Lat: {selectedAnimal.last_latitude.toFixed(6)}</p>
                     <p>Lon: {selectedAnimal.last_longitude!.toFixed(6)}</p>
                     {selectedAnimal.last_speed != null && (
@@ -239,7 +239,7 @@ export default function AnimalsPage() {
                 </div>
               )}
 
-              <div className="flex justify-end gap-2 border-t pt-4">
+              <div className="flex justify-end gap-2 border-t dark:border-gray-700 pt-4">
                 <a
                   href={`/map`}
                   className="px-4 py-2 text-sm bg-brand-100 text-brand-700 rounded-lg hover:bg-brand-200"

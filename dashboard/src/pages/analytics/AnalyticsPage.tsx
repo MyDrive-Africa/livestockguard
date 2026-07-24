@@ -21,17 +21,17 @@ const complianceRows = [
 
 export default function AnalyticsPage() {
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
+    <div className="p-6 space-y-6 bg-gray-50 dark:bg-gray-900 min-h-full theme-transition">
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analytics</h1>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {summaryCards.map((card) => (
-          <div key={card.label} className="bg-white rounded-xl shadow-sm border p-4">
-            <p className="text-sm text-gray-600">{card.label}</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{card.value}</p>
+          <div key={card.label} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 theme-transition">
+            <p className="text-sm text-gray-600 dark:text-gray-400">{card.label}</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{card.value}</p>
             {card.change && (
-              <p className={`text-sm mt-1 ${card.change.startsWith('+') ? 'text-green-600' : 'text-red-600'}`}>
+              <p className={`text-sm mt-1 ${card.change.startsWith('+') ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                 {card.change} vs yesterday
               </p>
             )}
@@ -40,19 +40,19 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Activity Breakdown */}
-      <div className="bg-white rounded-xl shadow-sm border p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Activity Breakdown (Today)</h2>
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 theme-transition">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Activity Breakdown (Today)</h2>
         <div className="space-y-3">
           {activityBreakdown.map((activity) => (
             <div key={activity.label} className="flex items-center gap-3">
-              <span className="w-20 text-sm text-gray-600">{activity.label}</span>
-              <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+              <span className="w-20 text-sm text-gray-600 dark:text-gray-400">{activity.label}</span>
+              <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-4 overflow-hidden">
                 <div
                   className={`h-full rounded-full ${activity.color}`}
                   style={{ width: `${activity.percentage}%` }}
                 ></div>
               </div>
-              <span className="w-12 text-sm text-right text-gray-700 font-medium">
+              <span className="w-12 text-sm text-right text-gray-700 dark:text-gray-300 font-medium">
                 {activity.percentage}%
               </span>
             </div>
@@ -61,30 +61,30 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Geofence Compliance */}
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div className="p-4 border-b">
-          <h2 className="text-lg font-semibold text-gray-900">Geofence Compliance (Last 7 Days)</h2>
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden theme-transition">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Geofence Compliance (Last 7 Days)</h2>
         </div>
         <table className="w-full">
-          <thead className="bg-gray-50 border-b">
+          <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
             <tr>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Geofence</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Compliance</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Breaches</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Avg. Return Time</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Geofence</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Compliance</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Breaches</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Avg. Return Time</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
             {complianceRows.map((row) => (
-              <tr key={row.fence} className="hover:bg-gray-50">
-                <td className="px-4 py-3 font-medium text-gray-900">{row.fence}</td>
+              <tr key={row.fence} className="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+                <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{row.fence}</td>
                 <td className="px-4 py-3">
-                  <span className={`font-medium ${row.compliance >= 98 ? 'text-green-600' : row.compliance >= 95 ? 'text-yellow-600' : 'text-red-600'}`}>
+                  <span className={`font-medium ${row.compliance >= 98 ? 'text-green-600 dark:text-green-400' : row.compliance >= 95 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>
                     {row.compliance}%
                   </span>
                 </td>
-                <td className="px-4 py-3 text-gray-600">{row.breaches}</td>
-                <td className="px-4 py-3 text-gray-600">{row.avgReturn}</td>
+                <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{row.breaches}</td>
+                <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{row.avgReturn}</td>
               </tr>
             ))}
           </tbody>

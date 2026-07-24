@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { useMapStore } from '@/stores/mapStore';
 import { useRealtimeStore } from '@/stores/realtimeStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useThemeStore } from '@/stores/themeStore';
 import { apiClient } from '@/api/client';
 
 // South Africa centre (Free State - Boschhoek Farm)
@@ -73,6 +73,7 @@ export default function MapPage() {
 
   const positions = useRealtimeStore((state) => state.positions);
   const currentFarm = useAuthStore((state) => state.currentFarm);
+  const resolved = useThemeStore((state) => state.resolved);
 
   // ─── Initialize Map ─────────────────────────────────
   useEffect(() => {
@@ -247,7 +248,7 @@ export default function MapPage() {
       if (name) {
         const fenceType = confirm('Is this an inclusion zone? (Cancel = exclusion zone)') ? 'inclusion' : 'exclusion';
         const closed = [...drawingPoints, drawingPoints[0]];
-        const geometry = { type: 'Polygon', coordinates: [closed] };
+        const geometry = { type: 'Polygon' as const, coordinates: [closed] };
 
         try {
           const farmId = currentFarm || '22222222-2222-2222-2222-222222222222';
@@ -311,7 +312,7 @@ export default function MapPage() {
 
     const isLow = battery != null && battery < 20;
     const el = document.createElement('div');
-    el.style.cssText = `width:32px;height:32px;background:${isLow ? '#ea580c' : '#16a34a'};border:2px solid white;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 6px rgba(0,0,0,0.3);transition:transform 0.3s;`;
+    el.style.cssText = `width:32px;height:32px;background:${isLow ? '#ea580c' : '#16a34a'};border:2px solid ${resolved === 'dark' ? '#374151' : 'white'};border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 6px rgba(0,0,0,0.3);transition:transform 0.3s;`;
     el.innerHTML = '🐄';
     el.title = name;
     el.addEventListener('click', (e) => { e.stopPropagation(); showTrail(id); });
@@ -352,7 +353,7 @@ export default function MapPage() {
   return (
     <div className="h-full w-full flex flex-col" style={{ height: '100%' }}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-white border-b z-10 shrink-0">
+      <div className="flex items-center justify-between px-4 py-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 z-10 shrink-0 theme-transition">
         <div className="flex items-center gap-4">
           <h2 className="text-lg font-semibold text-gray-800">Live Map</h2>
           <div className="flex items-center gap-1.5 text-xs">
@@ -390,7 +391,7 @@ export default function MapPage() {
       <div className="flex-1 min-h-0 relative" style={{ minHeight: 0 }}>
         <div ref={mapContainerRef} className="absolute inset-0" style={{ cursor: drawingMode ? 'crosshair' : 'grab', width: '100%', height: '100%' }} />
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-100/80 z-10">
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-100/80 dark:bg-gray-900/80 z-10">
             <div className="text-center">
               <div className="animate-spin w-8 h-8 border-4 border-brand-600 border-t-transparent rounded-full mx-auto mb-2"></div>
               <p className="text-gray-500">Loading map...</p>
@@ -400,7 +401,7 @@ export default function MapPage() {
       </div>
 
       {/* Status Bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-white border-t text-sm text-gray-600 z-10 shrink-0">
+      <div className="flex items-center justify-between px-4 py-2 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400 z-10 shrink-0 theme-transition">
         <div className="flex items-center gap-4">
           <span className="text-green-600 font-medium">🟢 {animalCount} animals</span>
           <span className="text-blue-600">{DEMO_GEOFENCES.length} geofences</span>
