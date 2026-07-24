@@ -62,12 +62,18 @@ db-migrate: ## Run database migrations
 db-shell: ## Open PostgreSQL shell
 	cd cloud && docker compose exec postgres psql -U livestockguard -d livestockguard
 
+db-seed: ## Load demo farm data (animals, devices, geofences)
+	@echo "$(CYAN)Loading seed data...$(RESET)"
+	cd cloud && docker compose exec -T postgres psql -U livestockguard -d livestockguard < ../scripts/seed_data.sql
+	@echo "$(GREEN)Demo farm loaded: Boschhoek Farm, 5 animals, 3 geofences$(RESET)"
+
 db-reset: ## Reset database (WARNING: destroys all data)
 	@echo "$(YELLOW)Resetting database...$(RESET)"
 	cd cloud && docker compose down -v
 	$(MAKE) start
 	sleep 3
 	$(MAKE) db-migrate
+	$(MAKE) db-seed
 
 # ─── SIMULATOR ──────────────────────────────────────
 
@@ -85,6 +91,12 @@ simulate-breach: ## Run geofence breach scenario
 
 simulate-many: ## Simulate 50 animals (stress test)
 	cd tools/simulator && python3 simulator.py --animals 50 --interval 15
+
+# ─── MQTT WRITER ────────────────────────────────────
+
+mqtt-writer: ## Start MQTT→DB writer (bridges simulator to database)
+	@echo "$(GREEN)Starting MQTT writer (devices → database)...$(RESET)"
+	cd cloud/services/mqtt_writer && python3 mqtt_writer.py
 
 # ─── DASHBOARD ──────────────────────────────────────
 
@@ -121,9 +133,11 @@ dev: ## Start everything for development
 	@echo "$(CYAN)Starting full development stack...$(RESET)"
 	$(MAKE) start
 	@echo ""
-	@echo "$(GREEN)Cloud stack running. Now open two more terminals:$(RESET)"
-	@echo "  Terminal 2: make dashboard"
-	@echo "  Terminal 3: make simulate"
+	@echo "$(GREEN)Cloud stack running. Now open MORE terminals:$(RESET)"
+	@echo ""
+	@echo "  Terminal 2: make mqtt-writer   (bridges MQTT → database)"
+	@echo "  Terminal 3: make simulate      (generates GPS data)"
+	@echo "  Terminal 4: make dashboard     (web UI at localhost:3000)"
 	@echo ""
 	@echo "$(CYAN)Then open http://localhost:3000 in your browser$(RESET)"
 
