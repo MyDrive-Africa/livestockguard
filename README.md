@@ -12,10 +12,16 @@ Real-time animal monitoring, virtual fencing, theft detection, and herd health �
 
 | Requirement | Install |
 |-------------|---------|
-| Docker Desktop | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) |
+| Docker (Colima or Desktop) | `brew install colima docker docker-compose` then `colima start` |
 | Node.js 18+ | `brew install node` |
 | Python 3.10+ | `brew install python3` |
 | Git | `brew install git` |
+
+> **Colima users:** After installing, link the Compose plugin so `docker compose` works:
+> ```bash
+> mkdir -p ~/.docker/cli-plugins
+> ln -sfn /opt/homebrew/opt/docker-compose/bin/docker-compose ~/.docker/cli-plugins/docker-compose
+> ```
 
 ### Clone & Setup (One Time)
 
@@ -47,7 +53,7 @@ make mqtt-writer
 make simulate         # 5 animals sending positions every 10s
 
 # Terminal 4: Web dashboard
-make dashboard        # Opens at http://localhost:3000
+make dashboard        # Opens at http://localhost:5173
 ```
 
 ### Verify It's Working
@@ -62,7 +68,7 @@ curl http://localhost:8000/api/devices
 curl http://localhost:8000/health
 
 # Open dashboard
-open http://localhost:3000
+open http://localhost:5173
 ```
 
 ### All Available Commands
@@ -83,7 +89,7 @@ make db-shell         # PostgreSQL CLI
 make db-reset         # Destroy and recreate (WARNING: data loss)
 
 # Development
-make dashboard        # Start React dev server (port 3000)
+make dashboard        # Start React dev server (port 5173)
 make mqtt-writer      # Start MQTT→DB bridge
 make simulate         # Normal grazing (5 animals)
 make simulate-theft   # Theft scenario
@@ -100,7 +106,7 @@ make clean            # Stop everything, remove volumes
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  DASHBOARD (React + MapLibre GL)          http://localhost:3000       │
+│  DASHBOARD (React + MapLibre GL)          http://localhost:5173       │
 │  - Live map with animal markers                                      │
 │  - Geofence polygon overlays                                         │
 │  - Movement trail lines (24h)                                        │
@@ -217,14 +223,21 @@ livestockguard/
 
 ## Demo Credentials
 
-After running `make db-seed`:
+After running `make db-seed`, log into the dashboard at **http://localhost:5173**:
 
 | Field | Value |
 |-------|-------|
-| Email | johan@boschhoek.co.za |
-| Password | demo123 |
+| Email | `africa.mydrive@gmail.com` |
+| Password | `demo123` |
 | Farm | Boschhoek Farm (Free State) |
 | Animals | Bella, Storm, Thunder, Daisy, Rosie |
+
+EMQX MQTT broker dashboard at **http://localhost:18083**:
+
+| Field | Value |
+|-------|-------|
+| Username | `admin` |
+| Password | `public` |
 
 ---
 

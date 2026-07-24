@@ -16,8 +16,8 @@ ON CONFLICT DO NOTHING;
 -- Demo user (password: demo123 — bcrypt hash)
 INSERT INTO users (id, organisation_id, email, password_hash, full_name, role) VALUES
     ('33333333-3333-3333-3333-333333333333', '11111111-1111-1111-1111-111111111111',
-     'johan@boschhoek.co.za',
-     '$2b$12$LQv3c1yqBo9SkvXS7QTJPeJh0n6RSbGHfFQTRz3Pp8e/X5xKqYqHe',
+     'africa.mydrive@gmail.com',
+     '$2b$12$l472OVKCboo1drRoOuzkl.H1uouXRVH7TCHvNZOwxWHt84wTs0Btu',
      'Johan van der Merwe', 'owner')
 ON CONFLICT DO NOTHING;
 

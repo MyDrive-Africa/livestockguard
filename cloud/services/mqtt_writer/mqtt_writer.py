@@ -82,7 +82,7 @@ def decode_position_record(data: bytes, offset: int = 0) -> dict:
         return None
 
     ts, lat_offset, lon_offset, speed, heading, hdop_x10, flags = \
-        struct.unpack_from('<iiibbbb', data, offset)
+        struct.unpack_from('<iiiBBBB', data, offset)
 
     # Convert offsets back to absolute coordinates
     # (In production, we'd store reference point per device)
@@ -110,14 +110,20 @@ async def write_position(device_id: int, position: dict):
 
     try:
         async with db_pool.acquire() as conn:
+            device_uuid = await get_device_uuid(conn, device_id)
+            # Look up linked animal
+            animal_id = await conn.fetchval(
+                "SELECT animal_id FROM devices WHERE id = $1", device_uuid
+            )
             await conn.execute("""
-                INSERT INTO positions (time, device_id, latitude, longitude,
+                INSERT INTO positions (time, device_id, animal_id, location, latitude, longitude,
                                        speed, heading, hdop, battery_mv)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                VALUES ($1, $2, $3, ST_SetSRID(ST_MakePoint($5, $4), 4326)::geography,
+                        $4, $5, $6, $7, $8, $9)
             """,
                 position["timestamp"],
-                # Map device_id int to UUID (lookup or create)
-                await get_device_uuid(conn, device_id),
+                device_uuid,
+                animal_id,
                 position["latitude"],
                 position["longitude"],
                 position["speed"],

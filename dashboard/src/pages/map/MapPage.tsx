@@ -292,9 +292,9 @@ export default function MapPage() {
 
   // ─── Render ────────────────────────────────────────
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full w-full flex flex-col" style={{ height: '100%' }}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-white border-b z-10">
+      <div className="flex items-center justify-between px-4 py-2 bg-white border-b z-10 shrink-0">
         <div className="flex items-center gap-4">
           <h2 className="text-lg font-semibold text-gray-800">Live Map</h2>
           <div className="flex items-center gap-1.5 text-xs">
@@ -329,8 +329,8 @@ export default function MapPage() {
       </div>
 
       {/* Map */}
-      <div className="flex-1 relative">
-        <div ref={mapContainerRef} className="absolute inset-0" style={{ cursor: drawingMode ? 'crosshair' : 'grab' }} />
+      <div className="flex-1 min-h-0 relative" style={{ minHeight: 0 }}>
+        <div ref={mapContainerRef} className="absolute inset-0" style={{ cursor: drawingMode ? 'crosshair' : 'grab', width: '100%', height: '100%' }} />
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-100/80 z-10">
             <div className="text-center">
@@ -342,7 +342,7 @@ export default function MapPage() {
       </div>
 
       {/* Status Bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-white border-t text-sm text-gray-600 z-10">
+      <div className="flex items-center justify-between px-4 py-2 bg-white border-t text-sm text-gray-600 z-10 shrink-0">
         <div className="flex items-center gap-4">
           <span className="text-green-600 font-medium">🟢 {animalCount} animals</span>
           <span className="text-blue-600">{DEMO_GEOFENCES.length} geofences</span>

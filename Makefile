@@ -27,7 +27,7 @@ setup: ## First-time setup (installs everything)
 
 start: ## Start cloud stack (PostgreSQL, Redis, EMQX, API)
 	@echo "$(GREEN)Starting cloud services...$(RESET)"
-	cd cloud && docker compose up -d
+	cd cloud && docker compose up -d --build
 	@echo ""
 	@echo "$(GREEN)Services started:$(RESET)"
 	@echo "  API Gateway:  http://localhost:8000/docs"
@@ -57,7 +57,7 @@ logs-api: ## Tail API gateway logs only
 
 db-migrate: ## Run database migrations
 	@echo "$(CYAN)Running migrations...$(RESET)"
-	cd cloud && docker compose exec postgres psql -U livestockguard -d livestockguard -f /docker-entrypoint-initdb.d/001_initial_schema.sql
+	cd cloud && docker compose exec -T postgres psql -U livestockguard -d livestockguard < migrations/versions/001_initial_schema.sql
 
 db-shell: ## Open PostgreSQL shell
 	cd cloud && docker compose exec postgres psql -U livestockguard -d livestockguard
@@ -71,7 +71,7 @@ db-reset: ## Reset database (WARNING: destroys all data)
 	@echo "$(YELLOW)Resetting database...$(RESET)"
 	cd cloud && docker compose down -v
 	$(MAKE) start
-	sleep 3
+	sleep 5
 	$(MAKE) db-migrate
 	$(MAKE) db-seed
 
@@ -101,7 +101,7 @@ mqtt-writer: ## Start MQTT→DB writer (bridges simulator to database)
 # ─── DASHBOARD ──────────────────────────────────────
 
 dashboard: ## Start web dashboard dev server
-	@echo "$(GREEN)Starting dashboard at http://localhost:3000$(RESET)"
+	@echo "$(GREEN)Starting dashboard at http://localhost:5173$(RESET)"
 	cd dashboard && npm run dev
 
 dashboard-install: ## Install dashboard dependencies
@@ -137,9 +137,9 @@ dev: ## Start everything for development
 	@echo ""
 	@echo "  Terminal 2: make mqtt-writer   (bridges MQTT → database)"
 	@echo "  Terminal 3: make simulate      (generates GPS data)"
-	@echo "  Terminal 4: make dashboard     (web UI at localhost:3000)"
+	@echo "  Terminal 4: make dashboard     (web UI at localhost:5173)"
 	@echo ""
-	@echo "$(CYAN)Then open http://localhost:3000 in your browser$(RESET)"
+	@echo "$(CYAN)Then open http://localhost:5173 in your browser$(RESET)"
 
 # ─── CLEANUP ────────────────────────────────────────
 
