@@ -2,15 +2,10 @@
 FastAPI dependencies for database sessions and auth.
 """
 
-import os
-import sys
 from typing import AsyncGenerator
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-
-# Add shared lib to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'shared'))
 
 from livestockguard_common.database import async_session_factory
 

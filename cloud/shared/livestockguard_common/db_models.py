@@ -84,7 +84,7 @@ class Device(Base):
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
     farm = relationship("Farm", back_populates="devices")
-    animal = relationship("Animal", back_populates="device", foreign_keys=[animal_id])
+    animal = relationship("Animal", foreign_keys=[animal_id], uselist=False)
 
 
 class Animal(Base):
@@ -103,7 +103,7 @@ class Animal(Base):
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
     farm = relationship("Farm", back_populates="animals")
-    device = relationship("Device", back_populates="animal", foreign_keys=[device_id])
+    device = relationship("Device", foreign_keys=[device_id], uselist=False)
 
 
 class Geofence(Base):
@@ -133,7 +133,7 @@ class Alert(Base):
     severity = Column(String(20), nullable=False)
     status = Column(String(20), nullable=False, default="active")
     message = Column(Text)
-    metadata = Column(JSONB, nullable=False, default=dict)
+    metadata_ = Column("metadata", JSONB, nullable=False, default=dict)
     acknowledged_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     acknowledged_at = Column(DateTime(timezone=True))
     resolved_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))

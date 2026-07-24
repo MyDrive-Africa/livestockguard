@@ -6,10 +6,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgeos-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY services/api_gateway/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app/ ./app/
+COPY services/api_gateway/app/ ./app/
+COPY shared/livestockguard_common/ ./livestockguard_common/
+
+ENV PYTHONPATH=/app
 
 EXPOSE 8000
 

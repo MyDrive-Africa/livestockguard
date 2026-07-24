@@ -123,14 +123,10 @@ class SimulatedAnimal:
         lat_i = int(self.lat * 1e7)
         lon_i = int(self.lon * 1e7)
 
-        if self.ref_lat is None:
-            self.ref_lat = lat_i
-            self.ref_lon = lon_i
-
-        record = struct.pack('<iiibbbb',
+        record = struct.pack('<iiiBBBB',
                              int(time.time()),
-                             lat_i - self.ref_lat,
-                             lon_i - self.ref_lon,
+                             lat_i,
+                             lon_i,
                              min(255, int(self.speed_kmh)),
                              int(self.heading_deg * 255 / 360),
                              int(1.2 * 10),  # hdop

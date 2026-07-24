@@ -1,12 +1,9 @@
 import os
-import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-# Add shared lib to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'shared'))
+from sqlalchemy import text
 
 from .routers import auth, devices, animals, geofences, alerts, analytics
 
@@ -14,17 +11,13 @@ from .routers import auth, devices, animals, geofences, alerts, analytics
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup/shutdown events."""
-    # Startup: verify DB connectivity
     from livestockguard_common.database import engine
     async with engine.begin() as conn:
         await conn.execute(text("SELECT 1"))
     print("Database connected")
     yield
-    # Shutdown
     await engine.dispose()
 
-
-from sqlalchemy import text
 
 app = FastAPI(
     title="LivestockGuard API",
@@ -35,7 +28,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://app.livestockguard.co.za"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://app.livestockguard.co.za",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

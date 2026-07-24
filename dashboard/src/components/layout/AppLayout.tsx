@@ -60,8 +60,10 @@ export default function AppLayout() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
-        <Outlet />
+      <main className="flex-1 overflow-hidden relative">
+        <div className="absolute inset-0">
+          <Outlet />
+        </div>
       </main>
     </div>
   );
