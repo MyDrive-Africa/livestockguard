@@ -3,6 +3,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapStore } from '@/stores/mapStore';
 import { useRealtimeStore } from '@/stores/realtimeStore';
+import { useAuthStore } from '@/stores/authStore';
 import { apiClient } from '@/api/client';
 
 // South Africa centre (Free State - Boschhoek Farm)
@@ -71,6 +72,7 @@ export default function MapPage() {
   const [drawingPoints, setDrawingPoints] = useState<[number, number][]>([]);
 
   const positions = useRealtimeStore((state) => state.positions);
+  const currentFarm = useAuthStore((state) => state.currentFarm);
 
   // ─── Initialize Map ─────────────────────────────────
   useEffect(() => {
@@ -93,7 +95,7 @@ export default function MapPage() {
 
     map.on('load', () => {
       setLoading(false);
-      addGeofenceLayers(map);
+      loadGeofences(map);
       fetchPositions(map);
     });
 
@@ -122,15 +124,40 @@ export default function MapPage() {
   }, [tileSource, loading]);
 
   // ─── Geofence Polygon Overlays ─────────────────────
-  function addGeofenceLayers(map: maplibregl.Map) {
+  function addGeofenceToMap(map: maplibregl.Map, id: string, name: string, type: string, geometry: any) {
+    const color = type === 'exclusion' ? '#ef4444' : '#22c55e';
+    map.addSource(`fence-${id}`, {
+      type: 'geojson',
+      data: { type: 'Feature', properties: { name }, geometry },
+    });
+    map.addLayer({ id: `fence-fill-${id}`, type: 'fill', source: `fence-${id}`, paint: { 'fill-color': color, 'fill-opacity': 0.1 } });
+    map.addLayer({ id: `fence-outline-${id}`, type: 'line', source: `fence-${id}`, paint: { 'line-color': color, 'line-width': 2, 'line-dasharray': type === 'exclusion' ? [4, 2] : [1] } });
+    map.addLayer({ id: `fence-label-${id}`, type: 'symbol', source: `fence-${id}`, layout: { 'text-field': name, 'text-size': 11 }, paint: { 'text-color': color, 'text-halo-color': '#fff', 'text-halo-width': 1.5 } });
+  }
+
+  async function loadGeofences(map: maplibregl.Map) {
+    try {
+      const farmId = currentFarm || '22222222-2222-2222-2222-222222222222';
+      const resp = await apiClient.get('/api/geofences', { params: { farm_id: farmId } });
+      const fences = resp.data;
+      if (fences.length > 0) {
+        fences.forEach((fence: any) => {
+          if (fence.geometry) {
+            addGeofenceToMap(map, fence.id, fence.name, fence.fence_type, fence.geometry);
+          }
+        });
+        return;
+      }
+    } catch {
+      // Fall through to demo geofences
+    }
+    // Fallback: demo geofences
+    addDemoGeofences(map);
+  }
+
+  function addDemoGeofences(map: maplibregl.Map) {
     DEMO_GEOFENCES.forEach((fence) => {
-      map.addSource(`fence-${fence.id}`, {
-        type: 'geojson',
-        data: { type: 'Feature', properties: { name: fence.name }, geometry: { type: 'Polygon', coordinates: [fence.coords] } },
-      });
-      map.addLayer({ id: `fence-fill-${fence.id}`, type: 'fill', source: `fence-${fence.id}`, paint: { 'fill-color': fence.color, 'fill-opacity': 0.1 } });
-      map.addLayer({ id: `fence-outline-${fence.id}`, type: 'line', source: `fence-${fence.id}`, paint: { 'line-color': fence.color, 'line-width': 2, 'line-dasharray': fence.type === 'exclusion' ? [4, 2] : [1] } });
-      map.addLayer({ id: `fence-label-${fence.id}`, type: 'symbol', source: `fence-${fence.id}`, layout: { 'text-field': fence.name, 'text-size': 11 }, paint: { 'text-color': fence.color, 'text-halo-color': '#fff', 'text-halo-width': 1.5 } });
+      addGeofenceToMap(map, fence.id, fence.name, fence.type, { type: 'Polygon', coordinates: [fence.coords] });
     });
   }
 
@@ -214,11 +241,42 @@ export default function MapPage() {
     }
   }, [drawingPoints, drawingMode, loading]);
 
-  function finishDrawing() {
+  async function finishDrawing() {
     if (drawingPoints.length >= 3) {
       const name = prompt('Geofence name:');
       if (name) {
-        alert(`Geofence "${name}" created with ${drawingPoints.length} vertices!\n(In production: pushes to API + devices)`);
+        const fenceType = confirm('Is this an inclusion zone? (Cancel = exclusion zone)') ? 'inclusion' : 'exclusion';
+        const closed = [...drawingPoints, drawingPoints[0]];
+        const geometry = { type: 'Polygon', coordinates: [closed] };
+
+        try {
+          const farmId = currentFarm || '22222222-2222-2222-2222-222222222222';
+          await apiClient.post('/api/geofences', {
+            name,
+            farm_id: farmId,
+            geometry,
+            fence_type: fenceType,
+            active: true,
+            alert_on_breach: true,
+          });
+
+          // Add the new geofence to the map
+          const map = mapRef.current;
+          if (map) {
+            const color = fenceType === 'exclusion' ? '#ef4444' : '#22c55e';
+            const fenceId = `user-fence-${Date.now()}`;
+            map.addSource(`fence-${fenceId}`, {
+              type: 'geojson',
+              data: { type: 'Feature', properties: { name }, geometry },
+            });
+            map.addLayer({ id: `fence-fill-${fenceId}`, type: 'fill', source: `fence-${fenceId}`, paint: { 'fill-color': color, 'fill-opacity': 0.1 } });
+            map.addLayer({ id: `fence-outline-${fenceId}`, type: 'line', source: `fence-${fenceId}`, paint: { 'line-color': color, 'line-width': 2, 'line-dasharray': fenceType === 'exclusion' ? [4, 2] : [1] } });
+            map.addLayer({ id: `fence-label-${fenceId}`, type: 'symbol', source: `fence-${fenceId}`, layout: { 'text-field': name, 'text-size': 11 }, paint: { 'text-color': color, 'text-halo-color': '#fff', 'text-halo-width': 1.5 } });
+          }
+        } catch (err) {
+          console.error('Failed to save geofence:', err);
+          alert('Failed to save geofence. Check console for details.');
+        }
       }
     }
     setDrawingMode(false);
@@ -279,9 +337,9 @@ export default function MapPage() {
     positions.forEach((pos, id) => addOrUpdateMarker(mapRef.current!, id, pos.animalName, pos.position.longitude, pos.position.latitude, pos.batteryLevel));
   }, [positions]);
 
-  // Auto-refresh
+  // Auto-refresh (fallback — primary updates come via WebSocket)
   useEffect(() => {
-    const i = setInterval(() => { if (mapRef.current) fetchPositions(mapRef.current); }, 30000);
+    const i = setInterval(() => { if (mapRef.current) fetchPositions(mapRef.current); }, 120000);
     return () => clearInterval(i);
   }, []);
 
@@ -349,7 +407,7 @@ export default function MapPage() {
           {selectedAnimal && <span className="text-purple-600">Trail: {trailData.length} pts</span>}
           {drawingMode && <span className="text-amber-600 font-medium">Drawing active</span>}
         </div>
-        <span className="text-gray-400">Tiles: {TILE_SOURCES[tileSource].label} | Refresh: 30s</span>
+        <span className="text-gray-400">Tiles: {TILE_SOURCES[tileSource].label} | Live via WebSocket</span>
       </div>
     </div>
   );

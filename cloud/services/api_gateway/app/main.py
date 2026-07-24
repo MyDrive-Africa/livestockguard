@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from .routers import auth, devices, animals, geofences, alerts, analytics
+from .routers.websocket import router as ws_router
 
 
 @asynccontextmanager
@@ -44,6 +45,7 @@ app.include_router(animals.router, prefix="/api/animals", tags=["animals"])
 app.include_router(geofences.router, prefix="/api/geofences", tags=["geofences"])
 app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
+app.include_router(ws_router, tags=["websocket"])
 
 
 @app.get("/health")
