@@ -1,101 +1,152 @@
-from typing import Optional
+"""
+Device management router — wired to real database.
+"""
+
+import os
+import sys
+from datetime import datetime, timezone
+from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import select, func, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'shared'))
+
+from livestockguard_common.db_models import Device, Animal
+from app.dependencies import get_db
 
 router = APIRouter()
 
 
-class DeviceCreate(BaseModel):
+class DeviceResponse(BaseModel):
+    id: str
     serial_number: str
-    device_type: str  # "collar" | "eartag"
+    device_type: str
     firmware_version: Optional[str] = None
+    status: str
+    battery_level: Optional[int] = None
+    last_seen: Optional[str] = None
+    animal_name: Optional[str] = None
 
-
-class DeviceUpdate(BaseModel):
-    name: Optional[str] = None
-    animal_id: Optional[UUID] = None
-    firmware_version: Optional[str] = None
-
-
-class DeviceConfig(BaseModel):
-    report_interval_s: int = 300
-    gnss_mode: str = "adaptive"
-    geofence_check_interval_s: int = 60
-    acceleration_threshold_mg: int = 500
+    class Config:
+        from_attributes = True
 
 
 class DeviceCommand(BaseModel):
-    command: str  # "reboot" | "locate" | "update_firmware" | "factory_reset"
-    params: Optional[dict] = None
+    command: str
+    priority: str = "normal"
+    params: dict = {}
 
 
-class ActivateRequest(BaseModel):
-    serial_number: str
-    activation_code: str
-    farm_id: UUID
-
-
-@router.get("/")
+@router.get("", response_model=List[DeviceResponse])
 async def list_devices(
     farm_id: Optional[UUID] = None,
-    device_type: Optional[str] = None,
-    limit: int = Query(default=50, le=200),
+    status: Optional[str] = None,
+    limit: int = Query(default=100, le=1000),
     offset: int = 0,
+    db: AsyncSession = Depends(get_db),
 ):
-    """List all devices, optionally filtered by farm or type."""
-    return {"devices": [], "total": 0, "limit": limit, "offset": offset}
+    """List all devices with optional filters."""
+    query = select(Device, Animal.name.label("animal_name")).outerjoin(
+        Animal, Device.animal_id == Animal.id
+    )
+
+    if farm_id:
+        query = query.where(Device.farm_id == farm_id)
+    if status:
+        query = query.where(Device.status == status)
+
+    query = query.limit(limit).offset(offset)
+    result = await db.execute(query)
+    rows = result.all()
+
+    return [
+        DeviceResponse(
+            id=str(row.Device.id),
+            serial_number=row.Device.serial_number,
+            device_type=row.Device.device_type,
+            firmware_version=row.Device.firmware_version,
+            status=row.Device.status,
+            battery_level=row.Device.battery_level,
+            last_seen=row.Device.last_seen.isoformat() if row.Device.last_seen else None,
+            animal_name=row.animal_name,
+        )
+        for row in rows
+    ]
 
 
-@router.post("/", status_code=201)
-async def create_device(device: DeviceCreate):
-    """Register a new device."""
-    return {"id": "placeholder", **device.model_dump()}
+@router.get("/{device_id}", response_model=DeviceResponse)
+async def get_device(device_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Get a single device."""
+    result = await db.execute(
+        select(Device, Animal.name.label("animal_name"))
+        .outerjoin(Animal, Device.animal_id == Animal.id)
+        .where(Device.id == device_id)
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Device not found")
 
-
-@router.get("/{device_id}")
-async def get_device(device_id: UUID):
-    """Get device details."""
-    return {"id": str(device_id), "serial_number": "", "device_type": "collar"}
-
-
-@router.put("/{device_id}")
-async def update_device(device_id: UUID, update: DeviceUpdate):
-    """Update device metadata."""
-    return {"id": str(device_id), **update.model_dump(exclude_none=True)}
-
-
-@router.delete("/{device_id}", status_code=204)
-async def delete_device(device_id: UUID):
-    """Remove a device."""
-    return None
+    return DeviceResponse(
+        id=str(row.Device.id),
+        serial_number=row.Device.serial_number,
+        device_type=row.Device.device_type,
+        firmware_version=row.Device.firmware_version,
+        status=row.Device.status,
+        battery_level=row.Device.battery_level,
+        last_seen=row.Device.last_seen.isoformat() if row.Device.last_seen else None,
+        animal_name=row.animal_name,
+    )
 
 
 @router.get("/{device_id}/positions")
 async def get_device_positions(
     device_id: UUID,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    limit: int = Query(default=100, le=1000),
+    from_time: Optional[str] = None,
+    to_time: Optional[str] = None,
+    limit: int = Query(default=100, le=10000),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Get historical position data for a device."""
-    return {"device_id": str(device_id), "positions": [], "count": 0}
+    """Get position history for a device from TimescaleDB."""
+    query = text("""
+        SELECT time, latitude, longitude, altitude, speed, heading,
+               battery_mv, signal_rssi
+        FROM positions
+        WHERE device_id = :device_id
+        ORDER BY time DESC
+        LIMIT :limit
+    """)
+    params = {"device_id": str(device_id), "limit": limit}
 
+    result = await db.execute(query, params)
+    rows = result.fetchall()
 
-@router.put("/{device_id}/config")
-async def update_device_config(device_id: UUID, config: DeviceConfig):
-    """Update device configuration (pushed via MQTT)."""
-    return {"device_id": str(device_id), "config": config.model_dump()}
+    positions = [
+        {
+            "time": row.time.isoformat(),
+            "latitude": row.latitude,
+            "longitude": row.longitude,
+            "altitude": row.altitude,
+            "speed_kmh": row.speed,
+            "heading_deg": row.heading,
+            "battery_mv": row.battery_mv,
+            "signal_rssi": row.signal_rssi,
+        }
+        for row in rows
+    ]
+
+    return {"device_id": str(device_id), "positions": positions, "count": len(positions)}
 
 
 @router.post("/{device_id}/command")
 async def send_device_command(device_id: UUID, command: DeviceCommand):
-    """Send a command to a device."""
-    return {"device_id": str(device_id), "command": command.command, "status": "queued"}
-
-
-@router.post("/activate")
-async def activate_device(request: ActivateRequest):
-    """Activate a device with an activation code and assign to farm."""
-    return {"serial_number": request.serial_number, "status": "activated"}
+    """Queue a command for a device (delivered on next check-in)."""
+    # TODO: Push to Redis command queue for device
+    return {
+        "status": "queued",
+        "device_id": str(device_id),
+        "command": command.command,
+    }

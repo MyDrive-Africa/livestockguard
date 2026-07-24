@@ -1,8 +1,21 @@
-from typing import Optional
+"""
+Animal management router — wired to real database.
+"""
+
+import os
+import sys
+from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'shared'))
+
+from livestockguard_common.db_models import Animal, Device
+from app.dependencies import get_db
 
 router = APIRouter()
 
@@ -10,66 +23,153 @@ router = APIRouter()
 class AnimalCreate(BaseModel):
     name: str
     tag_id: str
-    breed: Optional[str] = None
     species: str = "cattle"
-    date_of_birth: Optional[str] = None
+    breed: Optional[str] = None
     farm_id: UUID
     device_id: Optional[UUID] = None
 
 
-class AnimalUpdate(BaseModel):
-    name: Optional[str] = None
+class AnimalResponse(BaseModel):
+    id: str
+    name: str
+    tag_id: str
+    species: str
     breed: Optional[str] = None
-    device_id: Optional[UUID] = None
-    notes: Optional[str] = None
+    device_serial: Optional[str] = None
+    last_latitude: Optional[float] = None
+    last_longitude: Optional[float] = None
+    last_speed: Optional[float] = None
+    battery_level: Optional[int] = None
+
+    class Config:
+        from_attributes = True
 
 
-@router.get("/")
+@router.get("", response_model=List[AnimalResponse])
 async def list_animals(
     farm_id: Optional[UUID] = None,
     species: Optional[str] = None,
-    limit: int = Query(default=50, le=200),
+    limit: int = Query(default=100, le=1000),
     offset: int = 0,
+    db: AsyncSession = Depends(get_db),
 ):
-    """List all animals, optionally filtered by farm or species."""
-    return {"animals": [], "total": 0, "limit": limit, "offset": offset}
+    """List animals with their latest position."""
+    query = select(Animal, Device.serial_number.label("device_serial")).outerjoin(
+        Device, Animal.device_id == Device.id
+    )
+
+    if farm_id:
+        query = query.where(Animal.farm_id == farm_id)
+    if species:
+        query = query.where(Animal.species == species)
+
+    query = query.limit(limit).offset(offset)
+    result = await db.execute(query)
+    rows = result.all()
+
+    animals = []
+    for row in rows:
+        # Get latest position for this animal
+        pos_query = text("""
+            SELECT latitude, longitude, speed, battery_mv
+            FROM positions
+            WHERE animal_id = :animal_id
+            ORDER BY time DESC LIMIT 1
+        """)
+        pos_result = await db.execute(pos_query, {"animal_id": str(row.Animal.id)})
+        pos = pos_result.first()
+
+        animals.append(AnimalResponse(
+            id=str(row.Animal.id),
+            name=row.Animal.name,
+            tag_id=row.Animal.tag_id,
+            species=row.Animal.species,
+            breed=row.Animal.breed,
+            device_serial=row.device_serial,
+            last_latitude=pos.latitude if pos else None,
+            last_longitude=pos.longitude if pos else None,
+            last_speed=pos.speed if pos else None,
+            battery_level=int(pos.battery_mv / 37) if pos and pos.battery_mv else None,
+        ))
+
+    return animals
 
 
-@router.post("/", status_code=201)
-async def create_animal(animal: AnimalCreate):
+@router.post("", response_model=AnimalResponse, status_code=201)
+async def create_animal(animal: AnimalCreate, db: AsyncSession = Depends(get_db)):
     """Register a new animal."""
-    return {"id": "placeholder", **animal.model_dump()}
+    new_animal = Animal(
+        farm_id=animal.farm_id,
+        name=animal.name,
+        tag_id=animal.tag_id,
+        species=animal.species,
+        breed=animal.breed,
+        device_id=animal.device_id,
+    )
+    db.add(new_animal)
+    await db.commit()
+    await db.refresh(new_animal)
+
+    return AnimalResponse(
+        id=str(new_animal.id),
+        name=new_animal.name,
+        tag_id=new_animal.tag_id,
+        species=new_animal.species,
+        breed=new_animal.breed,
+    )
 
 
-@router.get("/{animal_id}")
-async def get_animal(animal_id: UUID):
-    """Get animal details including current position and status."""
-    return {"id": str(animal_id), "name": "", "tag_id": "", "species": "cattle"}
+@router.get("/{animal_id}", response_model=AnimalResponse)
+async def get_animal(animal_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Get animal details."""
+    result = await db.execute(select(Animal).where(Animal.id == animal_id))
+    animal = result.scalar_one_or_none()
+    if not animal:
+        raise HTTPException(status_code=404, detail="Animal not found")
 
-
-@router.put("/{animal_id}")
-async def update_animal(animal_id: UUID, update: AnimalUpdate):
-    """Update animal information."""
-    return {"id": str(animal_id), **update.model_dump(exclude_none=True)}
-
-
-@router.delete("/{animal_id}", status_code=204)
-async def delete_animal(animal_id: UUID):
-    """Remove an animal record."""
-    return None
+    return AnimalResponse(
+        id=str(animal.id),
+        name=animal.name,
+        tag_id=animal.tag_id,
+        species=animal.species,
+        breed=animal.breed,
+    )
 
 
 @router.get("/{animal_id}/history")
 async def get_animal_history(
     animal_id: UUID,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
-    limit: int = Query(default=100, le=1000),
+    hours: int = Query(default=24, le=168),
+    limit: int = Query(default=500, le=5000),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Get historical position and activity data for an animal."""
+    """Get position history for an animal."""
+    query = text("""
+        SELECT time, latitude, longitude, speed, heading, battery_mv
+        FROM positions
+        WHERE animal_id = :animal_id
+          AND time > NOW() - make_interval(hours => :hours)
+        ORDER BY time DESC
+        LIMIT :limit
+    """)
+    result = await db.execute(query, {
+        "animal_id": str(animal_id),
+        "hours": hours,
+        "limit": limit,
+    })
+    rows = result.fetchall()
+
     return {
         "animal_id": str(animal_id),
-        "positions": [],
-        "activities": [],
-        "count": 0,
+        "positions": [
+            {
+                "time": row.time.isoformat(),
+                "lat": row.latitude,
+                "lon": row.longitude,
+                "speed": row.speed,
+                "heading": row.heading,
+            }
+            for row in rows
+        ],
+        "count": len(rows),
     }
