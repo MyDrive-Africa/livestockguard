@@ -1,0 +1,65 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: timescale/timescaledb-ha:pg16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: livestockguard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-livestockguard_dev}
+      POSTGRES_DB: livestockguard
+    volumes:
+      - pgdata:/home/postgres/pgdata/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U livestockguard"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  emqx:
+    image: emqx/emqx:5.5
+    ports:
+      - "1883:1883"
+      - "8883:8883"
+      - "18083:18083"
+    environment:
+      EMQX_NAME: livestockguard
+      EMQX_HOST: 127.0.0.1
+    volumes:
+      - emqxdata:/opt/emqx/data
+
+  api_gateway:
+    build:
+      context: ./services/api_gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://livestockguard:${POSTGRES_PASSWORD:-livestockguard_dev}@postgres:5432/livestockguard
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production}
+      MQTT_HOST: emqx
+      MQTT_PORT: 1883
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+  emqxdata:

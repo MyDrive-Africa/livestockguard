@@ -1,0 +1,39 @@
+import { create } from 'zustand';
+import { AnimalPosition, Alert } from '@/types';
+
+interface RealtimeState {
+  positions: Map<string, AnimalPosition>;
+  alerts: Alert[];
+  wsConnected: boolean;
+  setConnected: (connected: boolean) => void;
+  updatePosition: (animalId: string, position: AnimalPosition) => void;
+  addAlert: (alert: Alert) => void;
+  acknowledgeAlert: (alertId: string) => void;
+}
+
+export const useRealtimeStore = create<RealtimeState>((set) => ({
+  positions: new Map(),
+  alerts: [],
+  wsConnected: false,
+
+  setConnected: (connected) => set({ wsConnected: connected }),
+
+  updatePosition: (animalId, position) =>
+    set((state) => {
+      const newPositions = new Map(state.positions);
+      newPositions.set(animalId, position);
+      return { positions: newPositions };
+    }),
+
+  addAlert: (alert) =>
+    set((state) => ({
+      alerts: [alert, ...state.alerts].slice(0, 100),
+    })),
+
+  acknowledgeAlert: (alertId) =>
+    set((state) => ({
+      alerts: state.alerts.map((a) =>
+        a.id === alertId ? { ...a, status: 'acknowledged' as const } : a
+      ),
+    })),
+}));

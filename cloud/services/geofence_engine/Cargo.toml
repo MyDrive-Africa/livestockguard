@@ -1,0 +1,15 @@
+[package]
+name = "livestockguard-geofence-engine"
+version = "0.1.0"
+edition = "2021"
+description = "Geofence evaluation engine for LivestockGuard"
+
+[dependencies]
+tokio = { version = "1.35", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+geo = "0.27"
+rstar = "0.12"
