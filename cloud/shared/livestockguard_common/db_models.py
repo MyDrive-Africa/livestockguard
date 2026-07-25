@@ -194,3 +194,97 @@ class NotificationPreference(Base):
 
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+
+# ─── Herdsman Gateway Models (Migration 007) ─────────────────────────────────
+
+
+class GatewayDevice(Base):
+    """Gateway device carried by a herdsman — collects BLE pings from ear tags."""
+    __tablename__ = "gateway_devices"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    farm_id = Column(UUID(as_uuid=True), ForeignKey("farms.id", ondelete="CASCADE"), nullable=False)
+    serial_number = Column(String(100), unique=True, nullable=False)
+    name = Column(String(255), nullable=False)
+    device_type = Column(String(50), nullable=False, default="phone")
+    herdsman_name = Column(String(255))
+    herdsman_phone = Column(String(50))
+    status = Column(String(50), nullable=False, default="active")
+    firmware_version = Column(String(50))
+    last_seen = Column(DateTime(timezone=True))
+    last_latitude = Column(Float)
+    last_longitude = Column(Float)
+    last_battery_pct = Column(Integer)
+    ble_scan_interval_ms = Column(Integer, nullable=False, default=5000)
+    report_interval_sec = Column(Integer, nullable=False, default=30)
+    max_ble_range_m = Column(Integer, nullable=False, default=100)
+    config = Column(JSONB, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+    farm = relationship("Farm")
+    sessions = relationship("HerdsmanSession", back_populates="gateway")
+
+
+class BleEarTag(Base):
+    """Passive BLE beacon attached to cattle — cheap, long battery, no GPS."""
+    __tablename__ = "ble_ear_tags"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    farm_id = Column(UUID(as_uuid=True), ForeignKey("farms.id", ondelete="CASCADE"), nullable=False)
+    animal_id = Column(UUID(as_uuid=True), ForeignKey("animals.id", ondelete="SET NULL"))
+    mac_address = Column(String(17), unique=True, nullable=False)
+    tag_name = Column(String(100))
+    manufacturer = Column(String(100))
+    battery_type = Column(String(50), default="CR2032")
+    estimated_battery_months = Column(Integer, default=36)
+    installed_date = Column(Date)
+    status = Column(String(50), nullable=False, default="active")
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+    farm = relationship("Farm")
+    animal = relationship("Animal")
+
+
+class BleSighting(Base):
+    """Single BLE advertisement received by a gateway — stored as time-series."""
+    __tablename__ = "ble_sightings"
+
+    time = Column(DateTime(timezone=True), primary_key=True, nullable=False)
+    gateway_id = Column(UUID(as_uuid=True), ForeignKey("gateway_devices.id", ondelete="CASCADE"), primary_key=True, nullable=False)
+    ble_tag_id = Column(UUID(as_uuid=True), ForeignKey("ble_ear_tags.id", ondelete="SET NULL"))
+    mac_address = Column(String(17), nullable=False)
+    animal_id = Column(UUID(as_uuid=True), ForeignKey("animals.id", ondelete="SET NULL"))
+    rssi = Column(Integer, nullable=False)
+    estimated_distance_m = Column(Float)
+    gateway_latitude = Column(Float, nullable=False)
+    gateway_longitude = Column(Float, nullable=False)
+    gateway_altitude = Column(Float)
+    gateway_speed = Column(Float)
+    gateway_battery_pct = Column(Integer)
+
+
+class HerdsmanSession(Base):
+    """Tracks a herdsman patrol shift — start/end, animals seen, distance."""
+    __tablename__ = "herdsman_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    gateway_id = Column(UUID(as_uuid=True), ForeignKey("gateway_devices.id", ondelete="CASCADE"), nullable=False)
+    farm_id = Column(UUID(as_uuid=True), ForeignKey("farms.id", ondelete="CASCADE"), nullable=False)
+    herdsman_name = Column(String(255))
+    started_at = Column(DateTime(timezone=True), default=func.now())
+    ended_at = Column(DateTime(timezone=True))
+    start_latitude = Column(Float)
+    start_longitude = Column(Float)
+    end_latitude = Column(Float)
+    end_longitude = Column(Float)
+    animals_seen = Column(Integer, default=0)
+    total_sightings = Column(Integer, default=0)
+    distance_walked_m = Column(Float)
+    notes = Column(Text)
+    status = Column(String(20), nullable=False, default="active")
+
+    gateway = relationship("GatewayDevice", back_populates="sessions")
+    farm = relationship("Farm")

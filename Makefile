@@ -85,6 +85,14 @@ simulate-lochvaal: ## Run simulator for Loch Vaal (10 animals)
 	@echo "$(GREEN)Starting device simulator (Loch Vaal Plot 30)...$(RESET)"
 	cd tools/simulator && python3 simulator.py --farm lochvaal --animals 10 --interval 10
 
+simulate-gateway: ## Run herdsman gateway simulator (BLE ear tags)
+	@echo "$(GREEN)Starting herdsman gateway simulator (Loch Vaal)...$(RESET)"
+	cd tools/simulator && python3 gateway_simulator.py --farm lochvaal --animals 10
+
+simulate-gateway-offline: ## Run gateway simulator without API (print only)
+	@echo "$(GREEN)Starting gateway simulator (offline mode)...$(RESET)"
+	cd tools/simulator && python3 gateway_simulator.py --farm lochvaal --animals 10 --offline
+
 simulate-theft: ## Run theft scenario simulation
 	@echo "$(YELLOW)Starting THEFT scenario...$(RESET)"
 	cd tools/simulator && python3 simulator.py --farm boschhoek --animals 5 --scenario theft --interval 5

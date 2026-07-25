@@ -12,6 +12,7 @@ const navItems = [
   { path: '/alerts', label: 'Alerts', icon: '🔔' },
   { path: '/analytics', label: 'Analytics', icon: '📊' },
   { path: '/devices', label: 'Devices', icon: '📡' },
+  { path: '/gateway', label: 'Herdsman', icon: '📶' },
 ];
 
 export default function AppLayout() {
