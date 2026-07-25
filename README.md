@@ -110,7 +110,10 @@ make clean            # Stop everything, remove volumes
 │  - Live map with animal markers                                      │
 │  - Geofence polygon overlays                                         │
 │  - Movement trail lines (24h)                                        │
-│  - Alerts, Analytics, Device management                              │
+│  - Dark/Light/System theme toggle                                    │
+│  - Animated UI (framer-motion page transitions, micro-interactions)  │
+│  - Analytics with Recharts (area, line, bar, donut, sparklines)      │
+│  - Alerts, Devices, Geofences management                            │
 └───────────────────────────────────┬──────────────────────────────────┘
                                     │ REST API
                                     ▼
@@ -177,10 +180,10 @@ livestockguard/
 │   └── migrations/        # SQL schema
 ├── dashboard/             # Web application
 │   ├── src/
-│   │   ├── pages/         # Map, Animals, Geofences, Alerts, etc.
-│   │   ├── stores/        # Zustand state management
+│   │   ├── pages/         # Map, Animals, Geofences, Alerts, Analytics, Devices
+│   │   ├── stores/        # Zustand (auth, map, realtime, theme)
 │   │   ├── hooks/         # WebSocket, API hooks
-│   │   └── components/    # Shared UI components
+│   │   └── components/    # ThemeToggle, motion (animations), layout
 │   └── package.json
 └── tools/
     └── simulator/         # Device simulator (Python)
@@ -202,6 +205,12 @@ livestockguard/
 | REST API (animals, devices, alerts) | ✅ Demo verified | FastAPI with Swagger docs at /docs |
 | Movement trail visualisation | ✅ Code complete | Click marker → 24h trail from `/history` endpoint (needs time to accumulate data) |
 | Geofence drawing tools | ✅ Code complete | Click-to-draw polygon on map, visual preview (saves to alert, not yet to DB/devices) |
+| Dark/Light/System theme toggle | ✅ Code complete | Zustand theme store + Tailwind `darkMode: 'class'`, persists in localStorage |
+| Animated UI (framer-motion) | ✅ Code complete | Page transitions, stagger cards, animated progress bars, count-up numbers, pulse badges |
+| Analytics with Recharts | ✅ Code complete | Area/line/bar/donut charts, sparklines in cards, dark-mode aware tooltips, date range picker |
+| Real-time WebSocket feed | ✅ Code complete | MQTT Writer → Redis pub/sub → API `/ws` → dashboard live updates |
+| Alert dispatchers (SES, FCM, Webhook) | ✅ Code complete | Alert engine with email, push notification, webhook, and Redis dashboard dispatchers |
+| API Gateway test suite | ✅ Code complete | 47 pytest cases covering auth, animals, alerts, devices, geofences, analytics, websocket |
 | On-device geofencing (point-in-polygon) | 📄 Code present | Firmware C implementation, not compiled/tested on hardware |
 | Multi-protocol (NB-IoT, LoRaWAN, Satellite, BLE) | 📄 Architecture | HAL interfaces defined, no real radio drivers |
 | Herd health monitoring (activity classification) | 📄 Code present | Algorithm in firmware, not exercised end-to-end |
@@ -214,6 +223,27 @@ livestockguard/
 - ✅ Code complete — feature code works but requires specific conditions to demonstrate
 - 📄 Code present — implementation written but not testable without hardware/integration
 - 🔧 Framework ready — scaffolding and interfaces only
+
+---
+
+## Testing
+
+### API Gateway (Backend)
+
+```bash
+cd cloud/services/api_gateway
+pip install -r requirements.txt -r requirements-test.txt
+pytest -v
+```
+
+Tests use an in-memory SQLite database — no PostgreSQL, Redis, or Docker needed. Covers:
+- Authentication (login, register, refresh token flows)
+- Animals CRUD + filtering/pagination
+- Alerts listing, acknowledge, resolve state transitions
+- Devices listing, detail, command queuing
+- Geofences CRUD, geometry validation, active/inactive filtering
+- Analytics stub endpoints (structure validation)
+- WebSocket token verification
 
 ---
 
