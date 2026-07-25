@@ -8,9 +8,9 @@ const demoGeofences = [
 
 export default function GeofencesPage() {
   return (
-    <div className="p-6">
+    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-full theme-transition">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Geofences</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Geofences</h1>
         <button className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors">
           + Create Geofence
         </button>
@@ -20,17 +20,17 @@ export default function GeofencesPage() {
         {demoGeofences.map((fence) => (
           <div
             key={fence.id}
-            className="bg-white rounded-xl shadow-sm border p-4 flex items-center justify-between hover:shadow-md transition-shadow"
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between hover:shadow-md dark:hover:shadow-lg dark:hover:shadow-black/10 transition-all theme-transition"
           >
             <div className="flex items-center gap-4">
               <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                fence.type === 'inclusion' ? 'bg-green-100' : 'bg-red-100'
+                fence.type === 'inclusion' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
               }`}>
                 <span className="text-lg">{fence.type === 'inclusion' ? '🟢' : '🔴'}</span>
               </div>
               <div>
-                <h3 className="font-medium text-gray-900">{fence.name}</h3>
-                <p className="text-sm text-gray-500">
+                <h3 className="font-medium text-gray-900 dark:text-white">{fence.name}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   {fence.type} &middot; {fence.area} &middot; {fence.animals} animals inside
                 </p>
               </div>
@@ -39,12 +39,12 @@ export default function GeofencesPage() {
             <div className="flex items-center gap-3">
               <span className={`px-3 py-1 text-xs rounded-full font-medium ${
                 fence.active
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-gray-100 text-gray-600'
+                  ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
+                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
               }`}>
                 {fence.active ? 'Active' : 'Inactive'}
               </span>
-              <button className="text-gray-400 hover:text-gray-600">
+              <button className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300">
                 <span>...</span>
               </button>
             </div>

@@ -17,9 +17,9 @@ const demoDevices = [
 
 export default function DevicesPage() {
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 bg-gray-50 dark:bg-gray-900 min-h-full theme-transition">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Devices</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Devices</h1>
         <button className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700">
           + Register Device
         </button>
@@ -28,34 +28,34 @@ export default function DevicesPage() {
       {/* Fleet Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {fleetSummary.map((item) => (
-          <div key={item.label} className="bg-white rounded-xl shadow-sm border p-4 text-center">
-            <p className="text-2xl font-bold text-gray-900">{item.value}</p>
-            <p className="text-sm text-gray-600">{item.label}</p>
+          <div key={item.label} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 text-center theme-transition">
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{item.value}</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">{item.label}</p>
           </div>
         ))}
       </div>
 
       {/* Device Table */}
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden theme-transition">
         <table className="w-full">
-          <thead className="bg-gray-50 border-b">
+          <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
             <tr>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Device ID</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Animal</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Type</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Battery</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Signal</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600">Status</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Device ID</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Animal</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Type</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Battery</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Signal</th>
+              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
             {demoDevices.map((device) => (
-              <tr key={device.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 font-mono text-sm font-medium text-gray-900">
+              <tr key={device.id} className="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+                <td className="px-4 py-3 font-mono text-sm font-medium text-gray-900 dark:text-white">
                   {device.id}
                 </td>
-                <td className="px-4 py-3 text-gray-700">{device.animal}</td>
-                <td className="px-4 py-3 text-gray-600">{device.type}</td>
+                <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{device.animal}</td>
+                <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{device.type}</td>
                 <td className="px-4 py-3">
                   <BatteryIndicator level={device.battery} />
                 </td>
@@ -75,23 +75,23 @@ export default function DevicesPage() {
 }
 
 function BatteryIndicator({ level }: { level: number }) {
-  const color = level > 70 ? 'text-green-600' : level > 30 ? 'text-yellow-600' : 'text-red-600';
+  const color = level > 70 ? 'text-green-600 dark:text-green-400' : level > 30 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400';
   return <span className={`text-sm font-medium ${color}`}>{level}%</span>;
 }
 
 function SignalIndicator({ rssi }: { rssi: number }) {
-  if (rssi === 0) return <span className="text-sm text-gray-400">N/A</span>;
+  if (rssi === 0) return <span className="text-sm text-gray-400 dark:text-gray-500">N/A</span>;
   const strength = rssi > -70 ? 'Strong' : rssi > -85 ? 'Good' : 'Weak';
-  const color = rssi > -70 ? 'text-green-600' : rssi > -85 ? 'text-yellow-600' : 'text-red-600';
+  const color = rssi > -70 ? 'text-green-600 dark:text-green-400' : rssi > -85 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400';
   return <span className={`text-sm ${color}`}>{strength} ({rssi} dBm)</span>;
 }
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    active: 'bg-green-100 text-green-800',
-    low_battery: 'bg-yellow-100 text-yellow-800',
-    offline: 'bg-gray-100 text-gray-600',
-    maintenance: 'bg-blue-100 text-blue-800',
+    active: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+    low_battery: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+    offline: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
+    maintenance: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
   };
   return (
     <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${styles[status] || styles.active}`}>

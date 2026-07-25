@@ -5,19 +5,19 @@ import { apiClient } from '@/api/client';
 import type { Alert } from '@/types';
 
 const severityStyles: Record<string, string> = {
-  critical: 'border-l-red-600 bg-red-50',
-  high: 'border-l-orange-500 bg-orange-50',
-  medium: 'border-l-yellow-500 bg-yellow-50',
-  low: 'border-l-blue-400 bg-blue-50',
-  info: 'border-l-gray-400 bg-gray-50',
+  critical: 'border-l-red-600 bg-red-50 dark:bg-red-900/20',
+  high: 'border-l-orange-500 bg-orange-50 dark:bg-orange-900/20',
+  medium: 'border-l-yellow-500 bg-yellow-50 dark:bg-yellow-900/20',
+  low: 'border-l-blue-400 bg-blue-50 dark:bg-blue-900/20',
+  info: 'border-l-gray-400 bg-gray-50 dark:bg-gray-800',
 };
 
 const severityBadge: Record<string, string> = {
-  critical: 'bg-red-100 text-red-800',
-  high: 'bg-orange-100 text-orange-800',
-  medium: 'bg-yellow-100 text-yellow-800',
-  low: 'bg-blue-100 text-blue-800',
-  info: 'bg-gray-100 text-gray-800',
+  critical: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+  high: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
+  medium: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+  low: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+  info: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
 };
 
 const alertTypeLabels: Record<string, string> = {
@@ -124,12 +124,12 @@ export default function AlertsPage() {
   const criticalCount = alerts.filter((a) => a.severity === 'critical' && a.status === 'active').length;
 
   return (
-    <div className="p-6 h-full overflow-y-auto">
+    <div className="p-6 h-full overflow-y-auto bg-gray-50 dark:bg-gray-900 theme-transition">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Alerts</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Alerts</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             {activeCount} active{criticalCount > 0 && ` (${criticalCount} critical)`}
           </p>
         </div>
@@ -137,7 +137,7 @@ export default function AlertsPage() {
           <select
             value={filterSeverity}
             onChange={(e) => setFilterSeverity(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
           >
             <option value="all">All Severities</option>
             <option value="critical">Critical</option>
@@ -148,7 +148,7 @@ export default function AlertsPage() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
           >
             <option value="all">All Status</option>
             <option value="active">Active</option>
@@ -157,7 +157,7 @@ export default function AlertsPage() {
           </select>
           <button
             onClick={fetchAlerts}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
+            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800"
           >
             Refresh
           </button>
@@ -173,9 +173,9 @@ export default function AlertsPage() {
 
       {/* Error state */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-          <p className="text-red-700">{error}</p>
-          <button onClick={fetchAlerts} className="text-sm text-red-600 underline mt-1">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">
+          <p className="text-red-700 dark:text-red-400">{error}</p>
+          <button onClick={fetchAlerts} className="text-sm text-red-600 dark:text-red-400 underline mt-1">
             Retry
           </button>
         </div>
@@ -185,8 +185,8 @@ export default function AlertsPage() {
       {!loading && !error && alerts.length === 0 && (
         <div className="text-center py-12">
           <div className="text-4xl mb-3">🔔</div>
-          <h3 className="text-lg font-medium text-gray-900">No alerts</h3>
-          <p className="text-gray-500 mt-1">All systems are operating normally.</p>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white">No alerts</h3>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">All systems are operating normally.</p>
         </div>
       )}
 
@@ -206,16 +206,16 @@ export default function AlertsPage() {
                     >
                       {alert.severity}
                     </span>
-                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                    <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
                       {alertTypeLabels[alert.alert_type] || alert.alert_type}
                     </span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-gray-400 dark:text-gray-500">
                       {timeAgo(alert.created_at)}
                     </span>
                   </div>
-                  <p className="font-medium text-gray-900 truncate">{alert.message || 'Alert triggered'}</p>
+                  <p className="font-medium text-gray-900 dark:text-white truncate">{alert.message || 'Alert triggered'}</p>
                   {alert.animal_name && (
-                    <p className="text-sm text-gray-600 mt-1">Animal: {alert.animal_name}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Animal: {alert.animal_name}</p>
                   )}
                 </div>
 
@@ -225,7 +225,7 @@ export default function AlertsPage() {
                       <button
                         onClick={() => handleAcknowledge(alert.id)}
                         disabled={actionLoading === alert.id}
-                        className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                        className="px-3 py-1.5 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 disabled:opacity-50"
                       >
                         {actionLoading === alert.id ? '...' : 'Acknowledge'}
                       </button>
@@ -250,10 +250,10 @@ export default function AlertsPage() {
                   <span
                     className={`px-2 py-0.5 text-xs rounded-full ${
                       alert.status === 'active'
-                        ? 'bg-red-100 text-red-700'
+                        ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
                         : alert.status === 'acknowledged'
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : 'bg-green-100 text-green-700'
+                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300'
+                          : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
                     }`}
                   >
                     {alert.status}
