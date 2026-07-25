@@ -1,0 +1,163 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+  RUST_VERSION: "stable"
+
+jobs:
+  # ─── Python: API Gateway Tests ────────────────────────
+  api-gateway-tests:
+    name: API Gateway (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloud/services/api_gateway
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: cloud/services/api_gateway/requirements*.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt -r requirements-test.txt
+
+      - name: Run tests
+        env:
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          JWT_SECRET: "test_secret"
+        run: pytest -v --tb=short
+
+  # ─── Python: Alert Engine Tests ───────────────────────
+  alert-engine-tests:
+    name: Alert Engine (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloud/services/alert_engine
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: cloud/services/alert_engine/requirements*.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt -r requirements-test.txt
+
+      - name: Run tests
+        run: pytest -v --tb=short
+
+  # ─── Python: MQTT Writer Tests ────────────────────────
+  mqtt-writer-tests:
+    name: MQTT Writer (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloud/services/mqtt_writer
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: cloud/services/mqtt_writer/requirements*.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt -r requirements-test.txt
+
+      - name: Run tests
+        run: pytest -v --tb=short
+
+  # ─── Rust: Ingestion + Geofence Engine Tests ──────────
+  rust-tests:
+    name: Rust Services
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            cloud/services/ingestion
+            cloud/services/geofence_engine
+
+      - name: Test ingestion service
+        working-directory: cloud/services/ingestion
+        run: cargo test --verbose
+
+      - name: Test geofence engine
+        working-directory: cloud/services/geofence_engine
+        run: cargo test --verbose
+
+  # ─── TypeScript: Dashboard Build Check ────────────────
+  dashboard-build:
+    name: Dashboard (TypeScript)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+  # ─── Summary Job (required check) ────────────────────
+  ci-pass:
+    name: CI Pass
+    runs-on: ubuntu-latest
+    needs:
+      - api-gateway-tests
+      - alert-engine-tests
+      - mqtt-writer-tests
+      - rust-tests
+      - dashboard-build
+    if: always()
+
+    steps:
+      - name: Check all jobs passed
+        run: |
+          if [[ "${{ needs.api-gateway-tests.result }}" != "success" ]] ||
+             [[ "${{ needs.alert-engine-tests.result }}" != "success" ]] ||
+             [[ "${{ needs.mqtt-writer-tests.result }}" != "success" ]] ||
+             [[ "${{ needs.rust-tests.result }}" != "success" ]] ||
+             [[ "${{ needs.dashboard-build.result }}" != "success" ]]; then
+            echo "One or more jobs failed"
+            exit 1
+          fi
+          echo "All CI jobs passed ✓"
