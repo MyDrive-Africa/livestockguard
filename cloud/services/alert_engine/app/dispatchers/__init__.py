@@ -9,10 +9,12 @@ from .email_ses import SESEmailDispatcher
 from .push_fcm import FCMPushDispatcher
 from .dashboard_redis import DashboardRedisDispatcher
 from .webhook import WebhookDispatcher
+from .sms_africastalking import AfricasTalkingSMSDispatcher
 
 __all__ = [
     "SESEmailDispatcher",
     "FCMPushDispatcher",
     "DashboardRedisDispatcher",
     "WebhookDispatcher",
+    "AfricasTalkingSMSDispatcher",
 ]

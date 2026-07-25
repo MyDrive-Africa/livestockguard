@@ -27,6 +27,7 @@ from .dispatchers.email_ses import SESEmailDispatcher
 from .dispatchers.push_fcm import FCMPushDispatcher
 from .dispatchers.dashboard_redis import DashboardRedisDispatcher
 from .dispatchers.webhook import WebhookDispatcher
+from .dispatchers.sms_africastalking import AfricasTalkingSMSDispatcher
 
 # Configure logging
 logging.basicConfig(
@@ -119,16 +120,23 @@ class AlertEngine:
         self.push_dispatcher = FCMPushDispatcher()
         self.dashboard_dispatcher = DashboardRedisDispatcher()
         self.webhook_dispatcher = WebhookDispatcher()
+        self.sms_dispatcher = AfricasTalkingSMSDispatcher()
 
         # Default notification recipients (override per farm in production)
         self.default_email_recipients = self._load_email_recipients()
+        self.default_sms_recipients = self._load_sms_recipients()
 
-        logger.info("AlertEngine initialized with dispatchers: SES, FCM, Redis, Webhook")
+        logger.info("AlertEngine initialized with dispatchers: SES, FCM, Redis, Webhook, SMS(AT)")
 
     def _load_email_recipients(self) -> list[str]:
         """Load default email recipients from env."""
         recipients = os.environ.get("ALERT_EMAIL_RECIPIENTS", "")
         return [e.strip() for e in recipients.split(",") if e.strip()]
+
+    def _load_sms_recipients(self) -> list[str]:
+        """Load default SMS recipients from env (E.164 format)."""
+        recipients = os.environ.get("ALERT_SMS_RECIPIENTS", "")
+        return [p.strip() for p in recipients.split(",") if p.strip()]
 
     def _cooldown_key(self, event: AlertEvent) -> str:
         """Generate a unique key for cooldown tracking."""
@@ -188,12 +196,12 @@ class AlertEngine:
         self.push_dispatcher.dispatch(event, topic=topic)
 
     def _send_sms(self, event: AlertEvent) -> None:
-        """Send SMS notification (future: Africa's Talking / Amazon SNS)."""
-        # TODO: Wire up Africa's Talking or Amazon SNS for SMS
-        logger.info(
-            f"SMS dispatch pending implementation: {event.alert_type.value} "
-            f"farm={event.farm_id}"
-        )
+        """Send SMS notification via Africa's Talking."""
+        recipients = self.default_sms_recipients
+        if recipients:
+            self.sms_dispatcher.dispatch(event, recipients)
+        else:
+            logger.debug("No SMS recipients configured")
 
     def _send_email(self, event: AlertEvent) -> None:
         """Send email notification via Amazon SES."""
