@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from livestockguard_common.db_models import Base, Organisation, Farm, User, Animal, Device, Geofence, Alert
-from app.dependencies import get_db
+from app.dependencies import get_db, get_current_user
 from app.routers.auth import pwd_context
 
 
@@ -42,6 +42,15 @@ async def override_get_db():
     """Override the get_db dependency for tests."""
     async with test_session_factory() as session:
         yield session
+
+
+async def override_get_current_user():
+    """Override auth dependency for tests — returns a mock admin user."""
+    return {
+        "user_id": str(TEST_USER_ID),
+        "email": "farmer@test.com",
+        "role": "admin",
+    }
 
 
 # ─── Fixtures ─────────────────────────────────────────
@@ -69,6 +78,7 @@ async def client():
     from app.main import app
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
