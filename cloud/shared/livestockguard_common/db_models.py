@@ -142,3 +142,31 @@ class Alert(Base):
     created_at = Column(DateTime(timezone=True), default=func.now())
 
     farm = relationship("Farm", back_populates="alerts")
+
+
+class NotificationPreference(Base):
+    __tablename__ = "notification_preferences"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    farm_id = Column(UUID(as_uuid=True), ForeignKey("farms.id", ondelete="CASCADE"), nullable=False)
+
+    # Channel toggles
+    push_enabled = Column(Boolean, nullable=False, default=True)
+    email_enabled = Column(Boolean, nullable=False, default=True)
+    sms_enabled = Column(Boolean, nullable=False, default=False)
+    webhook_enabled = Column(Boolean, nullable=False, default=False)
+
+    # Severity filter
+    min_severity = Column(String(20), nullable=False, default="medium")
+
+    # Quiet hours
+    quiet_start = Column(String(5))  # HH:MM
+    quiet_end = Column(String(5))    # HH:MM
+
+    # Contact overrides
+    sms_phone = Column(String(20))
+    webhook_url = Column(Text)
+
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())

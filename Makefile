@@ -65,7 +65,7 @@ db-shell: ## Open PostgreSQL shell
 db-seed: ## Load demo farm data (animals, devices, geofences)
 	@echo "$(CYAN)Loading seed data...$(RESET)"
 	cd cloud && docker compose exec -T postgres psql -U livestockguard -d livestockguard < ../scripts/seed_data.sql
-	@echo "$(GREEN)Demo farm loaded: Boschhoek Farm, 5 animals, 3 geofences$(RESET)"
+	@echo "$(GREEN)Loaded: Boschhoek Farm (5 animals) + Loch Vaal Plot 30 (10 animals)$(RESET)"
 
 db-reset: ## Reset database (WARNING: destroys all data)
 	@echo "$(YELLOW)Resetting database...$(RESET)"
@@ -77,20 +77,24 @@ db-reset: ## Reset database (WARNING: destroys all data)
 
 # ─── SIMULATOR ──────────────────────────────────────
 
-simulate: ## Run device simulator (5 animals, normal)
-	@echo "$(GREEN)Starting device simulator...$(RESET)"
-	cd tools/simulator && python3 simulator.py --animals 5 --interval 10
+simulate: ## Run device simulator (Boschhoek, 5 animals)
+	@echo "$(GREEN)Starting device simulator (Boschhoek Farm)...$(RESET)"
+	cd tools/simulator && python3 simulator.py --farm boschhoek --animals 5 --interval 10
+
+simulate-lochvaal: ## Run simulator for Loch Vaal (10 animals)
+	@echo "$(GREEN)Starting device simulator (Loch Vaal Plot 30)...$(RESET)"
+	cd tools/simulator && python3 simulator.py --farm lochvaal --animals 10 --interval 10
 
 simulate-theft: ## Run theft scenario simulation
 	@echo "$(YELLOW)Starting THEFT scenario...$(RESET)"
-	cd tools/simulator && python3 simulator.py --animals 5 --scenario theft --interval 5
+	cd tools/simulator && python3 simulator.py --farm boschhoek --animals 5 --scenario theft --interval 5
 
 simulate-breach: ## Run geofence breach scenario
 	@echo "$(YELLOW)Starting BREACH scenario...$(RESET)"
-	cd tools/simulator && python3 simulator.py --animals 5 --scenario breach --interval 5
+	cd tools/simulator && python3 simulator.py --farm boschhoek --animals 5 --scenario breach --interval 5
 
-simulate-many: ## Simulate 50 animals (stress test)
-	cd tools/simulator && python3 simulator.py --animals 50 --interval 15
+simulate-many: ## Simulate 50 animals at Loch Vaal (stress test)
+	cd tools/simulator && python3 simulator.py --farm lochvaal --animals 50 --interval 15
 
 # ─── MQTT WRITER ────────────────────────────────────
 
