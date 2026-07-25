@@ -1,3 +1,6 @@
+import { motion } from 'framer-motion';
+import { PageTransition, AnimatedCard, AnimatedProgressBar } from '@/components/motion';
+
 const summaryCards = [
   { label: 'Total Distance Today', value: '47.2 km', change: '+12%' },
   { label: 'Active Animals', value: '24 / 28', change: '' },
@@ -19,15 +22,28 @@ const complianceRows = [
   { fence: 'Neighbors Property', compliance: 99.1, breaches: 1, avgReturn: '2 min' },
 ];
 
+const tableRowVariants = {
+  hidden: { opacity: 0, x: -10 },
+  show: (i: number) => ({
+    opacity: 1,
+    x: 0,
+    transition: { delay: 0.4 + i * 0.08, duration: 0.3 },
+  }),
+};
+
 export default function AnalyticsPage() {
   return (
-    <div className="p-6 space-y-6 bg-gray-50 dark:bg-gray-900 min-h-full theme-transition">
+    <PageTransition className="p-6 space-y-6 bg-gray-50 dark:bg-gray-900 min-h-full theme-transition">
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analytics</h1>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {summaryCards.map((card) => (
-          <div key={card.label} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 theme-transition">
+        {summaryCards.map((card, i) => (
+          <AnimatedCard
+            key={card.label}
+            delay={i * 0.1}
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 theme-transition"
+          >
             <p className="text-sm text-gray-600 dark:text-gray-400">{card.label}</p>
             <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{card.value}</p>
             {card.change && (
@@ -35,33 +51,42 @@ export default function AnalyticsPage() {
                 {card.change} vs yesterday
               </p>
             )}
-          </div>
+          </AnimatedCard>
         ))}
       </div>
 
       {/* Activity Breakdown */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 theme-transition">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.3 }}
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 theme-transition"
+      >
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Activity Breakdown (Today)</h2>
         <div className="space-y-3">
-          {activityBreakdown.map((activity) => (
+          {activityBreakdown.map((activity, i) => (
             <div key={activity.label} className="flex items-center gap-3">
               <span className="w-20 text-sm text-gray-600 dark:text-gray-400">{activity.label}</span>
-              <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-4 overflow-hidden">
-                <div
-                  className={`h-full rounded-full ${activity.color}`}
-                  style={{ width: `${activity.percentage}%` }}
-                ></div>
-              </div>
+              <AnimatedProgressBar
+                percentage={activity.percentage}
+                color={activity.color}
+                delay={0.4 + i * 0.15}
+              />
               <span className="w-12 text-sm text-right text-gray-700 dark:text-gray-300 font-medium">
                 {activity.percentage}%
               </span>
             </div>
           ))}
         </div>
-      </div>
+      </motion.div>
 
       {/* Geofence Compliance */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden theme-transition">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.5 }}
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden theme-transition"
+      >
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Geofence Compliance (Last 7 Days)</h2>
         </div>
@@ -75,8 +100,15 @@ export default function AnalyticsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-            {complianceRows.map((row) => (
-              <tr key={row.fence} className="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+            {complianceRows.map((row, i) => (
+              <motion.tr
+                key={row.fence}
+                custom={i}
+                variants={tableRowVariants}
+                initial="hidden"
+                animate="show"
+                className="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
+              >
                 <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{row.fence}</td>
                 <td className="px-4 py-3">
                   <span className={`font-medium ${row.compliance >= 98 ? 'text-green-600 dark:text-green-400' : row.compliance >= 95 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>
@@ -85,11 +117,11 @@ export default function AnalyticsPage() {
                 </td>
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{row.breaches}</td>
                 <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{row.avgReturn}</td>
-              </tr>
+              </motion.tr>
             ))}
           </tbody>
         </table>
-      </div>
-    </div>
+      </motion.div>
+    </PageTransition>
   );
 }

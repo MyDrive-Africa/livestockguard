@@ -1,3 +1,6 @@
+import { motion } from 'framer-motion';
+import { PageTransition, AnimatedCard, CountUp } from '@/components/motion';
+
 const fleetSummary = [
   { label: 'Total Devices', value: 28 },
   { label: 'Online', value: 24 },
@@ -17,7 +20,7 @@ const demoDevices = [
 
 export default function DevicesPage() {
   return (
-    <div className="p-6 space-y-6 bg-gray-50 dark:bg-gray-900 min-h-full theme-transition">
+    <PageTransition className="p-6 space-y-6 bg-gray-50 dark:bg-gray-900 min-h-full theme-transition">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Devices</h1>
         <button className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700">
@@ -27,16 +30,21 @@ export default function DevicesPage() {
 
       {/* Fleet Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {fleetSummary.map((item) => (
-          <div key={item.label} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 text-center theme-transition">
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{item.value}</p>
+        {fleetSummary.map((item, i) => (
+          <AnimatedCard key={item.label} delay={i * 0.1} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 text-center theme-transition">
+            <CountUp value={item.value} className="text-2xl font-bold text-gray-900 dark:text-white" />
             <p className="text-sm text-gray-600 dark:text-gray-400">{item.label}</p>
-          </div>
+          </AnimatedCard>
         ))}
       </div>
 
       {/* Device Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden theme-transition">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.3 }}
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden theme-transition"
+      >
         <table className="w-full">
           <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
             <tr>
@@ -69,8 +77,8 @@ export default function DevicesPage() {
             ))}
           </tbody>
         </table>
-      </div>
-    </div>
+      </motion.div>
+    </PageTransition>
   );
 }
 

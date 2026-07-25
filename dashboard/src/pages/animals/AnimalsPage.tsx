@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { useAuthStore } from '@/stores/authStore';
 import { useRealtimeStore } from '@/stores/realtimeStore';
 import { apiClient } from '@/api/client';
+import { PageTransition } from '@/components/motion';
 import type { Animal } from '@/types';
 
 function BatteryBadge({ level }: { level: number | null | undefined }) {
@@ -82,7 +84,7 @@ export default function AnimalsPage() {
   );
 
   return (
-    <div className="p-6 h-full overflow-y-auto bg-gray-50 dark:bg-gray-900 theme-transition">
+    <PageTransition className="p-6 h-full overflow-y-auto bg-gray-50 dark:bg-gray-900 theme-transition">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -148,9 +150,12 @@ export default function AnimalsPage() {
                   </td>
                 </tr>
               )}
-              {filteredAnimals.map((animal) => (
-                <tr
+              {filteredAnimals.map((animal, i) => (
+                <motion.tr
                   key={animal.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.04, duration: 0.25 }}
                   onClick={() => setSelectedAnimal(animal)}
                   className="hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition-colors"
                 >
@@ -179,7 +184,7 @@ export default function AnimalsPage() {
                       battery={animal.battery_level}
                     />
                   </td>
-                </tr>
+                </motion.tr>
               ))}
             </tbody>
           </table>
@@ -257,6 +262,6 @@ export default function AnimalsPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageTransition>
   );
 }

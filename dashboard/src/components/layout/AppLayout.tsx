@@ -47,7 +47,7 @@ export default function AppLayout() {
               <span>{item.icon}</span>
               <span>{item.label}</span>
               {item.path === '/alerts' && activeAlerts > 0 && (
-                <span className="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                <span className="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full animate-pulse-badge">
                   {activeAlerts}
                 </span>
               )}
