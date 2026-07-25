@@ -244,14 +244,15 @@ export default function MapPage() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map || loading) return;
-    DEMO_GEOFENCES.forEach((fence) => {
+    const allFenceIds = geofenceIds.length > 0 ? geofenceIds : DEMO_GEOFENCES.map((f) => f.id);
+    allFenceIds.forEach((id) => {
       const vis = layers.geofences ? 'visible' : 'none';
       ['fill', 'outline', 'label'].forEach((t) => {
-        const id = `fence-${t}-${fence.id}`;
-        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis);
+        const layerId = `fence-${t}-${id}`;
+        if (map.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', vis);
       });
     });
-  }, [layers.geofences, loading]);
+  }, [layers.geofences, loading, geofenceIds]);
 
   // ─── Animal Marker Visibility ──────────────────────
   useEffect(() => {
@@ -446,7 +447,22 @@ export default function MapPage() {
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 py-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 z-10 shrink-0 theme-transition">
         <div className="flex items-center gap-4">
-          <h2 className="text-lg font-semibold text-gray-800">Live Map</h2>
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Live Map</h2>
+          {/* Farm Selector */}
+          {farms.length > 0 && (
+            <select
+              value={selectedFarmId}
+              onChange={(e) => setSelectedFarmId(e.target.value)}
+              className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-brand-500"
+              aria-label="Select farm"
+            >
+              {farms.map((farm) => (
+                <option key={farm.id} value={farm.id}>
+                  {farm.name}{farm.province ? ` (${farm.province})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
           <div className="flex items-center gap-1.5 text-xs">
             {(['animals', 'geofences', 'trails'] as LayerToggle[]).map((l) => (
               <button key={l} onClick={() => toggleLayer(l)}
