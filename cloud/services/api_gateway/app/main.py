@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -12,6 +12,7 @@ from sqlalchemy import text
 from .routers import auth, devices, animals, geofences, alerts, analytics, farms
 from .routers.websocket import router as ws_router
 from .routers.notifications import router as notifications_router
+from .metrics import metrics, add_metrics_middleware
 
 # ─── Rate Limiter ─────────────────────────────────────
 
@@ -113,3 +114,13 @@ async def api_version():
         "base_url": f"/api/{API_VERSION}",
         "note": "Unversioned /api/* routes are deprecated. Migrate to /api/v1/*.",
     }
+
+
+@app.get("/metrics", response_class=PlainTextResponse)
+async def prometheus_metrics():
+    """Prometheus-compatible metrics endpoint."""
+    return metrics.to_prometheus()
+
+
+# Add metrics middleware (after routes so /metrics itself is excluded)
+add_metrics_middleware(app)
