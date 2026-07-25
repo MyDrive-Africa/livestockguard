@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { useRealtimeStore } from '@/stores/realtimeStore';
 import { useAuthStore } from '@/stores/authStore';
 import { apiClient } from '@/api/client';
+import { PageTransition } from '@/components/motion';
 import type { Alert } from '@/types';
 
 const severityStyles: Record<string, string> = {
@@ -124,7 +126,7 @@ export default function AlertsPage() {
   const criticalCount = alerts.filter((a) => a.severity === 'critical' && a.status === 'active').length;
 
   return (
-    <div className="p-6 h-full overflow-y-auto bg-gray-50 dark:bg-gray-900 theme-transition">
+    <PageTransition className="p-6 h-full overflow-y-auto bg-gray-50 dark:bg-gray-900 theme-transition">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -193,9 +195,12 @@ export default function AlertsPage() {
       {/* Alerts list */}
       {!loading && alerts.length > 0 && (
         <div className="space-y-3">
-          {alerts.map((alert) => (
-            <div
+          {alerts.map((alert, i) => (
+            <motion.div
               key={alert.id}
+              initial={{ opacity: 0, x: -16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.05, duration: 0.3 }}
               className={`border-l-4 rounded-lg p-4 transition-all ${severityStyles[alert.severity] || severityStyles.info}`}
             >
               <div className="flex items-start justify-between">
@@ -260,10 +265,10 @@ export default function AlertsPage() {
                   </span>
                 </div>
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       )}
-    </div>
+    </PageTransition>
   );
 }

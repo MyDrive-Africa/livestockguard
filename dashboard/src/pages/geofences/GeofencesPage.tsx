@@ -1,3 +1,6 @@
+import { motion } from 'framer-motion';
+import { PageTransition } from '@/components/motion';
+
 const demoGeofences = [
   { id: '1', name: 'Main Paddock', type: 'inclusion', active: true, animals: 12, area: '45 ha' },
   { id: '2', name: 'Water Source Zone', type: 'inclusion', active: true, animals: 3, area: '2 ha' },
@@ -6,9 +9,19 @@ const demoGeofences = [
   { id: '5', name: 'Neighbors Property', type: 'exclusion', active: true, animals: 0, area: '120 ha' },
 ];
 
+const cardVariants = {
+  hidden: { opacity: 0, y: 16, scale: 0.98 },
+  show: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { delay: i * 0.08, duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] },
+  }),
+};
+
 export default function GeofencesPage() {
   return (
-    <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-full theme-transition">
+    <PageTransition className="p-6 bg-gray-50 dark:bg-gray-900 min-h-full theme-transition">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Geofences</h1>
         <button className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors">
@@ -17,10 +30,15 @@ export default function GeofencesPage() {
       </div>
 
       <div className="grid gap-4">
-        {demoGeofences.map((fence) => (
-          <div
+        {demoGeofences.map((fence, i) => (
+          <motion.div
             key={fence.id}
-            className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between hover:shadow-md dark:hover:shadow-lg dark:hover:shadow-black/10 transition-all theme-transition"
+            custom={i}
+            variants={cardVariants}
+            initial="hidden"
+            animate="show"
+            whileHover={{ scale: 1.01, boxShadow: '0 8px 25px rgba(0,0,0,0.08)' }}
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between transition-colors theme-transition"
           >
             <div className="flex items-center gap-4">
               <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
@@ -48,9 +66,9 @@ export default function GeofencesPage() {
                 <span>...</span>
               </button>
             </div>
-          </div>
+          </motion.div>
         ))}
       </div>
-    </div>
+    </PageTransition>
   );
 }
