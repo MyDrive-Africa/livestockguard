@@ -2,9 +2,11 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from jose import jwt
 from passlib.context import CryptContext
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -75,8 +77,8 @@ def create_refresh_token(user_id: str) -> str:
 # ─── Endpoints ──────────────────────────────────────
 
 @router.post("/login", response_model=TokenResponse)
-async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
-    """Authenticate user with email and password, returns JWT tokens."""
+async def login(request: LoginRequest, req: Request, db: AsyncSession = Depends(get_db)):
+    """Authenticate user with email and password, returns JWT tokens. Rate limited: 10/minute."""
     result = await db.execute(
         select(User).where(User.email == request.email)
     )
