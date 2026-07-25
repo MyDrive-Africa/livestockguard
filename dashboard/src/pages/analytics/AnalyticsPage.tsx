@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { PageTransition, AnimatedCard } from '@/components/motion';
 import { useThemeStore } from '@/stores/themeStore';
+import { downloadCSV, printReport } from '@/utils/export';
 
 // ─── Demo Data ───────────────────────────────────────
 
@@ -70,20 +71,43 @@ export default function AnalyticsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analytics</h1>
-        <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-          {(['24h', '7d', '30d'] as DateRange[]).map((range) => (
+        <div className="flex items-center gap-3">
+          {/* Export buttons */}
+          <div className="flex items-center gap-1 no-print">
             <button
-              key={range}
-              onClick={() => setDateRange(range)}
-              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                dateRange === range
-                  ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white font-medium'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-              }`}
+              onClick={() => downloadCSV(
+                movementData,
+                [{ key: 'day', label: 'Day' }, { key: 'distance', label: 'Distance (km)' }, { key: 'animals', label: 'Active Animals' }],
+                'livestockguard_movement'
+              )}
+              className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors"
             >
-              {range}
+              CSV
             </button>
-          ))}
+            <button
+              onClick={printReport}
+              className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors"
+            >
+              PDF
+            </button>
+          </div>
+
+          {/* Date range picker */}
+          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+            {(['24h', '7d', '30d'] as DateRange[]).map((range) => (
+              <button
+                key={range}
+                onClick={() => setDateRange(range)}
+                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                  dateRange === range
+                    ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white font-medium'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                }`}
+              >
+                {range}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
