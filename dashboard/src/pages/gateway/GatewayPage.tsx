@@ -99,6 +99,17 @@ export default function GatewayPage() {
 
   const currentFarm = useAuthStore((state) => state.currentFarm);
 
+  // Herd count / missing animals
+  interface HerdCount {
+    total_registered: number;
+    seen_today: number;
+    seen_this_session: number;
+    missing_count: number;
+    coverage_pct: number;
+    missing: { animal_id: string; name: string; tag_id: string; breed?: string; gender?: string; colour?: string; last_seen?: string; last_seen_by?: string; hours_missing?: number }[];
+  }
+  const [herdCount, setHerdCount] = useState<HerdCount | null>(null);
+
   const fetchGateways = useCallback(async () => {
     try {
       setError(null);
@@ -116,6 +127,20 @@ export default function GatewayPage() {
   useEffect(() => {
     fetchGateways();
   }, [fetchGateways]);
+
+  // Fetch herd count for current farm
+  useEffect(() => {
+    async function loadHerdCount() {
+      const farmId = currentFarm || 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+      try {
+        const resp = await apiClient.get(`/api/gateway/herd-count/${farmId}`);
+        setHerdCount(resp.data);
+      } catch {
+        // Herd count unavailable (no BLE tags registered yet)
+      }
+    }
+    loadHerdCount();
+  }, [currentFarm]);
 
   const fetchGatewayStatus = async (serial: string) => {
     try {
@@ -169,6 +194,91 @@ export default function GatewayPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400">Animals in Range</p>
         </AnimatedCard>
       </div>
+
+      {/* Cattle Count / Herd Reconciliation */}
+      {herdCount && (
+        <div className="mb-6">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Cattle Count</h3>
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                herdCount.coverage_pct >= 100 ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' :
+                herdCount.coverage_pct >= 80 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300' :
+                'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+              }`}>
+                {herdCount.coverage_pct}% coverage
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{herdCount.total_registered}</p>
+                <p className="text-xs text-gray-500">Total Tagged</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-green-600">{herdCount.seen_today}</p>
+                <p className="text-xs text-gray-500">Seen Today</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-blue-600">{herdCount.seen_this_session}</p>
+                <p className="text-xs text-gray-500">This Session</p>
+              </div>
+              <div className="text-center">
+                <p className={`text-2xl font-bold ${herdCount.missing_count > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  {herdCount.missing_count}
+                </p>
+                <p className="text-xs text-gray-500">Missing</p>
+              </div>
+            </div>
+
+            {/* Missing Animals Alert */}
+            {herdCount.missing_count > 0 && (
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-red-500 text-lg">⚠️</span>
+                  <h4 className="text-sm font-semibold text-red-700 dark:text-red-400">
+                    {herdCount.missing_count} Animal{herdCount.missing_count > 1 ? 's' : ''} Not Seen (24h+)
+                  </h4>
+                </div>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {herdCount.missing.map((animal) => (
+                    <div key={animal.animal_id} className="flex items-center justify-between py-2 px-3 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-800">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">🐄</span>
+                        <div>
+                          <p className="font-medium text-gray-900 dark:text-white text-sm">{animal.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {animal.tag_id} · {animal.breed || '—'} · {animal.gender === 'male' ? '♂' : animal.gender === 'female' ? '♀' : ''}
+                            {animal.colour ? ` · ${animal.colour}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        {animal.hours_missing != null ? (
+                          <p className="text-xs text-red-600 font-medium">{animal.hours_missing}h missing</p>
+                        ) : (
+                          <p className="text-xs text-gray-400">Never detected</p>
+                        )}
+                        {animal.last_seen_by && (
+                          <p className="text-xs text-gray-400">Last: {animal.last_seen_by}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {herdCount.missing_count === 0 && herdCount.total_registered > 0 && (
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-3 text-center">
+                <p className="text-sm text-green-600 dark:text-green-400 font-medium">
+                  ✓ All {herdCount.total_registered} cattle accounted for today
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Loading */}
       {loading && (

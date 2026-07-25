@@ -195,12 +195,45 @@ UPDATE devices SET animal_id = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee08' WHERE id =
 UPDATE devices SET animal_id = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee09' WHERE id = 'dddddddd-dddd-dddd-dddd-dddddddddd09';
 UPDATE devices SET animal_id = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee10' WHERE id = 'dddddddd-dddd-dddd-dddd-dddddddddd10';
 
--- Loch Vaal geofence (boundary around Plot 30, ~500m radius from centre)
-INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active) VALUES
-    ('ffffffff-ffff-ffff-ffff-ffffffffffff', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-     'Plot 30 Boundary',
-     ST_GeogFromText('POLYGON((27.704 -26.715, 27.716 -26.715, 27.716 -26.723, 27.704 -26.723, 27.704 -26.715))'),
-     'inclusion', true)
+-- Loch Vaal geofences — layered zones with escalating breach severity
+-- Centre: -26.719088, 27.709759 (Plot 30)
+--
+-- Zone 1: KRAAL (night enclosure, ~50m radius) — breach = CRITICAL (theft)
+-- Zone 2: YARD (2 hectare property boundary) — breach = HIGH (escaped yard)
+-- Zone 3: RANGE (10km radius grazing area) — breach = MEDIUM (strayed far)
+-- Outside Zone 3 = CRITICAL (likely stolen/lost)
+
+-- Zone 1: Kraal (small enclosure near farmhouse, ~50m x 40m)
+INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on_breach) VALUES
+    ('ffffffff-ffff-ffff-ffff-fffffffffff1', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+     'Kraal (Night Enclosure)',
+     ST_GeogFromText('POLYGON((27.70926 -26.71879, 27.71026 -26.71879, 27.71026 -26.71939, 27.70926 -26.71939, 27.70926 -26.71879))'),
+     'inclusion', true, true)
+ON CONFLICT DO NOTHING;
+
+-- Zone 2: Yard (2 hectare property — ~140m x 140m around centre)
+INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on_breach) VALUES
+    ('ffffffff-ffff-ffff-ffff-fffffffffff2', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+     'Yard Boundary (2ha)',
+     ST_GeogFromText('POLYGON((27.70876 -26.71809, 27.71076 -26.71809, 27.71076 -26.72009, 27.70876 -26.72009, 27.70876 -26.71809))'),
+     'inclusion', true, true)
+ON CONFLICT DO NOTHING;
+
+-- Zone 3: Range (10km radius grazing area — approx polygon)
+-- 10km ≈ 0.09° latitude, 0.1° longitude at this latitude
+INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on_breach) VALUES
+    ('ffffffff-ffff-ffff-ffff-fffffffffff3', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+     'Grazing Range (10km)',
+     ST_GeogFromText('POLYGON((27.610 -26.629, 27.810 -26.629, 27.810 -26.809, 27.610 -26.809, 27.610 -26.629))'),
+     'inclusion', true, true)
+ON CONFLICT DO NOTHING;
+
+-- Dam exclusion zone (within the yard — cattle should not enter)
+INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on_breach) VALUES
+    ('ffffffff-ffff-ffff-ffff-fffffffffff4', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+     'Dam (Exclusion Zone)',
+     ST_GeogFromText('POLYGON((27.70940 -26.71940, 27.70990 -26.71940, 27.70990 -26.71980, 27.70940 -26.71980, 27.70940 -26.71940))'),
+     'exclusion', true, true)
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
@@ -209,6 +242,6 @@ ON CONFLICT DO NOTHING;
 
 DO $$ BEGIN RAISE NOTICE 'Seed data loaded:';
 RAISE NOTICE '  Organisation 1: Boschhoek Farming (Free State) — 5 animals, 5 devices, 3 geofences';
-RAISE NOTICE '  Organisation 2: Loch Vaal Livestock (Gauteng) — 10 animals, 10 devices, 1 geofence';
-RAISE NOTICE '  Total: 2 orgs, 2 farms, 2 users, 15 devices, 15 animals, 4 geofences';
+RAISE NOTICE '  Organisation 2: Loch Vaal Livestock (Gauteng) — 10 animals, 10 devices, 4 geofences (kraal/yard/range/dam)';
+RAISE NOTICE '  Total: 2 orgs, 2 farms, 2 users, 15 devices, 15 animals, 7 geofences';
 END $$;

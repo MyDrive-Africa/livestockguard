@@ -246,28 +246,10 @@ async def ingest_batch(req: BatchSightingRequest, db: AsyncSession = Depends(get
 
     await db.commit()
 
-    # Also insert into positions table so animals show on the main map
-    # (uses gateway GPS as the animal's position)
-    if resolved > 0:
-        for sighting in req.sightings:
-            mac = sighting.mac_address.upper()
-            tag = tags.get(mac)
-            if tag and tag.animal_id:
-                await db.execute(text("""
-                    INSERT INTO positions (time, device_id, animal_id, location, latitude, longitude, altitude, speed, signal_rssi)
-                    VALUES (:time, NULL, :animal_id,
-                            ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
-                            :lat, :lon, :alt, :speed, :rssi)
-                """), {
-                    "time": now.isoformat(),
-                    "animal_id": str(tag.animal_id),
-                    "lat": req.latitude,
-                    "lon": req.longitude,
-                    "alt": req.altitude,
-                    "speed": req.speed,
-                    "rssi": sighting.rssi,
-                })
-        await db.commit()
+    # Note: Animal positions from BLE sightings are stored in ble_sightings table.
+    # The main positions table requires device_id (NOT NULL) which BLE-detected
+    # animals don't have. The herd-count and gateway-status endpoints query
+    # ble_sightings directly. Animals will show on map via the animal_last_seen view.
 
     return BatchSightingResponse(
         accepted=accepted,
@@ -600,3 +582,164 @@ async def end_session(session_id: UUID, req: SessionEndRequest, db: AsyncSession
         "animals_seen": session.animals_seen,
         "total_sightings": session.total_sightings,
     }
+
+
+# ─── Herd Count & Missing Animals ─────────────────────────────────────────────
+
+
+class MissingAnimalInfo(BaseModel):
+    animal_id: str
+    name: str
+    tag_id: str
+    breed: Optional[str] = None
+    gender: Optional[str] = None
+    colour: Optional[str] = None
+    last_seen: Optional[str] = None  # ISO timestamp or None if never seen
+    last_seen_by: Optional[str] = None  # Gateway name
+    hours_missing: Optional[float] = None
+
+
+class HerdCountResponse(BaseModel):
+    farm_id: str
+    farm_name: str
+    total_registered: int  # All active animals with BLE tags on this farm
+    seen_today: int  # Unique animals detected today by any gateway
+    seen_this_session: int  # Unique animals in the current active session
+    missing: List[MissingAnimalInfo]  # Animals NOT seen today
+    missing_count: int
+    coverage_pct: float  # seen_today / total_registered * 100
+    last_updated: str
+
+
+@router.get("/herd-count/{farm_id}", response_model=HerdCountResponse)
+async def get_herd_count(
+    farm_id: UUID,
+    missing_threshold_hours: int = Query(default=24, description="Hours without sighting to be considered missing"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Cattle count reconciliation for a farm.
+
+    Returns total registered animals (with BLE tags), how many were seen today,
+    and identifies which specific animals are MISSING (not seen within threshold).
+    This is the herdsman's daily stock check — "are all my cattle accounted for?"
+    """
+    from livestockguard_common.db_models import Farm
+
+    # Get farm info
+    farm_result = await db.execute(select(Farm).where(Farm.id == farm_id))
+    farm = farm_result.scalar_one_or_none()
+    if not farm:
+        raise HTTPException(status_code=404, detail="Farm not found")
+
+    # Get all active animals with BLE tags on this farm
+    tagged_query = text("""
+        SELECT a.id AS animal_id, a.name, a.tag_id, a.breed, a.gender, a.colour,
+               bt.mac_address
+        FROM animals a
+        JOIN ble_ear_tags bt ON bt.animal_id = a.id AND bt.status = 'active'
+        WHERE a.farm_id = :farm_id AND a.status = 'active'
+    """)
+    tagged_result = await db.execute(tagged_query, {"farm_id": str(farm_id)})
+    tagged_animals = tagged_result.fetchall()
+    total_registered = len(tagged_animals)
+
+    # Get animals seen today (by any gateway on this farm)
+    seen_today_query = text("""
+        SELECT DISTINCT s.animal_id
+        FROM ble_sightings s
+        JOIN gateway_devices g ON g.id = s.gateway_id
+        WHERE g.farm_id = :farm_id
+          AND s.animal_id IS NOT NULL
+          AND s.time >= CURRENT_DATE
+    """)
+    seen_today_result = await db.execute(seen_today_query, {"farm_id": str(farm_id)})
+    seen_today_ids = {str(row.animal_id) for row in seen_today_result.fetchall()}
+    seen_today = len(seen_today_ids)
+
+    # Get animals seen in current active session (if any)
+    active_session_query = text("""
+        SELECT hs.id AS session_id
+        FROM herdsman_sessions hs
+        JOIN gateway_devices g ON g.id = hs.gateway_id
+        WHERE g.farm_id = :farm_id AND hs.status = 'active'
+        ORDER BY hs.started_at DESC
+        LIMIT 1
+    """)
+    active_session_result = await db.execute(active_session_query, {"farm_id": str(farm_id)})
+    active_session_row = active_session_result.first()
+
+    seen_this_session = 0
+    if active_session_row:
+        session_seen_query = text("""
+            SELECT COUNT(DISTINCT s.animal_id)
+            FROM ble_sightings s
+            JOIN herdsman_sessions hs ON hs.gateway_id = s.gateway_id
+            WHERE hs.id = :session_id
+              AND s.animal_id IS NOT NULL
+              AND s.time >= hs.started_at
+        """)
+        session_seen_result = await db.execute(session_seen_query, {"session_id": str(active_session_row.session_id)})
+        row = session_seen_result.first()
+        seen_this_session = row[0] if row else 0
+
+    # Identify missing animals (not seen within threshold)
+    missing_animals: List[MissingAnimalInfo] = []
+    now = datetime.now(timezone.utc)
+
+    for animal in tagged_animals:
+        animal_id_str = str(animal.animal_id)
+
+        # Check last sighting for this animal
+        last_sighting_query = text("""
+            SELECT s.time, g.name AS gateway_name
+            FROM ble_sightings s
+            JOIN gateway_devices g ON g.id = s.gateway_id
+            WHERE s.animal_id = :animal_id
+            ORDER BY s.time DESC
+            LIMIT 1
+        """)
+        last_result = await db.execute(last_sighting_query, {"animal_id": animal_id_str})
+        last_row = last_result.first()
+
+        last_seen_iso = None
+        last_seen_by = None
+        hours_missing = None
+
+        if last_row:
+            last_seen_iso = last_row.time.isoformat()
+            last_seen_by = last_row.gateway_name
+            hours_missing = round((now - last_row.time).total_seconds() / 3600, 1)
+        else:
+            # Never been seen by any gateway
+            hours_missing = None  # Unknown — never detected
+
+        # Missing if: never seen OR not seen within threshold
+        is_missing = (last_row is None) or (hours_missing and hours_missing > missing_threshold_hours)
+
+        if is_missing:
+            missing_animals.append(MissingAnimalInfo(
+                animal_id=animal_id_str,
+                name=animal.name,
+                tag_id=animal.tag_id,
+                breed=animal.breed,
+                gender=animal.gender,
+                colour=animal.colour,
+                last_seen=last_seen_iso,
+                last_seen_by=last_seen_by,
+                hours_missing=hours_missing,
+            ))
+
+    coverage_pct = (seen_today / total_registered * 100) if total_registered > 0 else 0.0
+
+    return HerdCountResponse(
+        farm_id=str(farm_id),
+        farm_name=farm.name,
+        total_registered=total_registered,
+        seen_today=seen_today,
+        seen_this_session=seen_this_session,
+        missing=missing_animals,
+        missing_count=len(missing_animals),
+        coverage_pct=round(coverage_pct, 1),
+        last_updated=now.isoformat(),
+    )

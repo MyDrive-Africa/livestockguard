@@ -153,6 +153,22 @@ dev: ## Start everything for development
 	@echo ""
 	@echo "$(CYAN)Then open http://localhost:5173 in your browser$(RESET)"
 
+# ─── VERIFICATION ───────────────────────────────────
+
+verify-api: ## Run API feature verification (requires stack running)
+	@echo "$(CYAN)Running API feature verification...$(RESET)"
+	@bash scripts/verify-features.sh
+
+verify-e2e: ## Run Playwright E2E tests (requires dashboard + stack running)
+	@echo "$(CYAN)Running Playwright E2E tests...$(RESET)"
+	cd e2e && npx playwright test tests/features.spec.ts --reporter=list
+
+verify-all: ## Run all verification (API + E2E)
+	@echo "$(CYAN)Running full verification suite...$(RESET)"
+	$(MAKE) verify-api
+	@echo ""
+	$(MAKE) verify-e2e
+
 # ─── CLEANUP ────────────────────────────────────────
 
 clean: ## Stop everything and remove volumes

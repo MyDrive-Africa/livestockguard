@@ -330,7 +330,7 @@ export default function MapPage() {
         const geometry = { type: 'Polygon' as const, coordinates: [closed] };
 
         try {
-          const farmId = currentFarm || '22222222-2222-2222-2222-222222222222';
+          const farmId = selectedFarmId || currentFarm || '22222222-2222-2222-2222-222222222222';
           await apiClient.post('/api/geofences', {
             name,
             farm_id: farmId,

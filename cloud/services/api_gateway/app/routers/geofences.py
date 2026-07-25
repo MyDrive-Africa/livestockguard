@@ -142,7 +142,7 @@ async def create_geofence(geofence: GeofenceCreate, db: AsyncSession = Depends(g
         geojson_str = json.dumps(geofence.geometry)
         await db.execute(
             text(
-                "UPDATE geofences SET geometry = ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326) "
+                "UPDATE geofences SET geometry = ST_GeomFromGeoJSON(:geojson)::geography "
                 "WHERE id = :id"
             ),
             {"geojson": geojson_str, "id": str(new_fence.id)},
