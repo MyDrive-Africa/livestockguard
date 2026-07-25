@@ -165,3 +165,164 @@ mod hex {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ─── CRC-16 Tests ────────────────────────────────
+
+    #[test]
+    fn test_crc16_empty() {
+        assert_eq!(crc16_ccitt(&[]), 0xFFFF);
+    }
+
+    #[test]
+    fn test_crc16_deterministic() {
+        let data = b"hello";
+        let crc1 = crc16_ccitt(data);
+        let crc2 = crc16_ccitt(data);
+        assert_eq!(crc1, crc2);
+    }
+
+    #[test]
+    fn test_crc16_different_data_different_result() {
+        assert_ne!(crc16_ccitt(b"hello"), crc16_ccitt(b"world"));
+    }
+
+    #[test]
+    fn test_crc16_single_bit_flip() {
+        assert_ne!(crc16_ccitt(&[0x01, 0x02, 0x03]), crc16_ccitt(&[0x01, 0x02, 0x04]));
+    }
+
+    // ─── Hex Decode Tests ────────────────────────────
+
+    #[test]
+    fn test_hex_decode_valid() {
+        assert_eq!(hex::decode("48656c6c6f").unwrap(), b"Hello");
+    }
+
+    #[test]
+    fn test_hex_decode_empty() {
+        assert_eq!(hex::decode("").unwrap(), Vec::<u8>::new());
+    }
+
+    #[test]
+    fn test_hex_decode_odd_length() {
+        assert!(hex::decode("abc").is_err());
+    }
+
+    #[test]
+    fn test_hex_decode_invalid_chars() {
+        assert!(hex::decode("ZZZZ").is_err());
+    }
+
+    // ─── MessageType Tests ───────────────────────────
+
+    #[test]
+    fn test_message_type_from_valid() {
+        assert_eq!(MessageType::try_from(0x01).unwrap(), MessageType::PositionReport);
+        assert_eq!(MessageType::try_from(0x02).unwrap(), MessageType::AlertEvent);
+        assert_eq!(MessageType::try_from(0x03).unwrap(), MessageType::HeartBeat);
+        assert_eq!(MessageType::try_from(0x04).unwrap(), MessageType::ConfigAck);
+    }
+
+    #[test]
+    fn test_message_type_from_invalid() {
+        assert!(MessageType::try_from(0x00).is_err());
+        assert!(MessageType::try_from(0xFF).is_err());
+    }
+
+    // ─── decode_uplink Tests ─────────────────────────
+
+    fn build_valid_payload(position_count: u8, lat: i32, lon: i32) -> String {
+        let mut bytes: Vec<u8> = Vec::new();
+
+        // Header: msg_type(1) + device_id(4) + seq(2) + pos_count(1) = 8
+        bytes.push(0x01); // PositionReport
+        bytes.extend_from_slice(&0x00001234u32.to_be_bytes()); // device_id
+        bytes.extend_from_slice(&0x0001u16.to_be_bytes()); // sequence
+        bytes.push(position_count);
+
+        // Positions: 11 bytes each (lat_i32 + lon_i32 + alt_u16 + hdop_u8)
+        for _ in 0..position_count {
+            bytes.extend_from_slice(&lat.to_be_bytes());
+            bytes.extend_from_slice(&lon.to_be_bytes());
+            bytes.extend_from_slice(&1500u16.to_be_bytes()); // altitude
+            bytes.push(15); // hdop * 10
+        }
+
+        // Trailing: battery(2) + temp(1) + rssi(1)
+        bytes.extend_from_slice(&3700u16.to_be_bytes());
+        bytes.push(65); // temp: 65 - 40 = 25°C
+        bytes.push((-72i8) as u8); // RSSI
+
+        // CRC
+        let crc = crc16_ccitt(&bytes);
+        bytes.extend_from_slice(&crc.to_be_bytes());
+
+        // Convert to hex string
+        bytes.iter().map(|b| format!("{:02x}", b)).collect()
+    }
+
+    #[test]
+    fn test_decode_uplink_valid_single_position() {
+        let hex = build_valid_payload(1, -29_120_000, 26_210_000);
+        let result = decode_uplink(&hex).unwrap();
+
+        assert_eq!(result.device_id, "LG-00001234");
+        assert_eq!(result.sequence_number, 1);
+        assert_eq!(result.positions.len(), 1);
+        assert!((result.positions[0].latitude - (-29.12)).abs() < 0.001);
+        assert!((result.positions[0].longitude - 26.21).abs() < 0.001);
+        assert_eq!(result.battery_mv, 3700);
+        assert!((result.temperature_c - 25.0).abs() < 0.1);
+        assert_eq!(result.signal_rssi, -72);
+    }
+
+    #[test]
+    fn test_decode_uplink_multiple_positions() {
+        let hex = build_valid_payload(3, -29_120_000, 26_210_000);
+        let result = decode_uplink(&hex).unwrap();
+        assert_eq!(result.positions.len(), 3);
+    }
+
+    #[test]
+    fn test_decode_uplink_too_short() {
+        let result = decode_uplink("0102");
+        assert!(matches!(result, Err(DecodeError::PayloadTooShort { .. })));
+    }
+
+    #[test]
+    fn test_decode_uplink_invalid_hex() {
+        let result = decode_uplink("ZZZZ");
+        assert!(matches!(result, Err(DecodeError::InvalidHex(_))));
+    }
+
+    #[test]
+    fn test_decode_uplink_crc_mismatch() {
+        let hex = build_valid_payload(1, -29_120_000, 26_210_000);
+        // Corrupt last byte of CRC
+        let mut corrupted = hex.clone();
+        let len = corrupted.len();
+        corrupted.replace_range(len-2..len, "ff");
+        let result = decode_uplink(&corrupted);
+        assert!(matches!(result, Err(DecodeError::CrcMismatch { .. })));
+    }
+
+    #[test]
+    fn test_decode_uplink_zero_positions() {
+        let hex = build_valid_payload(0, 0, 0);
+        let result = decode_uplink(&hex).unwrap();
+        assert_eq!(result.positions.len(), 0);
+        assert_eq!(result.battery_mv, 3700);
+    }
+
+    #[test]
+    fn test_decode_uplink_device_id_format() {
+        let hex = build_valid_payload(0, 0, 0);
+        let result = decode_uplink(&hex).unwrap();
+        assert!(result.device_id.starts_with("LG-"));
+        assert_eq!(result.device_id.len(), 11); // "LG-" + 8 hex chars
+    }
+}
