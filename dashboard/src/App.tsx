@@ -8,6 +8,7 @@ import GeofencesPage from '@/pages/geofences/GeofencesPage';
 import AlertsPage from '@/pages/alerts/AlertsPage';
 import AnalyticsPage from '@/pages/analytics/AnalyticsPage';
 import DevicesPage from '@/pages/devices/DevicesPage';
+import GatewayPage from '@/pages/gateway/GatewayPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((state) => state.token);
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="alerts" element={<AlertsPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="devices" element={<DevicesPage />} />
+        <Route path="gateway" element={<GatewayPage />} />
       </Route>
     </Routes>
   );
