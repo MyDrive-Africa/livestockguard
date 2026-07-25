@@ -3,6 +3,7 @@ import { useRealtimeStore } from '@/stores/realtimeStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import ThemeToggle from '@/components/ThemeToggle';
+import ToastContainer from '@/components/ToastContainer';
 
 const navItems = [
   { path: '/map', label: 'Map', icon: '🗺️' },
@@ -78,6 +79,9 @@ export default function AppLayout() {
           <Outlet />
         </div>
       </main>
+
+      {/* Toast notifications */}
+      <ToastContainer />
     </div>
   );
 }

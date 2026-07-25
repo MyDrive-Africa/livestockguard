@@ -1,9 +1,18 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { useRealtimeStore } from '@/stores/realtimeStore';
+import { useToastStore } from '@/stores/toastStore';
 
 const RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_ATTEMPTS = 10;
+
+const SEVERITY_DURATIONS: Record<string, number> = {
+  critical: 0,      // Manual dismiss only
+  high: 10000,
+  medium: 7000,
+  low: 5000,
+  info: 4000,
+};
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
@@ -15,6 +24,7 @@ export function useWebSocket() {
   const setConnected = useRealtimeStore((state) => state.setConnected);
   const updatePosition = useRealtimeStore((state) => state.updatePosition);
   const addAlert = useRealtimeStore((state) => state.addAlert);
+  const addToast = useToastStore((state) => state.addToast);
 
   const connect = useCallback(() => {
     if (!token || !currentFarm) return;
@@ -55,6 +65,12 @@ export function useWebSocket() {
 
           case 'alert.created':
             addAlert(message.payload);
+            addToast({
+              title: message.payload.alert_type?.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) || 'Alert',
+              message: message.payload.message || `${message.payload.animal_name || 'Unknown animal'} — ${message.payload.severity}`,
+              severity: message.payload.severity || 'high',
+              duration: SEVERITY_DURATIONS[message.payload.severity] ?? 7000,
+            });
             break;
 
           case 'pong':
