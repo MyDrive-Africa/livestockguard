@@ -5,10 +5,12 @@ import { useRealtimeStore } from '@/stores/realtimeStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { apiClient } from '@/api/client';
+import type { Farm } from '@/types';
 
-// South Africa centre (Free State - Boschhoek Farm)
-const DEFAULT_CENTER: [number, number] = [26.21, -29.12];
-const DEFAULT_ZOOM = 14;
+// Fallback centre (South Africa overview) — used only if no farm is selected
+const DEFAULT_CENTER: [number, number] = [27.5, -28.0];
+const DEFAULT_ZOOM = 7;
+const FARM_ZOOM = 14;
 
 // Map tile sources
 const TILE_SOURCES = {
@@ -75,9 +77,77 @@ export default function MapPage() {
   const currentFarm = useAuthStore((state) => state.currentFarm);
   const resolved = useThemeStore((state) => state.resolved);
 
+  // Multi-farm support
+  const [farms, setFarms] = useState<Farm[]>([]);
+  const [selectedFarmId, setSelectedFarmId] = useState<string>(currentFarm || '');
+  const [geofenceIds, setGeofenceIds] = useState<string[]>([]);
+
+  // Fetch available farms on mount
+  useEffect(() => {
+    async function loadFarms() {
+      try {
+        const resp = await apiClient.get('/api/farms');
+        setFarms(resp.data);
+        // Auto-select first farm if none selected
+        if (!selectedFarmId && resp.data.length > 0) {
+          setSelectedFarmId(resp.data[0].id);
+        }
+      } catch {
+        // Fallback: use known demo farms
+        setFarms([
+          { id: '22222222-2222-2222-2222-222222222222', name: 'Boschhoek Farm', organisation_id: '', latitude: -29.12, longitude: 26.21, timezone: 'Africa/Johannesburg', province: 'Free State' },
+          { id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', name: 'Loch Vaal Plot 30', organisation_id: '', latitude: -26.719088, longitude: 27.709759, timezone: 'Africa/Johannesburg', province: 'Gauteng' },
+        ]);
+        if (!selectedFarmId) setSelectedFarmId('22222222-2222-2222-2222-222222222222');
+      }
+    }
+    loadFarms();
+  }, []);
+
+  // Fly to selected farm when it changes
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !selectedFarmId) return;
+    const farm = farms.find((f) => f.id === selectedFarmId);
+    if (farm?.latitude && farm?.longitude) {
+      map.flyTo({ center: [farm.longitude, farm.latitude], zoom: FARM_ZOOM, duration: 1500 });
+    }
+    // Reload geofences & animals for the new farm
+    if (!loading) {
+      clearAllGeofences(map);
+      clearAllMarkers();
+      loadGeofences(map);
+      fetchPositions(map);
+    }
+  }, [selectedFarmId, farms]);
+
+  function clearAllGeofences(map: maplibregl.Map) {
+    geofenceIds.forEach((id) => {
+      ['fill', 'outline', 'label'].forEach((t) => {
+        const layerId = `fence-${t}-${id}`;
+        if (map.getLayer(layerId)) map.removeLayer(layerId);
+      });
+      if (map.getSource(`fence-${id}`)) map.removeSource(`fence-${id}`);
+    });
+    setGeofenceIds([]);
+  }
+
+  function clearAllMarkers() {
+    markersRef.current.forEach((marker) => marker.remove());
+    markersRef.current.clear();
+    setAnimalCount(0);
+  }
+
   // ─── Initialize Map ─────────────────────────────────
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
+
+    // Determine initial centre from selected farm
+    const farm = farms.find((f) => f.id === selectedFarmId);
+    const center: [number, number] = farm?.longitude && farm?.latitude
+      ? [farm.longitude, farm.latitude]
+      : DEFAULT_CENTER;
+    const zoom = farm?.latitude ? FARM_ZOOM : DEFAULT_ZOOM;
 
     const source = TILE_SOURCES[tileSource];
     const map = new maplibregl.Map({
@@ -87,8 +157,8 @@ export default function MapPage() {
         sources: { 'base-tiles': { type: 'raster', tiles: source.tiles, tileSize: 256, attribution: source.attribution } },
         layers: [{ id: 'base-layer', type: 'raster', source: 'base-tiles', minzoom: 0, maxzoom: 19 }],
       },
-      center: DEFAULT_CENTER,
-      zoom: DEFAULT_ZOOM,
+      center,
+      zoom,
     });
 
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
@@ -138,22 +208,28 @@ export default function MapPage() {
 
   async function loadGeofences(map: maplibregl.Map) {
     try {
-      const farmId = currentFarm || '22222222-2222-2222-2222-222222222222';
+      const farmId = selectedFarmId || currentFarm || '22222222-2222-2222-2222-222222222222';
       const resp = await apiClient.get('/api/geofences', { params: { farm_id: farmId } });
       const fences = resp.data;
+      const ids: string[] = [];
       if (fences.length > 0) {
         fences.forEach((fence: any) => {
           if (fence.geometry) {
             addGeofenceToMap(map, fence.id, fence.name, fence.fence_type, fence.geometry);
+            ids.push(fence.id);
           }
         });
+        setGeofenceIds(ids);
         return;
       }
     } catch {
-      // Fall through to demo geofences
+      // Fall through to demo geofences only for Boschhoek
     }
-    // Fallback: demo geofences
-    addDemoGeofences(map);
+    // Fallback: demo geofences (only if Boschhoek farm)
+    if (!selectedFarmId || selectedFarmId === '22222222-2222-2222-2222-222222222222') {
+      addDemoGeofences(map);
+      setGeofenceIds(DEMO_GEOFENCES.map((f) => f.id));
+    }
   }
 
   function addDemoGeofences(map: maplibregl.Map) {
@@ -293,7 +369,8 @@ export default function MapPage() {
   // ─── Fetch & Render Positions ──────────────────────
   async function fetchPositions(map: maplibregl.Map) {
     try {
-      const resp = await apiClient.get('/api/animals', { params: { farm_id: '22222222-2222-2222-2222-222222222222' } });
+      const farmId = selectedFarmId || currentFarm || '22222222-2222-2222-2222-222222222222';
+      const resp = await apiClient.get('/api/animals', { params: { farm_id: farmId } });
       setAnimalCount(resp.data.length);
       resp.data.forEach((a: any) => {
         if (a.last_latitude && a.last_longitude) addOrUpdateMarker(map, a.id, a.name, a.last_longitude, a.last_latitude, a.battery_level);
