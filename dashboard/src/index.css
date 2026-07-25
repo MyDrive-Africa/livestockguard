@@ -39,3 +39,39 @@
 .animate-pulse-badge {
   animation: pulse-badge 2s ease-in-out infinite;
 }
+
+/* Print styles for PDF export */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Hide sidebar and non-content elements */
+  aside,
+  .no-print,
+  button,
+  nav {
+    display: none !important;
+  }
+
+  /* Full-width content */
+  main {
+    position: static !important;
+    overflow: visible !important;
+  }
+
+  main > div {
+    position: static !important;
+  }
+
+  /* Remove shadows/borders for clean print */
+  .shadow-sm, .shadow-lg {
+    box-shadow: none !important;
+  }
+
+  /* Ensure charts print */
+  .recharts-wrapper {
+    page-break-inside: avoid;
+  }
+}
