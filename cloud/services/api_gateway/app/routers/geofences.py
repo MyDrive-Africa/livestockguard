@@ -15,9 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'shared'))
 
 from livestockguard_common.db_models import Geofence
-from app.dependencies import get_db
+from app.dependencies import get_db, get_current_user
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 class GeofenceCreate(BaseModel):
