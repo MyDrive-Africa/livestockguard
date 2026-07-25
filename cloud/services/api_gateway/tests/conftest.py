@@ -28,6 +28,24 @@ from app.dependencies import get_db, get_current_user
 from app.routers.auth import pwd_context
 
 
+# ─── SQLite Compatibility (PostgreSQL types → SQLite equivalents) ─────────────
+
+from sqlalchemy import event, String
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import JSON
+
+@event.listens_for(Base.metadata, "before_create")
+def _patch_pg_types_for_sqlite(target, connection, **kw):
+    """Replace PostgreSQL-specific types with SQLite-compatible equivalents."""
+    if connection.dialect.name == "sqlite":
+        for table in target.tables.values():
+            for col in table.columns:
+                if isinstance(col.type, JSONB):
+                    col.type = JSON()
+                elif isinstance(col.type, UUID):
+                    col.type = String(36)
+
+
 # ─── Test Database ────────────────────────────────────
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
