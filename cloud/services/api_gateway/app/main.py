@@ -5,8 +5,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from .routers import auth, devices, animals, geofences, alerts, analytics
+from .routers import auth, devices, animals, geofences, alerts, analytics, farms
 from .routers.websocket import router as ws_router
+from .routers.notifications import router as notifications_router
 
 
 @asynccontextmanager
@@ -40,11 +41,13 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(farms.router, prefix="/api/farms", tags=["farms"])
 app.include_router(devices.router, prefix="/api/devices", tags=["devices"])
 app.include_router(animals.router, prefix="/api/animals", tags=["animals"])
 app.include_router(geofences.router, prefix="/api/geofences", tags=["geofences"])
 app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
+app.include_router(notifications_router, prefix="/api/notifications", tags=["notifications"])
 app.include_router(ws_router, tags=["websocket"])
 
 

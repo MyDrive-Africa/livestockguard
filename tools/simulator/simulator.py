@@ -249,24 +249,64 @@ CATTLE_NAMES = [
     "Amber", "Shadow", "Spirit", "Blaze", "Pepper",
 ]
 
+# Pre-configured farm locations
+FARM_PRESETS = {
+    'boschhoek': {'lat': -29.12, 'lon': 26.21, 'name': 'Boschhoek Farm (Free State)', 'device_base': 0x1000},
+    'lochvaal': {'lat': -26.719088, 'lon': 27.709759, 'name': 'Loch Vaal Plot 30 (Gauteng)', 'device_base': 0x2000},
+}
+
 
 @click.command()
 @click.option('--broker', default='localhost', help='MQTT broker address')
 @click.option('--port', default=1883, help='MQTT broker port')
 @click.option('--animals', default=5, help='Number of animals to simulate')
-@click.option('--farm-lat', default=-29.12, help='Farm centre latitude')
-@click.option('--farm-lon', default=26.21, help='Farm centre longitude')
+@click.option('--farm-lat', default=None, type=float, help='Farm centre latitude (overrides --farm)')
+@click.option('--farm-lon', default=None, type=float, help='Farm centre longitude (overrides --farm)')
+@click.option('--farm', default=None, type=click.Choice(list(FARM_PRESETS.keys())),
+              help='Use a pre-configured farm location')
+@click.option('--device-base', default=None, type=int,
+              help='Base device ID (hex). Default: 0x1000 for boschhoek, 0x2000 for lochvaal')
 @click.option('--scenario', default='normal',
               type=click.Choice(['normal', 'theft', 'breach', 'night']),
               help='Simulation scenario')
 @click.option('--duration', default=300, help='Duration in seconds')
 @click.option('--interval', default=15, help='Report interval in seconds')
-def main(broker, port, animals, farm_lat, farm_lon, scenario, duration, interval):
-    """LivestockGuard Device Simulator"""
-    print(f"LivestockGuard Simulator v1.0")
+def main(broker, port, animals, farm_lat, farm_lon, farm, device_base, scenario, duration, interval):
+    """LivestockGuard Device Simulator
+
+    Supports multiple farms. Use --farm for presets or --farm-lat/--farm-lon for custom coords.
+
+    Examples:
+      python simulator.py --farm boschhoek --animals 5
+      python simulator.py --farm lochvaal --animals 10
+      python simulator.py --farm-lat -26.719088 --farm-lon 27.709759 --animals 50
+    """
+    # Resolve farm location
+    if farm and farm in FARM_PRESETS:
+        preset = FARM_PRESETS[farm]
+        if farm_lat is None:
+            farm_lat = preset['lat']
+        if farm_lon is None:
+            farm_lon = preset['lon']
+        if device_base is None:
+            device_base = preset['device_base']
+        farm_name = preset['name']
+    else:
+        if farm_lat is None:
+            farm_lat = -29.12
+        if farm_lon is None:
+            farm_lon = 26.21
+        farm_name = f"Custom ({farm_lat:.4f}, {farm_lon:.4f})"
+
+    if device_base is None:
+        device_base = 0x1000
+
+    print(f"LivestockGuard Simulator v1.1")
     print(f"Broker: {broker}:{port}")
+    print(f"Farm: {farm_name}")
     print(f"Animals: {animals}, Scenario: {scenario}")
     print(f"Farm centre: ({farm_lat}, {farm_lon})")
+    print(f"Device ID base: 0x{device_base:04X}")
     print()
 
     # Connect to MQTT
@@ -283,7 +323,7 @@ def main(broker, port, animals, farm_lat, farm_lon, scenario, duration, interval
         lat = farm_lat + random.uniform(-0.005, 0.005)
         lon = farm_lon + random.uniform(-0.005, 0.005)
         animal = SimulatedAnimal(
-            device_id=0x1000 + i,
+            device_id=device_base + i,
             name=name,
             lat=lat,
             lon=lon,
