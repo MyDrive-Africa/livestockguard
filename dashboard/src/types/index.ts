@@ -33,11 +33,36 @@ export interface Animal {
   tag_id: string;
   species: string;
   breed?: string;
+  gender?: 'male' | 'female';
+  colour?: string;
+  description?: string;
+  photo_url?: string;
+  weight_kg?: number;
+  status: 'active' | 'sold' | 'deceased' | 'transferred';
+  date_of_birth?: string;
+  mother_id?: string;
+  father_id?: string;
   device_serial?: string;
   last_latitude?: number;
   last_longitude?: number;
   last_speed?: number;
   battery_level?: number;
+}
+
+export interface Farm {
+  id: string;
+  name: string;
+  organisation_id: string;
+  province?: string;
+  district?: string;
+  plot_number?: string;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
+  area_hectares?: number;
+  contact_name?: string;
+  contact_phone?: string;
+  timezone: string;
 }
 
 export interface Geofence {

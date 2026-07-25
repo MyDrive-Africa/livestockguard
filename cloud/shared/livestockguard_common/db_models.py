@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import (
-    Boolean, Column, DateTime, Float, ForeignKey, Index,
+    Boolean, Column, Date, DateTime, Float, ForeignKey, Index,
     Integer, String, Text, func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -39,6 +39,16 @@ class Farm(Base):
     organisation_id = Column(UUID(as_uuid=True), ForeignKey("organisations.id"), nullable=False)
     name = Column(String(255), nullable=False)
     timezone = Column(String(50), nullable=False, default="Africa/Johannesburg")
+    # Location details (migration 004)
+    province = Column(String(100))
+    district = Column(String(255))
+    plot_number = Column(String(50))
+    address = Column(Text)
+    latitude = Column(Float)
+    longitude = Column(Float)
+    area_hectares = Column(Float)
+    contact_name = Column(String(255))
+    contact_phone = Column(String(50))
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
@@ -97,13 +107,27 @@ class Animal(Base):
     tag_id = Column(String(100), nullable=False)
     species = Column(String(50), nullable=False, default="cattle")
     breed = Column(String(100))
-    date_of_birth = Column(DateTime)
+    date_of_birth = Column(Date)
     notes = Column(Text)
+    # Inventory fields (migration 003)
+    gender = Column(String(10))  # 'male' or 'female'
+    photo_url = Column(Text)
+    description = Column(Text)
+    colour = Column(String(100))
+    weight_kg = Column(Float)
+    status = Column(String(20), nullable=False, default="active")  # active/sold/deceased/transferred
+    mother_id = Column(UUID(as_uuid=True), ForeignKey("animals.id"))
+    father_id = Column(UUID(as_uuid=True), ForeignKey("animals.id"))
+    acquired_date = Column(Date)
+    removed_date = Column(Date)
+    removal_reason = Column(Text)
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
     farm = relationship("Farm", back_populates="animals")
     device = relationship("Device", foreign_keys=[device_id], uselist=False)
+    mother = relationship("Animal", foreign_keys=[mother_id], remote_side="Animal.id", uselist=False)
+    father = relationship("Animal", foreign_keys=[father_id], remote_side="Animal.id", uselist=False)
 
 
 class Geofence(Base):
