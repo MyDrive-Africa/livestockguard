@@ -5,6 +5,7 @@ import { useRealtimeStore } from '@/stores/realtimeStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { apiClient } from '@/api/client';
+import { useToastStore } from '@/stores/toastStore';
 import type { Farm } from '@/types';
 
 // Fallback centre (South Africa overview) — used only if no farm is selected
@@ -76,6 +77,7 @@ export default function MapPage() {
   const positions = useRealtimeStore((state) => state.positions);
   const currentFarm = useAuthStore((state) => state.currentFarm);
   const resolved = useThemeStore((state) => state.resolved);
+  const addToast = useToastStore((state) => state.addToast);
 
   // Multi-farm support
   const [farms, setFarms] = useState<Farm[]>([]);
@@ -350,9 +352,21 @@ export default function MapPage() {
             map.addLayer({ id: `fence-outline-${fenceId}`, type: 'line', source: `fence-${fenceId}`, paint: { 'line-color': color, 'line-width': 2, 'line-dasharray': fenceType === 'exclusion' ? [4, 2] : [1] } });
             map.addLayer({ id: `fence-label-${fenceId}`, type: 'symbol', source: `fence-${fenceId}`, layout: { 'text-field': name, 'text-size': 11 }, paint: { 'text-color': color, 'text-halo-color': '#fff', 'text-halo-width': 1.5 } });
           }
+
+          addToast({
+            title: 'Geofence Saved',
+            message: `"${name}" (${fenceType}) saved to database`,
+            severity: 'success',
+            duration: 5000,
+          });
         } catch (err) {
           console.error('Failed to save geofence:', err);
-          alert('Failed to save geofence. Check console for details.');
+          addToast({
+            title: 'Save Failed',
+            message: 'Failed to save geofence. Check connection and try again.',
+            severity: 'high',
+            duration: 8000,
+          });
         }
       }
     }
