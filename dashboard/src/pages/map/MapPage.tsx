@@ -118,8 +118,8 @@ export default function MapPage() {
     if (!loading) {
       clearAllGeofences(map);
       clearAllMarkers();
-      loadGeofences(map);
-      fetchPositions(map);
+      loadGeofencesForFarm(map, selectedFarmId);
+      fetchPositionsForFarm(map, selectedFarmId);
     }
   }, [selectedFarmId, farms]);
 
@@ -209,9 +209,13 @@ export default function MapPage() {
   }
 
   async function loadGeofences(map: maplibregl.Map) {
+    await loadGeofencesForFarm(map, selectedFarmId);
+  }
+
+  async function loadGeofencesForFarm(map: maplibregl.Map, farmId: string) {
     try {
-      const farmId = selectedFarmId || currentFarm || '22222222-2222-2222-2222-222222222222';
-      const resp = await apiClient.get('/api/geofences', { params: { farm_id: farmId } });
+      const fid = farmId || currentFarm || '22222222-2222-2222-2222-222222222222';
+      const resp = await apiClient.get('/api/geofences', { params: { farm_id: fid } });
       const fences = resp.data;
       const ids: string[] = [];
       if (fences.length > 0) {
@@ -228,7 +232,7 @@ export default function MapPage() {
       // Fall through to demo geofences only for Boschhoek
     }
     // Fallback: demo geofences (only if Boschhoek farm)
-    if (!selectedFarmId || selectedFarmId === '22222222-2222-2222-2222-222222222222') {
+    if (!farmId || farmId === '22222222-2222-2222-2222-222222222222') {
       addDemoGeofences(map);
       setGeofenceIds(DEMO_GEOFENCES.map((f) => f.id));
     }
@@ -383,9 +387,13 @@ export default function MapPage() {
 
   // ─── Fetch & Render Positions ──────────────────────
   async function fetchPositions(map: maplibregl.Map) {
+    await fetchPositionsForFarm(map, selectedFarmId);
+  }
+
+  async function fetchPositionsForFarm(map: maplibregl.Map, farmId: string) {
     try {
-      const farmId = selectedFarmId || currentFarm || '22222222-2222-2222-2222-222222222222';
-      const resp = await apiClient.get('/api/animals', { params: { farm_id: farmId } });
+      const fid = farmId || currentFarm || '22222222-2222-2222-2222-222222222222';
+      const resp = await apiClient.get('/api/animals', { params: { farm_id: fid } });
       setAnimalCount(resp.data.length);
       resp.data.forEach((a: any) => {
         if (a.last_latitude && a.last_longitude) addOrUpdateMarker(map, a.id, a.name, a.last_longitude, a.last_latitude, a.battery_level);
