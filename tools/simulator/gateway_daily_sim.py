@@ -136,20 +136,36 @@ def generate_mac():
 
 
 def send_batch(api_url, gateway_serial, herdsman, sightings, session_id=None):
-    payload = {
-        "gateway_serial": gateway_serial,
-        "latitude": herdsman.lat,
-        "longitude": herdsman.lon,
-        "speed": herdsman.speed_kmh,
-        "battery_pct": int(herdsman.battery),
-        "session_id": session_id,
-        "sightings": sightings,
-    }
-    try:
-        resp = requests.post(f"{api_url}/api/gateway/batch", json=payload, timeout=10)
-        return resp.json() if resp.status_code == 200 else None
-    except Exception:
+    """Send sightings to API — one mini-batch per cow for realistic individual positions."""
+    if not sightings:
         return None
+
+    total_accepted = 0
+    total_resolved = 0
+
+    # Send each cow as an individual sighting at its own position
+    for s in sightings:
+        cow_lat = s.get("_lat", herdsman.lat)
+        cow_lon = s.get("_lon", herdsman.lon)
+        payload = {
+            "gateway_serial": gateway_serial,
+            "latitude": cow_lat,
+            "longitude": cow_lon,
+            "speed": herdsman.speed_kmh,
+            "battery_pct": int(herdsman.battery),
+            "session_id": session_id,
+            "sightings": [{"mac_address": s["mac_address"], "rssi": s["rssi"]}],
+        }
+        try:
+            resp = requests.post(f"{api_url}/api/gateway/batch", json=payload, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                total_accepted += data.get("accepted", 0)
+                total_resolved += data.get("resolved", 0)
+        except Exception:
+            pass
+
+    return {"accepted": total_accepted, "resolved": total_resolved, "unresolved_macs": []}
 
 
 # ─── Daily Routine Phases ─────────────────────────────────────────────────────
@@ -347,15 +363,21 @@ def main(api_url, gateway_serial, animals, speed, offline, scan_interval, report
                 if dist_from_farm > 500 and sim_hour < 9.2:
                     print(f"        ⚠️  BREACH: {breach_cow.name} left yard boundary ({dist_from_farm:.0f}m from farm)")
 
-            # BLE scan
+            # BLE scan — detect cows and record their approximate positions
             detected = 0
             for cow in cows:
                 dist = distance_m(herdsman.lat, herdsman.lon, cow.lat, cow.lon)
                 if dist <= BLE_MAX_RANGE_M:
                     rssi = rssi_from_distance(dist)
+                    # Use cow's actual position (simulated) with slight noise
+                    # In real life this would be gateway GPS + RSSI distance estimate
+                    sighting_lat = cow.lat + random.gauss(0, 0.00005)
+                    sighting_lon = cow.lon + random.gauss(0, 0.00005)
                     batch_buffer.append({
                         "mac_address": cow.mac,
                         "rssi": rssi,
+                        "_lat": sighting_lat,
+                        "_lon": sighting_lon,
                     })
                     detected += 1
 
