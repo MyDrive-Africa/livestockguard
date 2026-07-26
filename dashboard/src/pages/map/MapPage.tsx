@@ -173,8 +173,8 @@ export default function MapPage() {
 
     map.on('load', () => {
       setLoading(false);
-      loadGeofences(map);
-      fetchPositions(map);
+      // Data loading is handled by the selectedFarmId useEffect
+      // (waits for farms API response before loading geofences/animals)
     });
 
     map.on('click', (e) => {
