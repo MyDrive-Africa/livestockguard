@@ -111,22 +111,20 @@ export default function MapPage() {
     loadFarms();
   }, []);
 
-  // Fly to selected farm when it changes
+  // Fly to selected farm when it changes, or when map finishes loading
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !selectedFarmId) return;
+    if (!map || !selectedFarmId || loading) return;
     const farm = farms.find((f) => f.id === selectedFarmId);
     if (farm?.latitude && farm?.longitude) {
       map.flyTo({ center: [farm.longitude, farm.latitude], zoom: FARM_ZOOM, duration: 1500 });
     }
-    // Reload geofences & animals for the new farm
-    if (!loading) {
-      clearAllGeofences(map);
-      clearAllMarkers();
-      loadGeofencesForFarm(map, selectedFarmId);
-      fetchPositionsForFarm(map, selectedFarmId);
-    }
-  }, [selectedFarmId, farms]);
+    // Load geofences & animals for the selected farm
+    clearAllGeofences(map);
+    clearAllMarkers();
+    loadGeofencesForFarm(map, selectedFarmId);
+    fetchPositionsForFarm(map, selectedFarmId);
+  }, [selectedFarmId, farms, loading]);
 
   function clearAllGeofences(map: maplibregl.Map) {
     geofenceIds.forEach((id) => {
@@ -222,10 +220,6 @@ export default function MapPage() {
     map.addLayer({ id: `fence-fill-${id}`, type: 'fill', source: `fence-${id}`, paint: { 'fill-color': color, 'fill-opacity': 0.1 } });
     map.addLayer({ id: `fence-outline-${id}`, type: 'line', source: `fence-${id}`, paint: { 'line-color': color, 'line-width': 2, 'line-dasharray': type === 'exclusion' ? [4, 2] : [1] } });
     map.addLayer({ id: `fence-label-${id}`, type: 'symbol', source: `fence-${id}`, layout: { 'text-field': name, 'text-size': 11 }, paint: { 'text-color': color, 'text-halo-color': '#fff', 'text-halo-width': 1.5 } });
-  }
-
-  async function loadGeofences(map: maplibregl.Map) {
-    await loadGeofencesForFarm(map, selectedFarmId);
   }
 
   async function loadGeofencesForFarm(map: maplibregl.Map, farmId: string) {

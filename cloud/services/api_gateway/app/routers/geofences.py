@@ -229,7 +229,7 @@ async def update_geofence(
             geojson_str = json.dumps(update.geometry)
             await db.execute(
                 text(
-                    "UPDATE geofences SET geometry = ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326) "
+                    "UPDATE geofences SET geometry = ST_GeomFromGeoJSON(:geojson)::geography "
                     "WHERE id = :id"
                 ),
                 {"geojson": geojson_str, "id": str(fence.id)},
@@ -250,6 +250,14 @@ async def update_geofence(
         geometry=update.geometry,
         created_at=fence.created_at.isoformat() if fence.created_at else None,
     )
+
+
+@router.patch("/{geofence_id}", response_model=GeofenceResponse)
+async def patch_geofence(
+    geofence_id: UUID, update: GeofenceUpdate, db: AsyncSession = Depends(get_db)
+):
+    """Partially update a geofence (name, type, active, alert)."""
+    return await update_geofence(geofence_id, update, db)
 
 
 @router.delete("/{geofence_id}", status_code=204)
