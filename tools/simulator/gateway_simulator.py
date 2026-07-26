@@ -211,7 +211,7 @@ def end_session(api_url: str, session_id: str, lat: float, lon: float):
 @click.option('--farm', default='lochvaal', type=click.Choice(list(FARM_PRESETS.keys())),
               help='Farm preset')
 @click.option('--gateway-serial', default=None, help='Gateway serial (auto from preset)')
-@click.option('--herdsman', default='Sipho', help='Herdsman name')
+@click.option('--herdsman', default='Teboho Mpeki', help='Herdsman name')
 @click.option('--animals', default=10, help='Number of ear-tagged animals')
 @click.option('--scan-interval', default=5, help='BLE scan interval (seconds)')
 @click.option('--report-interval', default=30, help='API report interval (seconds)')

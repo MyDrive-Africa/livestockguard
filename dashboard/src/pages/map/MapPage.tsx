@@ -30,6 +30,11 @@ const TILE_SOURCES = {
     tiles: ['https://tile.opentopomap.org/{z}/{x}/{y}.png'],
     attribution: '&copy; OpenTopoMap',
   },
+  dark: {
+    label: 'Dark',
+    tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'],
+    attribution: '&copy; CartoDB &copy; OpenStreetMap contributors',
+  },
 };
 
 // Demo geofences (matching seed_data.sql)
@@ -195,6 +200,17 @@ export default function MapPage() {
       map.addLayer({ id: 'base-layer', type: 'raster', source: 'base-tiles' }, map.getStyle().layers[1]?.id);
     }
   }, [tileSource, loading]);
+
+  // ─── Auto-switch to dark tiles when theme changes ──
+  useEffect(() => {
+    if (loading) return;
+    // If user hasn't manually picked a tile source, auto-switch based on theme
+    if (resolved === 'dark' && tileSource === 'osm') {
+      setTileSource('dark');
+    } else if (resolved === 'light' && tileSource === 'dark') {
+      setTileSource('osm');
+    }
+  }, [resolved, loading]);
 
   // ─── Geofence Polygon Overlays ─────────────────────
   function addGeofenceToMap(map: maplibregl.Map, id: string, name: string, type: string, geometry: any) {

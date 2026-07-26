@@ -520,6 +520,53 @@ async def list_gateways(
     ]
 
 
+# ─── Edit Gateway (Admin) ─────────────────────────────────────────────────────
+
+
+class GatewayUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    herdsman_name: Optional[str] = None
+    herdsman_phone: Optional[str] = None
+    device_type: Optional[str] = None
+    status: Optional[str] = None
+    ble_scan_interval_ms: Optional[int] = None
+    report_interval_sec: Optional[int] = None
+
+
+@router.patch("/{gateway_id}", response_model=GatewayResponse)
+async def update_gateway(gateway_id: UUID, req: GatewayUpdateRequest, db: AsyncSession = Depends(get_db)):
+    """Update gateway details (herdsman name, phone, config, status)."""
+    result = await db.execute(select(GatewayDevice).where(GatewayDevice.id == gateway_id))
+    gateway = result.scalar_one_or_none()
+    if not gateway:
+        raise HTTPException(status_code=404, detail="Gateway not found")
+
+    update_data = req.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(gateway, field, value)
+
+    await db.commit()
+    await db.refresh(gateway)
+
+    return GatewayResponse(
+        id=str(gateway.id),
+        farm_id=str(gateway.farm_id),
+        serial_number=gateway.serial_number,
+        name=gateway.name,
+        device_type=gateway.device_type,
+        herdsman_name=gateway.herdsman_name,
+        herdsman_phone=gateway.herdsman_phone,
+        status=gateway.status,
+        last_seen=gateway.last_seen.isoformat() if gateway.last_seen else None,
+        last_latitude=gateway.last_latitude,
+        last_longitude=gateway.last_longitude,
+        last_battery_pct=gateway.last_battery_pct,
+        ble_scan_interval_ms=gateway.ble_scan_interval_ms,
+        report_interval_sec=gateway.report_interval_sec,
+        max_ble_range_m=gateway.max_ble_range_m,
+    )
+
+
 # ─── Sessions (Patrol Tracking) ──────────────────────────────────────────────
 
 

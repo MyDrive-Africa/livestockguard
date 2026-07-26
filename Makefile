@@ -93,6 +93,14 @@ simulate-gateway-offline: ## Run gateway simulator without API (print only)
 	@echo "$(GREEN)Starting gateway simulator (offline mode)...$(RESET)"
 	cd tools/simulator && python3 gateway_simulator.py --farm lochvaal --animals 10 --offline
 
+simulate-day: ## Simulate full herdsman day at Loch Vaal (12h in 6min)
+	@echo "$(GREEN)Starting herdsman daily routine simulation...$(RESET)"
+	cd tools/simulator && python3 gateway_daily_sim.py --speed 120
+
+simulate-day-offline: ## Simulate herdsman day without API
+	@echo "$(GREEN)Starting herdsman daily simulation (offline)...$(RESET)"
+	cd tools/simulator && python3 gateway_daily_sim.py --speed 120 --offline
+
 simulate-theft: ## Run theft scenario simulation
 	@echo "$(YELLOW)Starting THEFT scenario...$(RESET)"
 	cd tools/simulator && python3 simulator.py --farm boschhoek --animals 5 --scenario theft --interval 5

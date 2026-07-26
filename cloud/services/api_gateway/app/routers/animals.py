@@ -168,7 +168,7 @@ async def list_animals(
 
     animals = []
     for row in rows:
-        # Get latest position for this animal
+        # Get latest position for this animal (GPS collar first, then BLE gateway fallback)
         pos_query = text("""
             SELECT latitude, longitude, speed, battery_mv
             FROM positions
@@ -177,6 +177,18 @@ async def list_animals(
         """)
         pos_result = await db.execute(pos_query, {"animal_id": str(row.Animal.id)})
         pos = pos_result.first()
+
+        # BLE fallback: if no GPS position, check ble_sightings for gateway coords
+        if not pos:
+            ble_query = text("""
+                SELECT gateway_latitude AS latitude, gateway_longitude AS longitude,
+                       gateway_speed AS speed, NULL::int AS battery_mv
+                FROM ble_sightings
+                WHERE animal_id = :animal_id
+                ORDER BY time DESC LIMIT 1
+            """)
+            ble_result = await db.execute(ble_query, {"animal_id": str(row.Animal.id)})
+            pos = ble_result.first()
 
         animals.append(_animal_to_response(row.Animal, row.device_serial, pos))
 
@@ -195,7 +207,7 @@ async def get_animal(animal_id: UUID, db: AsyncSession = Depends(get_db)):
     if not row:
         raise HTTPException(status_code=404, detail="Animal not found")
 
-    # Get latest position
+    # Get latest position (GPS first, BLE fallback)
     pos_query = text("""
         SELECT latitude, longitude, speed, battery_mv
         FROM positions
@@ -204,6 +216,17 @@ async def get_animal(animal_id: UUID, db: AsyncSession = Depends(get_db)):
     """)
     pos_result = await db.execute(pos_query, {"animal_id": str(animal_id)})
     pos = pos_result.first()
+
+    if not pos:
+        ble_query = text("""
+            SELECT gateway_latitude AS latitude, gateway_longitude AS longitude,
+                   gateway_speed AS speed, NULL::int AS battery_mv
+            FROM ble_sightings
+            WHERE animal_id = :animal_id
+            ORDER BY time DESC LIMIT 1
+        """)
+        ble_result = await db.execute(ble_query, {"animal_id": str(animal_id)})
+        pos = ble_result.first()
 
     return _animal_to_response(row.Animal, row.device_serial, pos)
 
