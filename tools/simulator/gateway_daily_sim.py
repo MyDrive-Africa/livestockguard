@@ -217,11 +217,18 @@ def main(api_url, gateway_serial, animals, speed, offline, scan_interval, report
     print(f"{'─' * 55}")
     print()
 
-    # Create cattle with BLE ear tags
+    # Create cattle with BLE ear tags (use fixed MACs matching registered tags)
     cows = []
     kraal = LOCATIONS['kraal']
+    # These MACs match what's registered in the database via register_ble_tags.py
+    registered_macs = [
+        'A1:B2:C3:D4:E5:01', 'A1:B2:C3:D4:E5:02', 'A1:B2:C3:D4:E5:03',
+        'A1:B2:C3:D4:E5:04', 'A1:B2:C3:D4:E5:05', 'A1:B2:C3:D4:E5:06',
+        'A1:B2:C3:D4:E5:07', 'A1:B2:C3:D4:E5:08', 'A1:B2:C3:D4:E5:09',
+        'A1:B2:C3:D4:E5:10',
+    ]
     for i in range(animals):
-        mac = generate_mac()
+        mac = registered_macs[i] if i < len(registered_macs) else generate_mac()
         cows.append(Cow(
             name=f"LV-{i+1:03d}",
             mac=mac,

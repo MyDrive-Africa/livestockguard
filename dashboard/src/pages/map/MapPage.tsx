@@ -411,8 +411,36 @@ export default function MapPage() {
       const fid = farmId || currentFarm || '22222222-2222-2222-2222-222222222222';
       const resp = await apiClient.get('/api/animals', { params: { farm_id: fid } });
       setAnimalCount(resp.data.length);
-      resp.data.forEach((a: any) => {
-        if (a.last_latitude && a.last_longitude) addOrUpdateMarker(map, a.id, a.name, a.last_longitude, a.last_latitude, a.battery_level);
+
+      // Spread animals that share the same coordinates (BLE animals at gateway position)
+      const positionMap = new Map<string, number>(); // "lat,lng" -> count
+      const animals = resp.data.filter((a: any) => a.last_latitude && a.last_longitude);
+
+      animals.forEach((a: any) => {
+        const key = `${a.last_latitude.toFixed(5)},${a.last_longitude.toFixed(5)}`;
+        positionMap.set(key, (positionMap.get(key) || 0) + 1);
+      });
+
+      // For each animal, if it shares a position with others, spread in a circle
+      const placed = new Map<string, number>(); // tracks how many placed at each key
+      animals.forEach((a: any) => {
+        const key = `${a.last_latitude.toFixed(5)},${a.last_longitude.toFixed(5)}`;
+        const total = positionMap.get(key) || 1;
+        const idx = placed.get(key) || 0;
+        placed.set(key, idx + 1);
+
+        let lng = a.last_longitude;
+        let lat = a.last_latitude;
+
+        // Spread markers in a circle if multiple at same point
+        if (total > 1) {
+          const angle = (idx / total) * 2 * Math.PI;
+          const radius = 0.0003 + (total > 5 ? 0.0002 : 0); // ~30-50m spread
+          lng += Math.cos(angle) * radius;
+          lat += Math.sin(angle) * radius;
+        }
+
+        addOrUpdateMarker(map, a.id, a.name, lng, lat, a.battery_level);
       });
     } catch { addDemoMarkers(map); }
   }
@@ -535,7 +563,7 @@ export default function MapPage() {
       <div className="flex items-center justify-between px-4 py-2 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400 z-10 shrink-0 theme-transition">
         <div className="flex items-center gap-4">
           <span className="text-green-600 font-medium">🟢 {animalCount} animals</span>
-          <span className="text-blue-600">{DEMO_GEOFENCES.length} geofences</span>
+          <span className="text-blue-600">{geofenceIds.length || DEMO_GEOFENCES.length} geofences</span>
           {selectedAnimal && <span className="text-purple-600">Trail: {trailData.length} pts</span>}
           {drawingMode && <span className="text-amber-600 font-medium">Drawing active</span>}
         </div>
