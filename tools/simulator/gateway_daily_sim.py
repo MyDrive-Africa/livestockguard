@@ -200,9 +200,17 @@ def phase_grazing(herdsman, cows, center_key, dt, **kw):
 @click.option('--offline', is_flag=True, help='No API calls, print only')
 @click.option('--scan-interval', default=5, help='BLE scan interval (real seconds)')
 @click.option('--report-interval', default=30, help='API batch interval (real seconds)')
-def main(api_url, gateway_serial, animals, speed, offline, scan_interval, report_interval):
+@click.option('--scenario', default='normal',
+              type=click.Choice(['normal', 'theft', 'breach']),
+              help='Scenario: normal (daily routine), theft (cow taken by vehicle), breach (cow leaves range)')
+def main(api_url, gateway_serial, animals, speed, offline, scan_interval, report_interval, scenario):
     """
     Simulate a full herdsman day at Loch Vaal Plot 30.
+
+    Scenarios:
+    - normal: Full daily routine (kraal → graze → water → graze → return)
+    - theft: One cow is stolen mid-morning (moves at vehicle speed away from farm)
+    - breach: One cow wanders out of the 10km grazing range
 
     The day runs at accelerated speed (default 120x = 12 hours in 6 minutes).
     BLE sightings are sent to the API every 30 real seconds.
@@ -317,6 +325,27 @@ def main(api_url, gateway_serial, animals, speed, offline, scan_interval, report
                 phase_grazing(herdsman, cows, 'grazing_south', sim_dt)
             elif phase_key == 'move_kraal':
                 phase_move_to_grazing(herdsman, cows, 'kraal', sim_dt)
+
+            # Scenario-specific behavior (theft or breach)
+            if scenario == 'theft' and sim_hour >= 8.0:
+                # First cow is being stolen — moves at vehicle speed away
+                stolen_cow = cows[0]
+                stolen_cow.lat -= 0.001 * (sim_dt / 60)  # Moving south fast
+                stolen_cow.lon += 0.0005 * (sim_dt / 60)  # Moving east
+                if sim_hour >= 8.0 and sim_hour < 8.1:
+                    print(f"        🚨 THEFT: {stolen_cow.name} taken by vehicle!")
+
+            elif scenario == 'breach' and sim_hour >= 9.0:
+                # First cow wanders steadily away from farm (breach)
+                breach_cow = cows[0]
+                breach_cow.lat += 0.0003 * (sim_dt / 60)  # Moving north slowly
+                breach_cow.lon += 0.0001 * (sim_dt / 60)
+                dist_from_farm = distance_m(
+                    breach_cow.lat, breach_cow.lon,
+                    FARM_CENTER[0], FARM_CENTER[1]
+                )
+                if dist_from_farm > 500 and sim_hour < 9.2:
+                    print(f"        ⚠️  BREACH: {breach_cow.name} left yard boundary ({dist_from_farm:.0f}m from farm)")
 
             # BLE scan
             detected = 0

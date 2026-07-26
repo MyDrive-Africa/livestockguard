@@ -101,6 +101,14 @@ simulate-day-offline: ## Simulate herdsman day without API
 	@echo "$(GREEN)Starting herdsman daily simulation (offline)...$(RESET)"
 	cd tools/simulator && python3 gateway_daily_sim.py --speed 120 --offline
 
+simulate-day-theft: ## Simulate theft at Loch Vaal (cow taken at 8am)
+	@echo "$(YELLOW)Starting THEFT scenario (Loch Vaal BLE)...$(RESET)"
+	cd tools/simulator && python3 gateway_daily_sim.py --speed 360 --scenario theft
+
+simulate-day-breach: ## Simulate geofence breach at Loch Vaal
+	@echo "$(YELLOW)Starting BREACH scenario (Loch Vaal BLE)...$(RESET)"
+	cd tools/simulator && python3 gateway_daily_sim.py --speed 360 --scenario breach
+
 simulate-theft: ## Run theft scenario simulation
 	@echo "$(YELLOW)Starting THEFT scenario...$(RESET)"
 	cd tools/simulator && python3 simulator.py --farm boschhoek --animals 5 --scenario theft --interval 5

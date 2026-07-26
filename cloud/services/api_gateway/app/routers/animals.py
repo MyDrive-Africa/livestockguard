@@ -390,7 +390,8 @@ async def get_animal_history(
     limit: int = Query(default=500, le=5000),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get position history for an animal."""
+    """Get position history for an animal (GPS or BLE gateway positions)."""
+    # Try GPS positions first
     query = text("""
         SELECT time, latitude, longitude, speed, heading, battery_mv
         FROM positions
@@ -405,6 +406,24 @@ async def get_animal_history(
         "limit": limit,
     })
     rows = result.fetchall()
+
+    # BLE fallback: if no GPS history, get positions from ble_sightings
+    if not rows:
+        ble_query = text("""
+            SELECT time, gateway_latitude AS latitude, gateway_longitude AS longitude,
+                   gateway_speed AS speed, 0 AS heading, NULL AS battery_mv
+            FROM ble_sightings
+            WHERE animal_id = :animal_id
+              AND time > NOW() - make_interval(hours => :hours)
+            ORDER BY time DESC
+            LIMIT :limit
+        """)
+        ble_result = await db.execute(ble_query, {
+            "animal_id": str(animal_id),
+            "hours": hours,
+            "limit": limit,
+        })
+        rows = ble_result.fetchall()
 
     return {
         "animal_id": str(animal_id),
