@@ -219,12 +219,12 @@ INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on
      'inclusion', true, true)
 ON CONFLICT DO NOTHING;
 
--- Zone 3: Range (10km radius grazing area — approx polygon)
--- 10km ≈ 0.09° latitude, 0.1° longitude at this latitude
+-- Zone 3: Range (30km radius from Loch Vaal — covers surrounding area)
+-- 30km ≈ 0.27° latitude, 0.33° longitude at this latitude
 INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on_breach) VALUES
     ('ffffffff-ffff-ffff-ffff-fffffffffff3', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-     'Grazing Range (10km)',
-     ST_GeogFromText('POLYGON((27.610 -26.629, 27.810 -26.629, 27.810 -26.809, 27.610 -26.809, 27.610 -26.629))'),
+     'Loch Vaal Area (30km)',
+     ST_GeogFromText('POLYGON((27.380 -26.449, 28.040 -26.449, 28.040 -26.989, 27.380 -26.989, 27.380 -26.449))'),
      'inclusion', true, true)
 ON CONFLICT DO NOTHING;
 
