@@ -237,6 +237,30 @@ INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
+-- HERDSMAN GATEWAY & BLE TAGS (Loch Vaal)
+-- ============================================================================
+
+-- Gateway device (Teboho's phone)
+INSERT INTO gateway_devices (id, farm_id, serial_number, name, device_type, herdsman_name, herdsman_phone, status) VALUES
+    ('77777777-7777-7777-7777-777777777701', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+     'GW-LV-001', 'Teboho Phone', 'phone', 'Teboho Mpeki', '+27 82 555 1234', 'active')
+ON CONFLICT DO NOTHING;
+
+-- BLE ear tags linked to Loch Vaal animals
+INSERT INTO ble_ear_tags (id, farm_id, animal_id, mac_address, tag_name, status) VALUES
+    ('88888888-8888-8888-8888-888888888801', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee01', 'A1:B2:C3:D4:E5:01', 'Tag-LV-001', 'active'),
+    ('88888888-8888-8888-8888-888888888802', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee02', 'A1:B2:C3:D4:E5:02', 'Tag-LV-002', 'active'),
+    ('88888888-8888-8888-8888-888888888803', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee03', 'A1:B2:C3:D4:E5:03', 'Tag-LV-003', 'active'),
+    ('88888888-8888-8888-8888-888888888804', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee04', 'A1:B2:C3:D4:E5:04', 'Tag-LV-004', 'active'),
+    ('88888888-8888-8888-8888-888888888805', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee05', 'A1:B2:C3:D4:E5:05', 'Tag-LV-005', 'active'),
+    ('88888888-8888-8888-8888-888888888806', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee06', 'A1:B2:C3:D4:E5:06', 'Tag-LV-006', 'active'),
+    ('88888888-8888-8888-8888-888888888807', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee07', 'A1:B2:C3:D4:E5:07', 'Tag-LV-007', 'active'),
+    ('88888888-8888-8888-8888-888888888808', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee08', 'A1:B2:C3:D4:E5:08', 'Tag-LV-008', 'active'),
+    ('88888888-8888-8888-8888-888888888809', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee09', 'A1:B2:C3:D4:E5:09', 'Tag-LV-009', 'active'),
+    ('88888888-8888-8888-8888-888888888810', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee10', 'A1:B2:C3:D4:E5:10', 'Tag-LV-010', 'active')
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
 -- Summary
 -- ============================================================================
 

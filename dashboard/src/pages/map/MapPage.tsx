@@ -11,7 +11,15 @@ import type { Farm } from '@/types';
 // Fallback centre (South Africa overview) — used only if no farm is selected
 const DEFAULT_CENTER: [number, number] = [27.5, -28.0];
 const DEFAULT_ZOOM = 7;
-const FARM_ZOOM = 14;
+
+// Calculate appropriate zoom based on farm area
+function farmZoom(farm?: { area_hectares?: number }): number {
+  if (!farm?.area_hectares) return 15;
+  const ha = farm.area_hectares;
+  if (ha > 200) return 14;    // Large farms (Boschhoek 450ha)
+  if (ha > 50) return 15;     // Medium farms
+  return 16;                   // Small plots (Loch Vaal 25ha)
+}
 
 // Map tile sources
 const TILE_SOURCES = {
@@ -117,7 +125,7 @@ export default function MapPage() {
     if (!map || !selectedFarmId || loading) return;
     const farm = farms.find((f) => f.id === selectedFarmId);
     if (farm?.latitude && farm?.longitude) {
-      map.flyTo({ center: [farm.longitude, farm.latitude], zoom: FARM_ZOOM, duration: 1500 });
+      map.flyTo({ center: [farm.longitude, farm.latitude], zoom: farmZoom(farm as any), duration: 1500 });
     }
     // Load geofences & animals for the selected farm
     clearAllGeofences(map);
@@ -152,7 +160,7 @@ export default function MapPage() {
     const center: [number, number] = farm?.longitude && farm?.latitude
       ? [farm.longitude, farm.latitude]
       : DEFAULT_CENTER;
-    const zoom = farm?.latitude ? FARM_ZOOM : DEFAULT_ZOOM;
+    const zoom = farm?.latitude ? farmZoom(farm as any) : DEFAULT_ZOOM;
 
     const source = TILE_SOURCES[tileSource];
     const map = new maplibregl.Map({
@@ -219,7 +227,7 @@ export default function MapPage() {
     });
     map.addLayer({ id: `fence-fill-${id}`, type: 'fill', source: `fence-${id}`, paint: { 'fill-color': color, 'fill-opacity': 0.1 } });
     map.addLayer({ id: `fence-outline-${id}`, type: 'line', source: `fence-${id}`, paint: { 'line-color': color, 'line-width': 2, 'line-dasharray': type === 'exclusion' ? [4, 2] : [1] } });
-    map.addLayer({ id: `fence-label-${id}`, type: 'symbol', source: `fence-${id}`, layout: { 'text-field': name, 'text-size': 11 }, paint: { 'text-color': color, 'text-halo-color': '#fff', 'text-halo-width': 1.5 } });
+    map.addLayer({ id: `fence-label-${id}`, type: 'symbol', source: `fence-${id}`, layout: { 'text-field': name, 'text-size': 13, 'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'], 'text-anchor': 'center' }, paint: { 'text-color': '#ffffff', 'text-halo-color': color, 'text-halo-width': 2 } });
   }
 
   async function loadGeofencesForFarm(map: maplibregl.Map, farmId: string) {
