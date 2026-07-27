@@ -30,8 +30,8 @@ const TILE_SOURCES = {
   },
   satellite: {
     label: 'Satellite',
-    tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
-    attribution: '&copy; Esri',
+    tiles: ['https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'],
+    attribution: '&copy; Google',
   },
   terrain: {
     label: 'Terrain',
@@ -86,6 +86,10 @@ export default function MapPage() {
   const [trailData, setTrailData] = useState<[number, number][]>([]);
   const [drawingMode, setDrawingMode] = useState(false);
   const [drawingPoints, setDrawingPoints] = useState<[number, number][]>([]);
+  const drawingModeRef = useRef(false);
+
+  // Keep ref in sync with state
+  useEffect(() => { drawingModeRef.current = drawingMode; }, [drawingMode]);
 
   const positions = useRealtimeStore((state) => state.positions);
   const currentFarm = useAuthStore((state) => state.currentFarm);
@@ -136,11 +140,14 @@ export default function MapPage() {
 
   function clearAllGeofences(map: maplibregl.Map) {
     geofenceIds.forEach((id) => {
-      ['fill', 'outline', 'label'].forEach((t) => {
+      ['fill', 'outline'].forEach((t) => {
         const layerId = `fence-${t}-${id}`;
         if (map.getLayer(layerId)) map.removeLayer(layerId);
       });
       if (map.getSource(`fence-${id}`)) map.removeSource(`fence-${id}`);
+      // Remove label marker
+      const labelMarker = fenceLabelMarkersRef.current.get(id);
+      if (labelMarker) { labelMarker.remove(); fenceLabelMarkersRef.current.delete(id); }
     });
     setGeofenceIds([]);
   }
@@ -184,7 +191,7 @@ export default function MapPage() {
     });
 
     map.on('click', (e) => {
-      if (drawingMode) {
+      if (drawingModeRef.current) {
         setDrawingPoints((prev) => [...prev, [e.lngLat.lng, e.lngLat.lat]]);
       }
     });
@@ -219,15 +226,30 @@ export default function MapPage() {
   }, [resolved, loading]);
 
   // ─── Geofence Polygon Overlays ─────────────────────
+  const fenceLabelMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+
   function addGeofenceToMap(map: maplibregl.Map, id: string, name: string, type: string, geometry: any) {
     const color = type === 'exclusion' ? '#ef4444' : '#22c55e';
     map.addSource(`fence-${id}`, {
       type: 'geojson',
       data: { type: 'Feature', properties: { name }, geometry },
     });
-    map.addLayer({ id: `fence-fill-${id}`, type: 'fill', source: `fence-${id}`, paint: { 'fill-color': color, 'fill-opacity': 0.1 } });
-    map.addLayer({ id: `fence-outline-${id}`, type: 'line', source: `fence-${id}`, paint: { 'line-color': color, 'line-width': 2, 'line-dasharray': type === 'exclusion' ? [4, 2] : [1] } });
-    map.addLayer({ id: `fence-label-${id}`, type: 'symbol', source: `fence-${id}`, layout: { 'text-field': name, 'text-size': 13, 'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'], 'text-anchor': 'center' }, paint: { 'text-color': '#ffffff', 'text-halo-color': color, 'text-halo-width': 2 } });
+    map.addLayer({ id: `fence-fill-${id}`, type: 'fill', source: `fence-${id}`, paint: { 'fill-color': color, 'fill-opacity': 0.12 } });
+    map.addLayer({ id: `fence-outline-${id}`, type: 'line', source: `fence-${id}`, paint: { 'line-color': color, 'line-width': 2.5, 'line-dasharray': type === 'exclusion' ? [4, 2] : [1] } });
+
+    // Add name as HTML marker at polygon centroid
+    const coords = geometry.coordinates?.[0];
+    if (coords && coords.length > 0) {
+      let cx = 0, cy = 0;
+      coords.forEach((c: number[]) => { cx += c[0]; cy += c[1]; });
+      cx /= coords.length; cy /= coords.length;
+
+      const el = document.createElement('div');
+      el.style.cssText = `font-size:12px;font-weight:bold;color:#fff;background:${color};padding:2px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;opacity:0.9;`;
+      el.textContent = name;
+      const marker = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat([cx, cy]).addTo(map);
+      fenceLabelMarkersRef.current.set(id, marker);
+    }
   }
 
   async function loadGeofencesForFarm(map: maplibregl.Map, farmId: string) {
@@ -269,10 +291,15 @@ export default function MapPage() {
     const allFenceIds = geofenceIds.length > 0 ? geofenceIds : DEMO_GEOFENCES.map((f) => f.id);
     allFenceIds.forEach((id) => {
       const vis = layers.geofences ? 'visible' : 'none';
-      ['fill', 'outline', 'label'].forEach((t) => {
+      ['fill', 'outline'].forEach((t) => {
         const layerId = `fence-${t}-${id}`;
         if (map.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', vis);
       });
+      // Toggle label marker visibility
+      const labelMarker = fenceLabelMarkersRef.current.get(id);
+      if (labelMarker) {
+        labelMarker.getElement().style.display = layers.geofences ? 'block' : 'none';
+      }
     });
   }, [layers.geofences, loading, geofenceIds]);
 
@@ -291,9 +318,35 @@ export default function MapPage() {
 
     try {
       const resp = await apiClient.get(`/api/animals/${animalId}/history`, { params: { hours: 24, limit: 200 } });
-      const points: [number, number][] = resp.data.positions.map((p: any) => [p.lon, p.lat]);
+      const positions = resp.data.positions;
+      const points: [number, number][] = positions.map((p: any) => [p.lon, p.lat]);
       setTrailData(points);
       renderTrail(map, points);
+
+      // Add time markers at start and end of trail
+      if (positions.length > 0) {
+        const first = positions[positions.length - 1]; // oldest
+        const last = positions[0]; // newest
+        const startTime = new Date(first.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const endTime = new Date(last.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        // Remove old time markers
+        document.querySelectorAll('.trail-time-marker').forEach(el => el.remove());
+
+        // Start marker
+        const startEl = document.createElement('div');
+        startEl.className = 'trail-time-marker';
+        startEl.style.cssText = 'font-size:10px;background:#7c3aed;color:#fff;padding:1px 4px;border-radius:3px;white-space:nowrap;';
+        startEl.textContent = `Start ${startTime}`;
+        new maplibregl.Marker({ element: startEl, anchor: 'bottom' }).setLngLat([first.lon, first.lat]).addTo(map);
+
+        // End marker
+        const endEl = document.createElement('div');
+        endEl.className = 'trail-time-marker';
+        endEl.style.cssText = 'font-size:10px;background:#7c3aed;color:#fff;padding:1px 4px;border-radius:3px;white-space:nowrap;';
+        endEl.textContent = `Now ${endTime}`;
+        new maplibregl.Marker({ element: endEl, anchor: 'bottom' }).setLngLat([last.lon, last.lat]).addTo(map);
+      }
     } catch {
       // Demo trail
       const demo: [number, number][] = [];
@@ -323,6 +376,7 @@ export default function MapPage() {
     if (map.getLayer('trail-line')) map.removeLayer('trail-line');
     if (map.getLayer('trail-dots')) map.removeLayer('trail-dots');
     if (map.getSource('trail-source')) map.removeSource('trail-source');
+    document.querySelectorAll('.trail-time-marker').forEach(el => el.remove());
     setSelectedAnimal(null);
     setTrailData([]);
   }
