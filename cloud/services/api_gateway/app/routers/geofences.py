@@ -45,6 +45,9 @@ class GeofenceResponse(BaseModel):
     active: bool
     alert_on_breach: bool
     geometry: Optional[dict] = None
+    area_m2: Optional[float] = None
+    area_hectares: Optional[float] = None
+    area_km2: Optional[float] = None
     created_at: Optional[str] = None
 
     class Config:
@@ -79,21 +82,29 @@ async def list_geofences(
 
     responses = []
     for fence in geofences:
-        # Retrieve geometry from PostGIS if stored, otherwise from JSONB
+        # Retrieve geometry and area from PostGIS
         geometry = None
+        area_m2 = None
         try:
             geo_result = await db.execute(
                 text(
-                    "SELECT ST_AsGeoJSON(geometry)::json as geojson "
+                    "SELECT ST_AsGeoJSON(geometry)::json as geojson, "
+                    "ST_Area(geometry) as area_m2 "
                     "FROM geofences WHERE id = :id"
                 ),
                 {"id": str(fence.id)},
             )
             row = geo_result.first()
-            if row and row.geojson:
-                geometry = row.geojson
+            if row:
+                if row.geojson:
+                    geometry = row.geojson
+                if row.area_m2:
+                    area_m2 = float(row.area_m2)
         except Exception:
             pass
+
+        area_hectares = round(area_m2 / 10000, 2) if area_m2 else None
+        area_km2 = round(area_m2 / 1000000, 4) if area_m2 else None
 
         responses.append(GeofenceResponse(
             id=str(fence.id),
@@ -103,6 +114,9 @@ async def list_geofences(
             active=fence.active,
             alert_on_breach=fence.alert_on_breach,
             geometry=geometry,
+            area_m2=round(area_m2, 1) if area_m2 else None,
+            area_hectares=area_hectares,
+            area_km2=area_km2,
             created_at=fence.created_at.isoformat() if fence.created_at else None,
         ))
 

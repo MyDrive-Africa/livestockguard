@@ -228,7 +228,7 @@ export default function MapPage() {
   // ─── Geofence Polygon Overlays ─────────────────────
   const fenceLabelMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
 
-  function addGeofenceToMap(map: maplibregl.Map, id: string, name: string, type: string, geometry: any) {
+  function addGeofenceToMap(map: maplibregl.Map, id: string, name: string, type: string, geometry: any, areaHectares?: number | null) {
     const color = type === 'exclusion' ? '#ef4444' : '#22c55e';
     map.addSource(`fence-${id}`, {
       type: 'geojson',
@@ -237,16 +237,23 @@ export default function MapPage() {
     map.addLayer({ id: `fence-fill-${id}`, type: 'fill', source: `fence-${id}`, paint: { 'fill-color': color, 'fill-opacity': 0.12 } });
     map.addLayer({ id: `fence-outline-${id}`, type: 'line', source: `fence-${id}`, paint: { 'line-color': color, 'line-width': 2.5, 'line-dasharray': type === 'exclusion' ? [4, 2] : [1] } });
 
-    // Add name as HTML marker at polygon centroid
+    // Add name + area as HTML marker at polygon centroid
     const coords = geometry.coordinates?.[0];
     if (coords && coords.length > 0) {
       let cx = 0, cy = 0;
       coords.forEach((c: number[]) => { cx += c[0]; cy += c[1]; });
       cx /= coords.length; cy /= coords.length;
 
+      let areaText = '';
+      if (areaHectares != null && areaHectares > 0) {
+        if (areaHectares >= 100) areaText = ` · ${(areaHectares / 100).toFixed(0)} km²`;
+        else if (areaHectares >= 1) areaText = ` · ${areaHectares.toFixed(1)} ha`;
+        else areaText = ` · ${Math.round(areaHectares * 10000)} m²`;
+      }
+
       const el = document.createElement('div');
-      el.style.cssText = `font-size:12px;font-weight:bold;color:#fff;background:${color};padding:2px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;opacity:0.9;`;
-      el.textContent = name;
+      el.style.cssText = `font-size:11px;font-weight:bold;color:#fff;background:${color};padding:2px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;opacity:0.9;`;
+      el.textContent = `${name}${areaText}`;
       const marker = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat([cx, cy]).addTo(map);
       fenceLabelMarkersRef.current.set(id, marker);
     }
@@ -261,7 +268,7 @@ export default function MapPage() {
       if (fences.length > 0) {
         fences.forEach((fence: any) => {
           if (fence.geometry) {
-            addGeofenceToMap(map, fence.id, fence.name, fence.fence_type, fence.geometry);
+            addGeofenceToMap(map, fence.id, fence.name, fence.fence_type, fence.geometry, fence.area_hectares);
             ids.push(fence.id);
           }
         });

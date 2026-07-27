@@ -12,6 +12,9 @@ interface Geofence {
   active: boolean;
   alert_on_breach: boolean;
   geometry?: any;
+  area_m2?: number;
+  area_hectares?: number;
+  area_km2?: number;
   created_at?: string;
 }
 
@@ -130,7 +133,9 @@ export default function GeofencesPage() {
                   <h3 className="font-medium text-gray-900 dark:text-white">{fence.name}</h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     {fence.fence_type} · {fence.alert_on_breach ? 'alerts on' : 'alerts off'}
-                    {fence.created_at && ` · created ${new Date(fence.created_at).toLocaleDateString()}`}
+                    {fence.area_hectares != null && fence.area_hectares >= 100 && ` · ${(fence.area_hectares / 100).toFixed(0)} km²`}
+                    {fence.area_hectares != null && fence.area_hectares >= 1 && fence.area_hectares < 100 && ` · ${fence.area_hectares.toFixed(1)} ha`}
+                    {fence.area_hectares != null && fence.area_hectares > 0 && fence.area_hectares < 1 && ` · ${Math.round(fence.area_hectares * 10000)} m²`}
                   </p>
                 </div>
               </div>
