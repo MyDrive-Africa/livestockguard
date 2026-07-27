@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useRealtimeStore } from '@/stores/realtimeStore';
@@ -87,9 +88,25 @@ export default function MapPage() {
   const [drawingMode, setDrawingMode] = useState(false);
   const [drawingPoints, setDrawingPoints] = useState<[number, number][]>([]);
   const drawingModeRef = useRef(false);
+  const [editingFenceId, setEditingFenceId] = useState<string | null>(null);
+  const [editingFenceName, setEditingFenceName] = useState<string>('');
 
   // Keep ref in sync with state
   useEffect(() => { drawingModeRef.current = drawingMode; }, [drawingMode]);
+
+  // Check URL for ?editFence=id (from Geofences page "Redraw" button)
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const editId = searchParams.get('editFence');
+    if (editId) {
+      setEditingFenceId(editId);
+      setDrawingMode(true);
+      setDrawingPoints([]);
+      // Clean the URL param
+      searchParams.delete('editFence');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, []);
 
   const positions = useRealtimeStore((state) => state.positions);
   const currentFarm = useAuthStore((state) => state.currentFarm);
@@ -406,56 +423,54 @@ export default function MapPage() {
 
   async function finishDrawing() {
     if (drawingPoints.length >= 3) {
-      const name = prompt('Geofence name:');
-      if (name) {
-        const fenceType = confirm('Is this an inclusion zone? (Cancel = exclusion zone)') ? 'inclusion' : 'exclusion';
-        const closed = [...drawingPoints, drawingPoints[0]];
-        const geometry = { type: 'Polygon' as const, coordinates: [closed] };
+      const closed = [...drawingPoints, drawingPoints[0]];
+      const geometry = { type: 'Polygon' as const, coordinates: [closed] };
 
-        try {
-          const farmId = selectedFarmId || currentFarm || '22222222-2222-2222-2222-222222222222';
-          await apiClient.post('/api/geofences', {
-            name,
-            farm_id: farmId,
-            geometry,
-            fence_type: fenceType,
-            active: true,
-            alert_on_breach: true,
-          });
-
-          // Add the new geofence to the map
+      try {
+        if (editingFenceId) {
+          // REDRAW existing geofence — update geometry via PUT
+          const newName = prompt('Rename geofence (or leave as-is):', editingFenceName) || editingFenceName;
+          await apiClient.put(`/api/geofences/${editingFenceId}`, { geometry, name: newName });
+          addToast({ title: 'Geofence Updated', message: `"${newName}" redrawn with new boundary`, severity: 'success', duration: 5000 });
+          setEditingFenceId(null);
+          setEditingFenceName('');
+          // Reload all geofences to reflect change
           const map = mapRef.current;
           if (map) {
-            const color = fenceType === 'exclusion' ? '#ef4444' : '#22c55e';
-            const fenceId = `user-fence-${Date.now()}`;
-            map.addSource(`fence-${fenceId}`, {
-              type: 'geojson',
-              data: { type: 'Feature', properties: { name }, geometry },
-            });
-            map.addLayer({ id: `fence-fill-${fenceId}`, type: 'fill', source: `fence-${fenceId}`, paint: { 'fill-color': color, 'fill-opacity': 0.1 } });
-            map.addLayer({ id: `fence-outline-${fenceId}`, type: 'line', source: `fence-${fenceId}`, paint: { 'line-color': color, 'line-width': 2, 'line-dasharray': fenceType === 'exclusion' ? [4, 2] : [1] } });
-            map.addLayer({ id: `fence-label-${fenceId}`, type: 'symbol', source: `fence-${fenceId}`, layout: { 'text-field': name, 'text-size': 11 }, paint: { 'text-color': color, 'text-halo-color': '#fff', 'text-halo-width': 1.5 } });
+            clearAllGeofences(map);
+            loadGeofencesForFarm(map, selectedFarmId);
           }
-
-          addToast({
-            title: 'Geofence Saved',
-            message: `"${name}" (${fenceType}) saved to database`,
-            severity: 'success',
-            duration: 5000,
-          });
-        } catch (err) {
-          console.error('Failed to save geofence:', err);
-          addToast({
-            title: 'Save Failed',
-            message: 'Failed to save geofence. Check connection and try again.',
-            severity: 'high',
-            duration: 8000,
-          });
+        } else {
+          // CREATE new geofence
+          const name = prompt('Geofence name:');
+          if (name) {
+            const fenceType = confirm('Is this an inclusion zone? (Cancel = exclusion zone)') ? 'inclusion' : 'exclusion';
+            const farmId = selectedFarmId || currentFarm || '22222222-2222-2222-2222-222222222222';
+            await apiClient.post('/api/geofences', {
+              name,
+              farm_id: farmId,
+              geometry,
+              fence_type: fenceType,
+              active: true,
+              alert_on_breach: true,
+            });
+            addToast({ title: 'Geofence Saved', message: `"${name}" (${fenceType}) saved`, severity: 'success', duration: 5000 });
+            // Reload geofences
+            const map = mapRef.current;
+            if (map) {
+              clearAllGeofences(map);
+              loadGeofencesForFarm(map, selectedFarmId);
+            }
+          }
         }
+      } catch (err) {
+        console.error('Failed to save geofence:', err);
+        addToast({ title: 'Save Failed', message: 'Could not save geofence', severity: 'high', duration: 5000 });
       }
     }
     setDrawingMode(false);
     setDrawingPoints([]);
+    setEditingFenceId(null);
     const map = mapRef.current;
     if (map) {
       if (map.getLayer('drawing-fill')) map.removeLayer('drawing-fill');
@@ -601,9 +616,11 @@ export default function MapPage() {
             <button onClick={() => { setDrawingMode(true); setDrawingPoints([]); }} className="px-3 py-1.5 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700">+ Draw Fence</button>
           ) : (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-amber-600">Click map ({drawingPoints.length} pts)</span>
+              <span className="text-xs text-amber-600">
+                {editingFenceId ? '✏️ Redraw: ' : ''}Click map ({drawingPoints.length} pts)
+              </span>
               <button onClick={finishDrawing} disabled={drawingPoints.length < 3} className="px-2 py-1 text-xs bg-green-600 text-white rounded disabled:opacity-50">✓ Finish</button>
-              <button onClick={() => { setDrawingMode(false); setDrawingPoints([]); }} className="px-2 py-1 text-xs bg-red-600 text-white rounded">✕</button>
+              <button onClick={() => { setDrawingMode(false); setDrawingPoints([]); setEditingFenceId(null); }} className="px-2 py-1 text-xs bg-red-600 text-white rounded">✕</button>
             </div>
           )}
         </div>

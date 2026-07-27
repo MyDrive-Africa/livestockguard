@@ -161,6 +161,14 @@ export default function GeofencesPage() {
                   Edit
                 </button>
 
+                {/* Edit on Map */}
+                <a
+                  href={`/map?editFence=${fence.id}`}
+                  className="px-3 py-1 text-xs bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/50"
+                >
+                  Redraw
+                </a>
+
                 {/* Delete */}
                 <button
                   onClick={() => deleteGeofence(fence.id, fence.name)}
