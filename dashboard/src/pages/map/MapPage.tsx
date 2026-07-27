@@ -480,10 +480,6 @@ export default function MapPage() {
   }
 
   // ─── Fetch & Render Positions ──────────────────────
-  async function fetchPositions(map: maplibregl.Map) {
-    await fetchPositionsForFarm(map, selectedFarmId);
-  }
-
   async function fetchPositionsForFarm(map: maplibregl.Map, farmId: string) {
     try {
       const fid = farmId || currentFarm || '22222222-2222-2222-2222-222222222222';
@@ -562,7 +558,7 @@ export default function MapPage() {
 
   // Auto-refresh (fallback — primary updates come via WebSocket)
   useEffect(() => {
-    const i = setInterval(() => { if (mapRef.current) fetchPositions(mapRef.current); }, 120000);
+    const i = setInterval(() => { if (mapRef.current && selectedFarmId) fetchPositionsForFarm(mapRef.current, selectedFarmId); }, 30000);
     return () => clearInterval(i);
   }, []);
 

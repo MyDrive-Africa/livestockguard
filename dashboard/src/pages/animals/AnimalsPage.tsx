@@ -66,6 +66,12 @@ export default function AnimalsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('active');
   const [genderFilter, setGenderFilter] = useState<string>('');
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addForm, setAddForm] = useState({
+    name: '', tag_id: '', breed: '', gender: '', colour: '',
+    description: '', weight_kg: '', date_of_birth: '', photo_url: '',
+  });
+  const [addSubmitting, setAddSubmitting] = useState(false);
 
   const currentFarm = useAuthStore((state) => state.currentFarm);
   const positions = useRealtimeStore((state) => state.positions);
@@ -91,6 +97,35 @@ export default function AnimalsPage() {
   useEffect(() => {
     fetchAnimals();
   }, [fetchAnimals]);
+
+  const handleAddAnimal = async () => {
+    if (!addForm.name || !addForm.tag_id) return;
+    setAddSubmitting(true);
+    try {
+      const farmId = currentFarm || 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+      await apiClient.post('/api/animals', {
+        name: addForm.name,
+        tag_id: addForm.tag_id,
+        species: 'cattle',
+        breed: addForm.breed || undefined,
+        gender: addForm.gender || undefined,
+        colour: addForm.colour || undefined,
+        description: addForm.description || undefined,
+        weight_kg: addForm.weight_kg ? parseFloat(addForm.weight_kg) : undefined,
+        date_of_birth: addForm.date_of_birth || undefined,
+        photo_url: addForm.photo_url || undefined,
+        farm_id: farmId,
+      });
+      setShowAddForm(false);
+      setAddForm({ name: '', tag_id: '', breed: '', gender: '', colour: '', description: '', weight_kg: '', date_of_birth: '', photo_url: '' });
+      fetchAnimals();
+    } catch (err) {
+      alert('Failed to add animal. Check console.');
+      console.error(err);
+    } finally {
+      setAddSubmitting(false);
+    }
+  };
 
   // Update animals with real-time position data from WebSocket
   useEffect(() => {
@@ -135,7 +170,7 @@ export default function AnimalsPage() {
             {animals.length} registered — {maleCount} ♂ / {femaleCount} ♀ — {withGps} with GPS
           </p>
         </div>
-        <button className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors">
+        <button onClick={() => setShowAddForm(true)} className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors">
           + Add Animal
         </button>
       </div>
@@ -364,6 +399,85 @@ export default function AnimalsPage() {
                   className="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Add Animal Modal */}
+      {showAddForm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowAddForm(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="bg-brand-600 text-white px-6 py-4">
+              <h2 className="text-lg font-semibold">Add New Animal</h2>
+              <p className="text-brand-200 text-sm">Register a cow to the current farm</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name *</label>
+                  <input type="text" value={addForm.name} onChange={e => setAddForm(f => ({...f, name: e.target.value}))} placeholder="e.g. Bella" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tag ID *</label>
+                  <input type="text" value={addForm.tag_id} onChange={e => setAddForm(f => ({...f, tag_id: e.target.value}))} placeholder="e.g. LV-2025-051" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Breed</label>
+                  <select value={addForm.breed} onChange={e => setAddForm(f => ({...f, breed: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    <option value="">Select breed</option>
+                    <option value="Nguni">Nguni</option>
+                    <option value="Brahman">Brahman</option>
+                    <option value="Bonsmara">Bonsmara</option>
+                    <option value="Hereford">Hereford</option>
+                    <option value="Angus">Angus</option>
+                    <option value="Jersey">Jersey</option>
+                    <option value="Holstein">Holstein</option>
+                    <option value="Afrikaner">Afrikaner</option>
+                    <option value="Drakensberger">Drakensberger</option>
+                    <option value="Mixed">Mixed</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Gender</label>
+                  <select value={addForm.gender} onChange={e => setAddForm(f => ({...f, gender: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                    <option value="">Select gender</option>
+                    <option value="female">Female (Cow)</option>
+                    <option value="male">Male (Bull)</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Colour</label>
+                  <input type="text" value={addForm.colour} onChange={e => setAddForm(f => ({...f, colour: e.target.value}))} placeholder="e.g. Brown and white" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Weight (kg)</label>
+                  <input type="number" value={addForm.weight_kg} onChange={e => setAddForm(f => ({...f, weight_kg: e.target.value}))} placeholder="e.g. 420" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date of Birth</label>
+                  <input type="date" value={addForm.date_of_birth} onChange={e => setAddForm(f => ({...f, date_of_birth: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Photo URL</label>
+                  <input type="text" value={addForm.photo_url} onChange={e => setAddForm(f => ({...f, photo_url: e.target.value}))} placeholder="https://..." className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                <textarea value={addForm.description} onChange={e => setAddForm(f => ({...f, description: e.target.value}))} placeholder="Physical description, markings, temperament..." rows={2} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button onClick={() => setShowAddForm(false)} className="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg">Cancel</button>
+                <button onClick={handleAddAnimal} disabled={!addForm.name || !addForm.tag_id || addSubmitting} className="px-4 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50">
+                  {addSubmitting ? 'Adding...' : 'Add Animal'}
                 </button>
               </div>
             </div>
