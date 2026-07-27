@@ -70,6 +70,7 @@ export default function AnimalsPage() {
   const [addForm, setAddForm] = useState({
     name: '', tag_id: '', breed: '', gender: '', colour: '',
     description: '', weight_kg: '', date_of_birth: '', photo_url: '',
+    device_type: 'eartag', ble_mac: '',
   });
   const [addSubmitting, setAddSubmitting] = useState(false);
 
@@ -103,7 +104,7 @@ export default function AnimalsPage() {
     setAddSubmitting(true);
     try {
       const farmId = currentFarm || 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
-      await apiClient.post('/api/animals', {
+      const resp = await apiClient.post('/api/animals', {
         name: addForm.name,
         tag_id: addForm.tag_id,
         species: 'cattle',
@@ -116,8 +117,24 @@ export default function AnimalsPage() {
         photo_url: addForm.photo_url || undefined,
         farm_id: farmId,
       });
+
+      // If BLE MAC provided, register the ear tag and link to the new animal
+      const newAnimalId = resp.data?.id;
+      if (addForm.ble_mac && newAnimalId) {
+        try {
+          await apiClient.post('/api/gateway/tags', {
+            farm_id: farmId,
+            animal_id: newAnimalId,
+            mac_address: addForm.ble_mac.toUpperCase(),
+            tag_name: `Tag-${addForm.name}`,
+          });
+        } catch (tagErr) {
+          console.warn('BLE tag registration failed (may already exist):', tagErr);
+        }
+      }
+
       setShowAddForm(false);
-      setAddForm({ name: '', tag_id: '', breed: '', gender: '', colour: '', description: '', weight_kg: '', date_of_birth: '', photo_url: '' });
+      setAddForm({ name: '', tag_id: '', breed: '', gender: '', colour: '', description: '', weight_kg: '', date_of_birth: '', photo_url: '', device_type: 'eartag', ble_mac: '' });
       fetchAnimals();
     } catch (err) {
       alert('Failed to add animal. Check console.');
@@ -473,6 +490,31 @@ export default function AnimalsPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
                 <textarea value={addForm.description} onChange={e => setAddForm(f => ({...f, description: e.target.value}))} placeholder="Physical description, markings, temperament..." rows={2} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+              </div>
+
+              {/* Tracking Device */}
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Tracking Device</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Device Type</label>
+                    <select value={addForm.device_type} onChange={e => setAddForm(f => ({...f, device_type: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
+                      <option value="eartag">BLE Ear Tag</option>
+                      <option value="collar">GPS Collar</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {addForm.device_type === 'eartag' ? 'BLE MAC Address' : 'Collar Serial'}
+                    </label>
+                    <input type="text" value={addForm.ble_mac} onChange={e => setAddForm(f => ({...f, ble_mac: e.target.value}))} placeholder={addForm.device_type === 'eartag' ? 'AA:BB:CC:DD:EE:FF' : 'LG-XXX'} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400 mt-2">
+                  {addForm.device_type === 'eartag'
+                    ? 'The BLE MAC is printed on the ear tag or detected by the gateway scanner.'
+                    : 'The collar serial is on the device label.'}
+                </p>
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button onClick={() => setShowAddForm(false)} className="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg">Cancel</button>
