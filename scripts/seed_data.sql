@@ -219,13 +219,12 @@ INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on
      'inclusion', true, true)
 ON CONFLICT DO NOTHING;
 
--- Zone 3: Range (1000km radius from Loch Vaal — covers most of South Africa)
--- 1000km ≈ 9° latitude, 11° longitude at this latitude
--- This is the absolute outer boundary — breach here means cross-province theft
+-- Zone 3: Range (100km radius from Loch Vaal — covers surrounding districts)
+-- 100km ≈ 0.9° latitude, 1.1° longitude at this latitude
 INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on_breach) VALUES
     ('ffffffff-ffff-ffff-ffff-fffffffffff3', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-     'Loch Vaal Area (1000km)',
-     ST_GeogFromText('POLYGON((16.71 -17.72, 38.71 -17.72, 38.71 -35.72, 16.71 -35.72, 16.71 -17.72))'),
+     'Loch Vaal Area (100km)',
+     ST_GeogFromText('POLYGON((26.610 -25.819, 28.810 -25.819, 28.810 -27.619, 26.610 -27.619, 26.610 -25.819))'),
      'inclusion', true, true)
 ON CONFLICT DO NOTHING;
 
