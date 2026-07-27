@@ -1,24 +1,32 @@
 #!/usr/bin/env python3
 """
-LivestockGuard — Herdsman Daily Routine Simulator
+LivestockGuard — Herdsman Daily Routine Simulator (Loch Vaal Plot 30)
 
-Simulates a realistic day for a herdsman at Loch Vaal Plot 30:
-- 05:00 Wake up, cattle in kraal (night enclosure)
-- 06:00 Open kraal, herd moves to grazing area
-- 06:00–11:00 Morning grazing (herdsman walks with herd)
-- 11:00–13:00 Midday rest near water
-- 13:00–17:00 Afternoon grazing (different area)
-- 17:00–18:00 Return to kraal
-- 18:00+ Cattle in kraal, herdsman at house
+Realistic cattle movement simulation based on actual geofence locations:
 
-The simulator sends BLE batch sightings to the API every 30s,
-mimicking the herdsman's phone scanning ear tags as he walks.
+DRY NIGHT: Cattle in TheKraal (enclosed overnight)
+WET NIGHT: Cattle scattered in Yard Boundary (kraal too muddy)
+
+MORNING ROUTINE:
+  1. Cattle start in kraal (dry) or yard (wet)
+  2. Kraal gate opens → cattle move within yard
+  3. Cattle navigate to Entrance/Exit gate
+  4. Exit through gate → outside yard boundary
+
+DAY (Herdsman leads):
+  5. Herdsman leads cattle to grazing areas (random directions)
+  6. Cattle graze, walk, rest throughout the day
+
+EVENING:
+  7. Herdsman leads cattle back through Entrance/Exit gate
+  8. Cattle return to kraal (dry) or yard (wet)
 
 Usage:
-    python gateway_daily_sim.py                     # Full day (compressed to ~5 min)
-    python gateway_daily_sim.py --realtime          # Real pace (12 hours)
-    python gateway_daily_sim.py --speed 60          # 60x speed (12 min)
-    python gateway_daily_sim.py --offline           # No API, print only
+    python gateway_daily_sim.py                          # Normal day (dry)
+    python gateway_daily_sim.py --weather wet            # Wet day
+    python gateway_daily_sim.py --scenario theft         # Theft at 8am
+    python gateway_daily_sim.py --scenario breach        # Cow wanders off
+    python gateway_daily_sim.py --offline                # No API
 """
 
 import time
@@ -32,56 +40,71 @@ import click
 import requests
 
 
-# ─── Loch Vaal Plot 30 Coordinates ───────────────────────────────────────────
+# ─── Actual Geofence Coordinates (from seed_data.sql) ─────────────────────────
 
-FARM_CENTER = (-26.719088, 27.709759)
+# TheKraal (user-drawn, ~705 m²)
+KRAAL_CENTER = (-26.71900, 27.70883)
+KRAAL_RADIUS_M = 15  # ~30m across
 
-# Key locations on the plot
-LOCATIONS = {
-    'kraal':        (-26.71909, 27.70976),   # Night enclosure (centre of plot)
-    'house':        (-26.71880, 27.70950),   # Farmhouse (near kraal)
-    'water_point':  (-26.71850, 27.71020),   # Dam/trough
-    'gate':         (-26.71810, 27.70880),   # Plot entrance gate
-    'grazing_north': (-26.71650, 27.71050),  # North grazing area
-    'grazing_east':  (-26.71900, 27.71200),  # East grazing area
-    'grazing_south': (-26.72100, 27.70950),  # South grazing area
+# Yard Boundary (2ha, ~140m x 200m)
+YARD_CENTER = (-26.71909, 27.70976)
+YARD_BOUNDS = {
+    'min_lat': -26.72009, 'max_lat': -26.71809,
+    'min_lon': 27.70876, 'max_lon': 27.71076,
 }
 
-# BLE simulation
+# Entrance/Exit Gate (tiny zone at property boundary)
+GATE_POSITION = (-26.71891, 27.70994)
+
+# Grazing areas outside the yard (various directions)
+GRAZING_AREAS = [
+    {'name': 'North field', 'lat': -26.71600, 'lon': 27.70950},
+    {'name': 'East riverbank', 'lat': -26.71900, 'lon': 27.71300},
+    {'name': 'South pasture', 'lat': -26.72200, 'lon': 27.70900},
+    {'name': 'West clearing', 'lat': -26.71850, 'lon': 27.70600},
+]
+
+# BLE simulation parameters
 BLE_TX_POWER = -59
 BLE_PATH_LOSS_N = 2.2
 BLE_MAX_RANGE_M = 100
 BLE_NOISE_DB = 4
+
+# Registered BLE MACs (must match seed_data.sql)
+REGISTERED_MACS = [
+    'A1:B2:C3:D4:E5:01', 'A1:B2:C3:D4:E5:02', 'A1:B2:C3:D4:E5:03',
+    'A1:B2:C3:D4:E5:04', 'A1:B2:C3:D4:E5:05', 'A1:B2:C3:D4:E5:06',
+    'A1:B2:C3:D4:E5:07', 'A1:B2:C3:D4:E5:08', 'A1:B2:C3:D4:E5:09',
+    'A1:B2:C3:D4:E5:10',
+]
 
 
 # ─── Simulated Entities ──────────────────────────────────────────────────────
 
 @dataclass
 class Cow:
-    """A cow with a BLE ear tag."""
     name: str
     mac: str
     lat: float
     lon: float
 
     def move_towards(self, target_lat: float, target_lon: float, speed_mps: float, dt: float):
-        """Move towards target at given speed."""
         dy = (target_lat - self.lat) * 111320.0
         dx = (target_lon - self.lon) * 111320.0 * math.cos(math.radians(self.lat))
         dist = math.sqrt(dx * dx + dy * dy)
         if dist < 2:
-            return
+            return True  # Arrived
         move_dist = min(speed_mps * dt, dist)
         ratio = move_dist / dist
         self.lat += (target_lat - self.lat) * ratio
         self.lon += (target_lon - self.lon) * ratio
-        # Add wander
-        self.lat += random.gauss(0, 0.00001)
-        self.lon += random.gauss(0, 0.00001)
+        # Natural wander
+        self.lat += random.gauss(0, 0.000008)
+        self.lon += random.gauss(0, 0.000008)
+        return False
 
     def graze(self, dt: float):
-        """Random slow grazing movement."""
-        speed = random.uniform(0.1, 0.5)  # m/s
+        speed = random.uniform(0.1, 0.4)
         heading = random.uniform(0, 360)
         dist = speed * dt
         dlat = (dist * math.cos(math.radians(heading))) / 111320.0
@@ -89,30 +112,40 @@ class Cow:
         self.lat += dlat
         self.lon += dlon
 
+    def random_in_yard(self):
+        """Place cow randomly within yard boundary."""
+        self.lat = random.uniform(YARD_BOUNDS['min_lat'], YARD_BOUNDS['max_lat'])
+        self.lon = random.uniform(YARD_BOUNDS['min_lon'], YARD_BOUNDS['max_lon'])
+
+    def random_in_kraal(self):
+        """Place cow randomly within the kraal."""
+        angle = random.uniform(0, 2 * math.pi)
+        r = random.uniform(0, KRAAL_RADIUS_M)
+        self.lat = KRAAL_CENTER[0] + (r * math.cos(angle)) / 111320.0
+        self.lon = KRAAL_CENTER[1] + (r * math.sin(angle)) / (111320.0 * math.cos(math.radians(KRAAL_CENTER[0])))
+
 
 @dataclass
 class Herdsman:
-    """The herdsman carrying the gateway phone."""
     lat: float
     lon: float
     battery: float = 100.0
     speed_kmh: float = 0.0
 
     def move_towards(self, target_lat: float, target_lon: float, speed_mps: float, dt: float):
-        """Walk towards a target."""
         dy = (target_lat - self.lat) * 111320.0
         dx = (target_lon - self.lon) * 111320.0 * math.cos(math.radians(self.lat))
         dist = math.sqrt(dx * dx + dy * dy)
         if dist < 3:
             self.speed_kmh = 0
-            return True  # Arrived
+            return True
         move_dist = min(speed_mps * dt, dist)
         ratio = move_dist / dist
         self.lat += (target_lat - self.lat) * ratio
         self.lon += (target_lon - self.lon) * ratio
         self.speed_kmh = speed_mps * 3.6
-        self.battery -= random.uniform(0.001, 0.005)
-        return False  # Still moving
+        self.battery -= random.uniform(0.001, 0.003)
+        return False
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -124,33 +157,22 @@ def distance_m(lat1, lon1, lat2, lon2):
 
 
 def rssi_from_distance(dist):
-    if dist < 0.5:
-        dist = 0.5
+    if dist < 0.5: dist = 0.5
     rssi = BLE_TX_POWER - 10 * BLE_PATH_LOSS_N * math.log10(dist)
     rssi += random.gauss(0, BLE_NOISE_DB)
     return max(-120, min(-30, int(rssi)))
 
 
-def generate_mac():
-    return ':'.join(f'{random.randint(0, 255):02X}' for _ in range(6))
-
-
 def send_batch(api_url, gateway_serial, herdsman, sightings, session_id=None):
-    """Send sightings to API — one mini-batch per cow for realistic individual positions."""
     if not sightings:
         return None
-
     total_accepted = 0
     total_resolved = 0
-
-    # Send each cow as an individual sighting at its own position
     for s in sightings:
-        cow_lat = s.get("_lat", herdsman.lat)
-        cow_lon = s.get("_lon", herdsman.lon)
         payload = {
             "gateway_serial": gateway_serial,
-            "latitude": cow_lat,
-            "longitude": cow_lon,
+            "latitude": s.get("_lat", herdsman.lat),
+            "longitude": s.get("_lon", herdsman.lon),
             "speed": herdsman.speed_kmh,
             "battery_pct": int(herdsman.battery),
             "session_id": session_id,
@@ -164,46 +186,7 @@ def send_batch(api_url, gateway_serial, herdsman, sightings, session_id=None):
                 total_resolved += data.get("resolved", 0)
         except Exception:
             pass
-
-    return {"accepted": total_accepted, "resolved": total_resolved, "unresolved_macs": []}
-
-
-# ─── Daily Routine Phases ─────────────────────────────────────────────────────
-
-def phase_in_kraal(herdsman, cows, duration_sim_sec, dt, **kw):
-    """Cattle in kraal, herdsman nearby. All animals detectable."""
-    kraal = LOCATIONS['kraal']
-    for cow in cows:
-        cow.lat = kraal[0] + random.uniform(-0.0002, 0.0002)
-        cow.lon = kraal[1] + random.uniform(-0.0002, 0.0002)
-    herdsman.lat = LOCATIONS['house'][0]
-    herdsman.lon = LOCATIONS['house'][1]
-    herdsman.speed_kmh = 0
-
-
-def phase_move_to_grazing(herdsman, cows, target_key, dt, **kw):
-    """Herdsman and cows walk to grazing area."""
-    target = LOCATIONS[target_key]
-    herdsman.move_towards(target[0], target[1], 1.2, dt)  # ~4.3 km/h
-    for cow in cows:
-        # Cows follow herdsman loosely
-        cow.move_towards(
-            herdsman.lat + random.uniform(-0.0003, 0.0003),
-            herdsman.lon + random.uniform(-0.0003, 0.0003),
-            random.uniform(0.8, 1.5), dt
-        )
-
-
-def phase_grazing(herdsman, cows, center_key, dt, **kw):
-    """Cows graze, herdsman walks slowly among them."""
-    center = LOCATIONS[center_key]
-    # Herdsman wanders slowly
-    herdsman.lat += random.gauss(0, 0.00002)
-    herdsman.lon += random.gauss(0, 0.00002)
-    herdsman.speed_kmh = random.uniform(1.0, 3.0)
-    # Cows graze
-    for cow in cows:
-        cow.graze(dt)
+    return {"accepted": total_accepted, "resolved": total_resolved}
 
 
 # ─── Main Simulation ─────────────────────────────────────────────────────────
@@ -212,77 +195,76 @@ def phase_grazing(herdsman, cows, center_key, dt, **kw):
 @click.option('--api-url', default='http://localhost:8000', help='API base URL')
 @click.option('--gateway-serial', default='GW-LV-001', help='Gateway serial')
 @click.option('--animals', default=10, help='Number of cattle')
-@click.option('--speed', default=120, help='Simulation speed multiplier (120 = 12h in 6min)')
-@click.option('--offline', is_flag=True, help='No API calls, print only')
-@click.option('--scan-interval', default=5, help='BLE scan interval (real seconds)')
-@click.option('--report-interval', default=30, help='API batch interval (real seconds)')
+@click.option('--speed', default=120, help='Speed multiplier (120 = 12h in 6min)')
+@click.option('--weather', default='dry', type=click.Choice(['dry', 'wet']),
+              help='Weather: dry (kraal overnight) or wet (yard overnight)')
 @click.option('--scenario', default='normal',
               type=click.Choice(['normal', 'theft', 'breach']),
-              help='Scenario: normal (daily routine), theft (cow taken by vehicle), breach (cow leaves range)')
-def main(api_url, gateway_serial, animals, speed, offline, scan_interval, report_interval, scenario):
+              help='Scenario: normal, theft (cow taken at 8am), breach (cow wanders)')
+@click.option('--offline', is_flag=True, help='No API calls')
+@click.option('--scan-interval', default=5, help='Real seconds between ticks')
+@click.option('--report-interval', default=30, help='Real seconds between API reports')
+def main(api_url, gateway_serial, animals, speed, weather, scenario, offline,
+         scan_interval, report_interval):
     """
-    Simulate a full herdsman day at Loch Vaal Plot 30.
+    Simulate a realistic herdsman day at Loch Vaal Plot 30.
 
-    Scenarios:
-    - normal: Full daily routine (kraal → graze → water → graze → return)
-    - theft: One cow is stolen mid-morning (moves at vehicle speed away from farm)
-    - breach: One cow wanders out of the 10km grazing range
-
-    The day runs at accelerated speed (default 120x = 12 hours in 6 minutes).
-    BLE sightings are sent to the API every 30 real seconds.
+    Cattle start in kraal (dry) or yard (wet), exit through the gate,
+    graze outside with the herdsman, then return in the evening.
     """
-    print(f"LivestockGuard — Herdsman Daily Routine Simulator")
-    print(f"{'─' * 55}")
-    print(f"Farm:      Loch Vaal Plot 30 (-26.719088, 27.709759)")
+    print(f"LivestockGuard — Realistic Daily Simulator")
+    print(f"{'═' * 55}")
+    print(f"Farm:      Loch Vaal Plot 30")
     print(f"Gateway:   {gateway_serial}")
+    print(f"Herdsman:  Teboho Mpeki")
     print(f"Cattle:    {animals}")
-    print(f"Speed:     {speed}x (12h day in {12*3600/speed/60:.0f} minutes)")
+    print(f"Weather:   {weather} ({'kraal overnight' if weather == 'dry' else 'yard overnight — kraal muddy'})")
+    print(f"Scenario:  {scenario}")
+    print(f"Speed:     {speed}x ({12*3600/speed/60:.0f} min real time)")
     print(f"API:       {'OFFLINE' if offline else api_url}")
-    print(f"{'─' * 55}")
+    print(f"{'═' * 55}\n")
+
+    # Create cattle
+    cows = []
+    for i in range(min(animals, len(REGISTERED_MACS))):
+        cow = Cow(name=f"LV-{i+1:03d}", mac=REGISTERED_MACS[i], lat=0, lon=0)
+        if weather == 'dry':
+            cow.random_in_kraal()
+        else:
+            cow.random_in_yard()
+        cows.append(cow)
+
+    # Herdsman starts at the house (near kraal)
+    herdsman = Herdsman(lat=KRAAL_CENTER[0] + 0.0002, lon=KRAAL_CENTER[1] - 0.0003)
+
+    # Pick today's grazing area (random)
+    todays_grazing = random.choice(GRAZING_AREAS)
+    print(f"  Today's grazing: {todays_grazing['name']}")
+    print(f"  Cattle start: {'TheKraal' if weather == 'dry' else 'Yard (wet kraal)'}")
     print()
 
-    # Create cattle with BLE ear tags (use fixed MACs matching registered tags)
-    cows = []
-    kraal = LOCATIONS['kraal']
-    # These MACs match what's registered in the database via register_ble_tags.py
-    registered_macs = [
-        'A1:B2:C3:D4:E5:01', 'A1:B2:C3:D4:E5:02', 'A1:B2:C3:D4:E5:03',
-        'A1:B2:C3:D4:E5:04', 'A1:B2:C3:D4:E5:05', 'A1:B2:C3:D4:E5:06',
-        'A1:B2:C3:D4:E5:07', 'A1:B2:C3:D4:E5:08', 'A1:B2:C3:D4:E5:09',
-        'A1:B2:C3:D4:E5:10',
-    ]
-    for i in range(animals):
-        mac = registered_macs[i] if i < len(registered_macs) else generate_mac()
-        cows.append(Cow(
-            name=f"LV-{i+1:03d}",
-            mac=mac,
-            lat=kraal[0] + random.uniform(-0.0002, 0.0002),
-            lon=kraal[1] + random.uniform(-0.0002, 0.0002),
-        ))
-
-    # Herdsman starts at house
-    herdsman = Herdsman(lat=LOCATIONS['house'][0], lon=LOCATIONS['house'][1])
-
-    # Day schedule (sim_hour, phase_name, params)
+    # Day schedule
+    # Phase: (sim_hour, phase_key, description)
     schedule = [
-        (5.0,  'kraal',         'In kraal (night)'),
-        (6.0,  'move_north',    'Walking to north grazing'),
-        (6.5,  'graze_north',   'Morning grazing (north)'),
-        (9.0,  'move_water',    'Walking to water point'),
-        (9.5,  'graze_water',   'Resting near water'),
-        (11.0, 'move_east',     'Walking to east grazing'),
-        (11.5, 'graze_east',    'Afternoon grazing (east)'),
-        (15.0, 'move_south',    'Walking to south grazing'),
-        (15.5, 'graze_south',   'Late afternoon grazing (south)'),
-        (17.0, 'move_kraal',    'Returning to kraal'),
-        (17.5, 'kraal_evening', 'Cattle in kraal (evening)'),
+        (5.0,  'night',       f"Cattle in {'kraal' if weather == 'dry' else 'yard'} (night)"),
+        (6.0,  'gate_open',   "Kraal gate open → cattle move to yard"),
+        (6.5,  'to_gate',     "Cattle walking to Entrance/Exit gate"),
+        (7.0,  'exit_gate',   "Exiting through gate"),
+        (7.5,  'to_grazing',  f"Walking to {todays_grazing['name']}"),
+        (8.5,  'grazing',     f"Grazing at {todays_grazing['name']}"),
+        (12.0, 'rest',        "Midday rest (shade)"),
+        (13.0, 'grazing2',    "Afternoon grazing"),
+        (16.0, 'return_gate', "Returning to gate"),
+        (16.5, 'enter_gate',  "Entering through gate"),
+        (17.0, 'to_kraal',    f"Walking to {'kraal' if weather == 'dry' else 'yard'}"),
+        (17.5, 'night_end',   "Cattle settled for night"),
     ]
 
     # Simulation loop
-    sim_time = 5.0 * 3600  # Start at 05:00 (in seconds)
-    end_time = 18.0 * 3600  # End at 18:00
-    real_dt = scan_interval  # Real seconds per tick
-    sim_dt = real_dt * speed  # Simulated seconds per tick
+    sim_time = 5.0 * 3600
+    end_time = 18.0 * 3600
+    real_dt = scan_interval
+    sim_dt = real_dt * speed
 
     current_phase_idx = 0
     batch_buffer = []
@@ -295,135 +277,162 @@ def main(api_url, gateway_serial, animals, speed, offline, scan_interval, report
         try:
             resp = requests.post(f"{api_url}/api/gateway/sessions/start", json={
                 "gateway_serial": gateway_serial,
-                "latitude": herdsman.lat,
-                "longitude": herdsman.lon,
+                "latitude": herdsman.lat, "longitude": herdsman.lon,
                 "herdsman_name": "Teboho Mpeki",
             }, timeout=5)
             if resp.status_code == 201:
                 session_id = resp.json().get("session_id")
-                print(f"  Session started: {session_id[:8]}...")
         except Exception:
             pass
 
-    print(f"\n  {'Time':<6} {'Phase':<30} {'Cows in range':<15} {'Herdsman pos'}")
-    print(f"  {'─'*6} {'─'*30} {'─'*15} {'─'*25}")
+    print(f"  {'Time':<6} {'Phase':<35} {'In range':<10} {'Location'}")
+    print(f"  {'─'*6} {'─'*35} {'─'*10} {'─'*25}")
 
     try:
         while sim_time < end_time:
             sim_hour = sim_time / 3600.0
+            h = int(sim_hour)
+            m = int((sim_hour - h) * 60)
 
-            # Determine current phase
-            for i, (start_hour, _, _) in enumerate(schedule):
-                if sim_hour >= start_hour:
+            # Determine phase
+            for i, (start_h, _, _) in enumerate(schedule):
+                if sim_hour >= start_h:
                     current_phase_idx = i
-
             phase_key = schedule[current_phase_idx][1]
             phase_label = schedule[current_phase_idx][2]
 
-            # Execute phase logic
-            if phase_key == 'kraal' or phase_key == 'kraal_evening':
-                phase_in_kraal(herdsman, cows, sim_dt, sim_dt)
-            elif phase_key == 'move_north':
-                phase_move_to_grazing(herdsman, cows, 'grazing_north', sim_dt)
-            elif phase_key == 'graze_north':
-                phase_grazing(herdsman, cows, 'grazing_north', sim_dt)
-            elif phase_key == 'move_water':
-                phase_move_to_grazing(herdsman, cows, 'water_point', sim_dt)
-            elif phase_key == 'graze_water':
-                phase_grazing(herdsman, cows, 'water_point', sim_dt)
-            elif phase_key == 'move_east':
-                phase_move_to_grazing(herdsman, cows, 'grazing_east', sim_dt)
-            elif phase_key == 'graze_east':
-                phase_grazing(herdsman, cows, 'grazing_east', sim_dt)
-            elif phase_key == 'move_south':
-                phase_move_to_grazing(herdsman, cows, 'grazing_south', sim_dt)
-            elif phase_key == 'graze_south':
-                phase_grazing(herdsman, cows, 'grazing_south', sim_dt)
-            elif phase_key == 'move_kraal':
-                phase_move_to_grazing(herdsman, cows, 'kraal', sim_dt)
+            # ── Execute phase logic ──
+            if phase_key == 'night' or phase_key == 'night_end':
+                # Cattle stationary in kraal or yard
+                herdsman.speed_kmh = 0
 
-            # Scenario-specific behavior (theft or breach)
+            elif phase_key == 'gate_open':
+                # Cattle move from kraal to yard area
+                for cow in cows:
+                    cow.move_towards(YARD_CENTER[0], YARD_CENTER[1], 0.5, sim_dt)
+                herdsman.move_towards(YARD_CENTER[0], YARD_CENTER[1], 1.0, sim_dt)
+
+            elif phase_key == 'to_gate':
+                # Cattle navigate to the Entrance/Exit gate
+                for cow in cows:
+                    cow.move_towards(GATE_POSITION[0], GATE_POSITION[1], 0.8, sim_dt)
+                herdsman.move_towards(GATE_POSITION[0], GATE_POSITION[1], 1.2, sim_dt)
+
+            elif phase_key == 'exit_gate' or phase_key == 'enter_gate':
+                # All funnel through the gate
+                for cow in cows:
+                    cow.move_towards(GATE_POSITION[0], GATE_POSITION[1], 1.0, sim_dt)
+                herdsman.move_towards(GATE_POSITION[0], GATE_POSITION[1], 1.2, sim_dt)
+
+            elif phase_key == 'to_grazing':
+                # Walk to today's grazing area
+                target = (todays_grazing['lat'], todays_grazing['lon'])
+                herdsman.move_towards(target[0], target[1], 1.3, sim_dt)
+                for cow in cows:
+                    cow.move_towards(
+                        herdsman.lat + random.uniform(-0.0003, 0.0003),
+                        herdsman.lon + random.uniform(-0.0003, 0.0003),
+                        random.uniform(0.8, 1.2), sim_dt
+                    )
+
+            elif phase_key in ('grazing', 'grazing2'):
+                # Cows graze freely, herdsman wanders slowly
+                herdsman.lat += random.gauss(0, 0.00002)
+                herdsman.lon += random.gauss(0, 0.00002)
+                herdsman.speed_kmh = random.uniform(1.0, 2.5)
+                for cow in cows:
+                    cow.graze(sim_dt)
+
+            elif phase_key == 'rest':
+                # Midday rest — minimal movement
+                herdsman.speed_kmh = 0
+                for cow in cows:
+                    cow.lat += random.gauss(0, 0.000005)
+                    cow.lon += random.gauss(0, 0.000005)
+
+            elif phase_key == 'return_gate':
+                # Walk back to gate
+                herdsman.move_towards(GATE_POSITION[0], GATE_POSITION[1], 1.3, sim_dt)
+                for cow in cows:
+                    cow.move_towards(
+                        herdsman.lat + random.uniform(-0.0002, 0.0002),
+                        herdsman.lon + random.uniform(-0.0002, 0.0002),
+                        random.uniform(0.9, 1.3), sim_dt
+                    )
+
+            elif phase_key == 'to_kraal':
+                # From gate back to kraal or yard
+                target = KRAAL_CENTER if weather == 'dry' else YARD_CENTER
+                herdsman.move_towards(target[0], target[1], 1.0, sim_dt)
+                for cow in cows:
+                    cow.move_towards(target[0], target[1], 0.8, sim_dt)
+
+            # ── Scenario overrides ──
             if scenario == 'theft' and sim_hour >= 8.0:
-                # First cow is being stolen — moves at vehicle speed away
-                stolen_cow = cows[0]
-                stolen_cow.lat -= 0.001 * (sim_dt / 60)  # Moving south fast
-                stolen_cow.lon += 0.0005 * (sim_dt / 60)  # Moving east
-                if sim_hour >= 8.0 and sim_hour < 8.1:
-                    print(f"        🚨 THEFT: {stolen_cow.name} taken by vehicle!")
+                stolen = cows[0]
+                stolen.lat -= 0.002 * (sim_dt / 60)
+                stolen.lon += 0.001 * (sim_dt / 60)
+                if 8.0 <= sim_hour < 8.1:
+                    print(f"  {'':6} 🚨 THEFT: {stolen.name} taken by vehicle!")
 
             elif scenario == 'breach' and sim_hour >= 9.0:
-                # First cow wanders steadily away from farm (breach)
                 breach_cow = cows[0]
-                breach_cow.lat += 0.0003 * (sim_dt / 60)  # Moving north slowly
-                breach_cow.lon += 0.0001 * (sim_dt / 60)
-                dist_from_farm = distance_m(
-                    breach_cow.lat, breach_cow.lon,
-                    FARM_CENTER[0], FARM_CENTER[1]
-                )
-                if dist_from_farm > 500 and sim_hour < 9.2:
-                    print(f"        ⚠️  BREACH: {breach_cow.name} left yard boundary ({dist_from_farm:.0f}m from farm)")
+                breach_cow.lat += 0.0005 * (sim_dt / 60)
+                breach_cow.lon += 0.0002 * (sim_dt / 60)
+                if 9.0 <= sim_hour < 9.1:
+                    print(f"  {'':6} ⚠️  BREACH: {breach_cow.name} wandering away!")
 
-            # BLE scan — detect cows and record their approximate positions
+            # ── BLE scan ──
             detected = 0
             for cow in cows:
                 dist = distance_m(herdsman.lat, herdsman.lon, cow.lat, cow.lon)
                 if dist <= BLE_MAX_RANGE_M:
                     rssi = rssi_from_distance(dist)
-                    # Use cow's actual position (simulated) with slight noise
-                    # In real life this would be gateway GPS + RSSI distance estimate
-                    sighting_lat = cow.lat + random.gauss(0, 0.00005)
-                    sighting_lon = cow.lon + random.gauss(0, 0.00005)
                     batch_buffer.append({
                         "mac_address": cow.mac,
                         "rssi": rssi,
-                        "_lat": sighting_lat,
-                        "_lon": sighting_lon,
+                        "_lat": cow.lat + random.gauss(0, 0.00003),
+                        "_lon": cow.lon + random.gauss(0, 0.00003),
                     })
                     detected += 1
-
             total_sightings += detected
 
-            # Print status
-            h = int(sim_hour)
-            m = int((sim_hour - h) * 60)
-            print(f"  {h:02d}:{m:02d}  {phase_label:<30} {detected:>2}/{animals:<12} "
+            # Print
+            print(f"  {h:02d}:{m:02d}  {phase_label:<35} {detected:>2}/{animals:<6} "
                   f"({herdsman.lat:.5f}, {herdsman.lon:.5f})")
 
-            # Send batch to API at intervals
+            # Send batch
             now = time.time()
             if now - last_report >= report_interval and batch_buffer:
                 if not offline:
                     result = send_batch(api_url, gateway_serial, herdsman, batch_buffer, session_id)
                     if result:
-                        print(f"        → API: {result['accepted']} accepted, "
-                              f"{result['resolved']} resolved")
+                        print(f"  {'':6} → API: {result['accepted']} accepted, {result['resolved']} resolved")
                 else:
-                    print(f"        → [OFFLINE] {len(batch_buffer)} sightings buffered")
+                    print(f"  {'':6} → [OFFLINE] {len(batch_buffer)} sightings")
                 batch_buffer = []
                 last_report = now
 
-            # Advance time
             sim_time += sim_dt
             time.sleep(real_dt)
 
     except KeyboardInterrupt:
-        print("\n\nSimulation stopped by user")
+        print("\n\nStopped by user")
 
     # End session
     if session_id and not offline:
         try:
             requests.post(f"{api_url}/api/gateway/sessions/{session_id}/end", json={
-                "latitude": herdsman.lat,
-                "longitude": herdsman.lon,
+                "latitude": herdsman.lat, "longitude": herdsman.lon,
             }, timeout=5)
         except Exception:
             pass
 
-    print(f"\n{'─' * 55}")
+    print(f"\n{'═' * 55}")
     print(f"Day complete:")
     print(f"  Total BLE detections: {total_sightings}")
-    print(f"  Herdsman battery:     {herdsman.battery:.0f}%")
-    print(f"  Final position:       ({herdsman.lat:.5f}, {herdsman.lon:.5f})")
+    print(f"  Battery remaining:    {herdsman.battery:.0f}%")
+    print(f"  Cattle end position:  {'Kraal' if weather == 'dry' else 'Yard'}")
 
 
 if __name__ == '__main__':
