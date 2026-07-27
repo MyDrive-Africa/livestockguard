@@ -236,6 +236,26 @@ INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on
      'exclusion', true, true)
 ON CONFLICT DO NOTHING;
 
+-- User-drawn geofences (Loch Vaal — exported from live database)
+INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on_breach) VALUES
+    ('e26eba79-9887-414e-891f-048eb6a52f9b', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+     'Border',
+     ST_GeogFromText('POLYGON((27.616674666767068 -26.68485012503193, 27.623865971464056 -26.756118718320025, 27.805703247375646 -26.755660050396564, 27.803819810430923 -26.683779226666736, 27.616674666767068 -26.68485012503193))'),
+     'inclusion', true, true),
+    ('07bc663a-7cfb-4ab3-8e19-bd70b8765e32', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+     'Entrance/Exit',
+     ST_GeogFromText('POLYGON((27.709901157106685 -26.718896335310276, 27.709978941168572 -26.718932272471996, 27.709981623377843 -26.718923887135972, 27.709911885942915 -26.718896335310276, 27.709901157106685 -26.718896335310276))'),
+     'inclusion', true, true),
+    ('2dd38843-68a5-4a7b-a128-77cf8ffa2936', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+     'Loch Vaal Plot 30_2.1hct',
+     ST_GeogFromText('POLYGON((27.7083816856547 -26.71826264148735, 27.70805445615528 -26.718856804420533, 27.710742029587465 -26.72005470412943, 27.71107998792405 -26.719417423053137, 27.7083816856547 -26.71826264148735))'),
+     'inclusion', true, true),
+    ('31050f97-a33e-47e8-9864-027983d421a3', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+     'TheKraal',
+     ST_GeogFromText('POLYGON((27.708636602771236 -26.719099715517586, 27.70886226782764 -26.718845654442312, 27.70902446458703 -26.71890654516536, 27.708824656985968 -26.719194200897803, 27.708636602771236 -26.719099715517586))'),
+     'inclusion', true, true)
+ON CONFLICT DO NOTHING;
+
 -- ============================================================================
 -- HERDSMAN GATEWAY & BLE TAGS (Loch Vaal)
 -- ============================================================================
