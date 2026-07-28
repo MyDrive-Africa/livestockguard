@@ -562,6 +562,58 @@ export default function MapPage() {
     return () => clearInterval(i);
   }, []);
 
+  // ─── Breach Alert Markers ──────────────────────────
+  const alertMarkersRef = useRef<maplibregl.Marker[]>([]);
+
+  useEffect(() => {
+    if (loading || !mapRef.current) return;
+    const map = mapRef.current;
+
+    async function fetchAlerts() {
+      try {
+        const resp = await apiClient.get('/api/alerts', { params: { status: 'active' } });
+        const alerts = resp.data;
+
+        // Clear old alert markers
+        alertMarkersRef.current.forEach(m => m.remove());
+        alertMarkersRef.current = [];
+
+        // Add red pulse markers for active alerts with location
+        alerts.forEach((alert: any) => {
+          if (!alert.latitude && !alert.longitude) return;
+          const lat = alert.latitude || alert.metadata?.latitude;
+          const lon = alert.longitude || alert.metadata?.longitude;
+          if (!lat || !lon) return;
+
+          const el = document.createElement('div');
+          el.style.cssText = `width:20px;height:20px;background:#ef4444;border:3px solid #fff;border-radius:50%;cursor:pointer;animation:pulse-badge 1.5s infinite;box-shadow:0 0 12px rgba(239,68,68,0.6);`;
+          el.title = `⚠️ ${alert.alert_type}: ${alert.message || ''}`;
+
+          const popup = new maplibregl.Popup({ offset: 15 }).setHTML(`
+            <div style="padding:8px;max-width:200px;">
+              <strong style="color:#dc2626;">⚠️ ${alert.alert_type.replace('_', ' ').toUpperCase()}</strong><br/>
+              <span style="font-size:12px;color:#666;">
+                ${alert.message || 'Active alert'}<br/>
+                Severity: ${alert.severity}<br/>
+                ${alert.animal_name ? `Animal: ${alert.animal_name}` : ''}
+              </span>
+            </div>
+          `);
+
+          const marker = new maplibregl.Marker({ element: el })
+            .setLngLat([lon, lat])
+            .setPopup(popup)
+            .addTo(map);
+          alertMarkersRef.current.push(marker);
+        });
+      } catch { /* alerts not available */ }
+    }
+
+    fetchAlerts();
+    const alertInterval = setInterval(fetchAlerts, 15000); // Check every 15s
+    return () => clearInterval(alertInterval);
+  }, [loading]);
+
   function toggleLayer(l: LayerToggle) {
     setLayers((p) => ({ ...p, [l]: !p[l] }));
     if (l === 'trails' && layers.trails) clearTrail();

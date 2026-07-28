@@ -96,6 +96,8 @@ export default function GatewayPage() {
   const [selectedGateway, setSelectedGateway] = useState<GatewayStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editingGateway, setEditingGateway] = useState<Gateway | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', herdsman_name: '', herdsman_phone: '' });
 
   const currentFarm = useAuthStore((state) => state.currentFarm);
 
@@ -148,6 +150,28 @@ export default function GatewayPage() {
       setSelectedGateway(resp.data);
     } catch {
       // Gateway status unavailable
+    }
+  };
+
+  const openEditGateway = (gw: Gateway, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingGateway(gw);
+    setEditForm({ name: gw.name, herdsman_name: gw.herdsman_name || '', herdsman_phone: gw.herdsman_phone || '' });
+  };
+
+  const saveGatewayEdit = async () => {
+    if (!editingGateway) return;
+    try {
+      await apiClient.patch(`/api/gateway/${editingGateway.id}`, {
+        name: editForm.name,
+        herdsman_name: editForm.herdsman_name,
+        herdsman_phone: editForm.herdsman_phone,
+      });
+      setEditingGateway(null);
+      fetchGateways();
+    } catch (err) {
+      alert('Failed to update. Check console.');
+      console.error(err);
     }
   };
 
@@ -330,6 +354,12 @@ export default function GatewayPage() {
                     👤 {gw.herdsman_name}
                   </p>
                 )}
+                <button
+                  onClick={(e) => openEditGateway(gw, e)}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  ✏️ Edit herdsman
+                </button>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-500 dark:text-gray-400">Last seen:</span>
                   <TimeAgo iso={gw.last_seen} />
@@ -454,6 +484,35 @@ export default function GatewayPage() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Edit Herdsman Modal */}
+      {editingGateway && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditingGateway(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full mx-4" onClick={e => e.stopPropagation()}>
+            <div className="bg-brand-600 text-white px-6 py-4">
+              <h2 className="text-lg font-semibold">Edit Herdsman / Gateway</h2>
+              <p className="text-brand-200 text-sm">{editingGateway.serial_number}</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Gateway Name</label>
+                <input type="text" value={editForm.name} onChange={e => setEditForm(f => ({...f, name: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Herdsman Name</label>
+                <input type="text" value={editForm.herdsman_name} onChange={e => setEditForm(f => ({...f, herdsman_name: e.target.value}))} placeholder="e.g. Teboho Mpeki" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Herdsman Phone</label>
+                <input type="tel" value={editForm.herdsman_phone} onChange={e => setEditForm(f => ({...f, herdsman_phone: e.target.value}))} placeholder="+27 82 XXX XXXX" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button onClick={() => setEditingGateway(null)} className="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg">Cancel</button>
+                <button onClick={saveGatewayEdit} className="px-4 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700">Save</button>
+              </div>
             </div>
           </div>
         </div>
