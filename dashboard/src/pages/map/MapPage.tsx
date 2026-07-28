@@ -85,6 +85,7 @@ export default function MapPage() {
   });
   const [selectedAnimal, setSelectedAnimal] = useState<string | null>(null);
   const [trailData, setTrailData] = useState<[number, number][]>([]);
+  const [trailDate, setTrailDate] = useState<string>(''); // YYYY-MM-DD or '' for today
   const [drawingMode, setDrawingMode] = useState(false);
   const [drawingPoints, setDrawingPoints] = useState<[number, number][]>([]);
   const drawingModeRef = useRef(false);
@@ -334,14 +335,20 @@ export default function MapPage() {
     });
   }, [layers.animals]);
 
-  // ─── Movement Trail (Click → 24h path) ────────────
-  async function showTrail(animalId: string) {
+  // ─── Movement Trail (Click → daily path) ────────────
+  async function showTrail(animalId: string, forDate?: string) {
     const map = mapRef.current;
     if (!map) return;
     setSelectedAnimal(animalId);
 
     try {
-      const resp = await apiClient.get(`/api/animals/${animalId}/history`, { params: { hours: 24, limit: 200 } });
+      const params: Record<string, any> = { limit: 500 };
+      if (forDate || trailDate) {
+        params.date = forDate || trailDate;
+      } else {
+        params.hours = 24;
+      }
+      const resp = await apiClient.get(`/api/animals/${animalId}/history`, { params });
       const positions = resp.data.positions;
       const points: [number, number][] = positions.map((p: any) => [p.lon, p.lat]);
       setTrailData(points);
@@ -403,6 +410,7 @@ export default function MapPage() {
     document.querySelectorAll('.trail-time-marker').forEach(el => el.remove());
     setSelectedAnimal(null);
     setTrailData([]);
+    setTrailDate('');
   }
 
   // ─── Geofence Drawing Tool ─────────────────────────
@@ -659,7 +667,18 @@ export default function MapPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {selectedAnimal && <button onClick={clearTrail} className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded border border-purple-300">✕ Clear Trail</button>}
+          {selectedAnimal && (
+            <>
+              <input
+                type="date"
+                value={trailDate}
+                onChange={(e) => { setTrailDate(e.target.value); if (selectedAnimal) showTrail(selectedAnimal, e.target.value); }}
+                className="px-2 py-1 text-xs border border-purple-300 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                title="Select date to view that day's trail"
+              />
+              <button onClick={clearTrail} className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded border border-purple-300">✕ Clear Trail</button>
+            </>
+          )}
           {!drawingMode ? (
             <button onClick={() => { setDrawingMode(true); setDrawingPoints([]); }} className="px-3 py-1.5 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700">+ Draw Fence</button>
           ) : (

@@ -387,42 +387,48 @@ async def register_newborn(animal_id: UUID, req: NewbornRequest, db: AsyncSessio
 async def get_animal_history(
     animal_id: UUID,
     hours: int = Query(default=24, le=168),
+    date: Optional[str] = Query(default=None, description="Specific date (YYYY-MM-DD) to get trail for that day"),
     limit: int = Query(default=500, le=5000),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get position history for an animal (GPS or BLE gateway positions)."""
+    """Get position history for an animal (GPS or BLE gateway positions).
+    
+    If 'date' is provided, returns trail for that specific day.
+    Otherwise returns last N hours.
+    """
+    # Build time filter
+    if date:
+        # Specific day: from 00:00 to 23:59:59 on that date
+        time_filter = "AND time >= :start_date AND time < :start_date + INTERVAL '1 day'"
+        time_params = {"animal_id": str(animal_id), "start_date": date, "limit": limit}
+    else:
+        time_filter = "AND time > NOW() - make_interval(hours => :hours)"
+        time_params = {"animal_id": str(animal_id), "hours": hours, "limit": limit}
+
     # Try GPS positions first
-    query = text("""
+    query = text(f"""
         SELECT time, latitude, longitude, speed, heading, battery_mv
         FROM positions
         WHERE animal_id = :animal_id
-          AND time > NOW() - make_interval(hours => :hours)
+          {time_filter}
         ORDER BY time DESC
         LIMIT :limit
     """)
-    result = await db.execute(query, {
-        "animal_id": str(animal_id),
-        "hours": hours,
-        "limit": limit,
-    })
+    result = await db.execute(query, time_params)
     rows = result.fetchall()
 
     # BLE fallback: if no GPS history, get positions from ble_sightings
     if not rows:
-        ble_query = text("""
+        ble_query = text(f"""
             SELECT time, gateway_latitude AS latitude, gateway_longitude AS longitude,
                    gateway_speed AS speed, 0 AS heading, NULL AS battery_mv
             FROM ble_sightings
             WHERE animal_id = :animal_id
-              AND time > NOW() - make_interval(hours => :hours)
+              {time_filter}
             ORDER BY time DESC
             LIMIT :limit
         """)
-        ble_result = await db.execute(ble_query, {
-            "animal_id": str(animal_id),
-            "hours": hours,
-            "limit": limit,
-        })
+        ble_result = await db.execute(ble_query, time_params)
         rows = ble_result.fetchall()
 
     return {
