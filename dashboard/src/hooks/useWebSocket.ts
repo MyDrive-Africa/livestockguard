@@ -27,7 +27,7 @@ export function useWebSocket() {
   const addToast = useToastStore((state) => state.addToast);
 
   const connect = useCallback(() => {
-    if (!token || !currentFarm) return;
+    if (!token) return;
 
     // Clean up existing connection
     if (wsRef.current) {
@@ -35,8 +35,13 @@ export function useWebSocket() {
       wsRef.current = null;
     }
 
+    // In development, WebSocket connects to API server (port 8000), not Vite dev server
+    const apiHost = window.location.port === '5173' || window.location.port === '5174' || window.location.port === '5175'
+      ? `${window.location.hostname}:8000`
+      : window.location.host;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws?token=${token}&farm=${currentFarm}`;
+    const farmParam = currentFarm ? `&farm=${currentFarm}` : '';
+    const wsUrl = `${protocol}//${apiHost}/ws?token=${token}${farmParam}`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;

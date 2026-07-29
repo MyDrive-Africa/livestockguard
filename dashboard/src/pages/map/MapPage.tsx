@@ -77,6 +77,7 @@ export default function MapPage() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const mapReadyRef = useRef(false);
   const [animalCount, setAnimalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [tileSource, setTileSource] = useState<TileSource>('osm');
@@ -204,8 +205,8 @@ export default function MapPage() {
 
     map.on('load', () => {
       setLoading(false);
+      mapReadyRef.current = true;
       // Data loading is handled by the selectedFarmId useEffect
-      // (waits for farms API response before loading geofences/animals)
     });
 
     map.on('click', (e) => {
@@ -228,7 +229,9 @@ export default function MapPage() {
       map.removeLayer('base-layer');
       map.removeSource('base-tiles');
       map.addSource('base-tiles', { type: 'raster', tiles: source.tiles, tileSize: 256, attribution: source.attribution });
-      map.addLayer({ id: 'base-layer', type: 'raster', source: 'base-tiles' }, map.getStyle().layers[1]?.id);
+      // Insert base layer at the very bottom (below geofences)
+      const firstLayerId = map.getStyle().layers[0]?.id;
+      map.addLayer({ id: 'base-layer', type: 'raster', source: 'base-tiles', minzoom: 0, maxzoom: 19 }, firstLayerId);
     }
   }, [tileSource, loading]);
 
