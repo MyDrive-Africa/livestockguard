@@ -10,6 +10,7 @@ The herdsman carries a gateway device (phone or dedicated hardware) that:
 
 import os
 import sys
+import json
 from datetime import datetime, timezone, date
 from typing import List, Optional
 from uuid import UUID
@@ -245,6 +246,57 @@ async def ingest_batch(req: BatchSightingRequest, db: AsyncSession = Depends(get
             session.animals_seen = (session.animals_seen or 0) + resolved
 
     await db.commit()
+
+    # ── Geofence breach detection ──
+    # Check if any resolved animal is outside inclusion geofences
+    if resolved > 0:
+        try:
+            breach_check = text("""
+                SELECT a.id AS animal_id, a.name AS animal_name, g.name AS fence_name,
+                       g.breach_severity, g.id AS geofence_id
+                FROM animals a
+                JOIN ble_ear_tags bt ON bt.animal_id = a.id
+                JOIN geofences g ON g.farm_id = a.farm_id AND g.active = true
+                    AND g.fence_type = 'inclusion'
+                WHERE a.farm_id = :farm_id
+                  AND bt.mac_address = ANY(:macs)
+                  AND NOT ST_Covers(g.geometry, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography)
+                LIMIT 5
+            """)
+            resolved_macs = [s.mac_address.upper() for s in req.sightings if tags.get(s.mac_address.upper())]
+            if resolved_macs:
+                breach_result = await db.execute(breach_check, {
+                    "farm_id": str(gateway.farm_id),
+                    "macs": resolved_macs,
+                    "lat": req.latitude,
+                    "lon": req.longitude,
+                })
+                breaches = breach_result.fetchall()
+                for breach in breaches:
+                    # Create alert if not already active for this animal+geofence
+                    existing_alert = await db.execute(text("""
+                        SELECT id FROM alerts
+                        WHERE animal_id = :animal_id AND geofence_id = :geofence_id
+                          AND status = 'active'
+                        LIMIT 1
+                    """), {"animal_id": str(breach.animal_id), "geofence_id": str(breach.geofence_id)})
+                    if not existing_alert.first():
+                        await db.execute(text("""
+                            INSERT INTO alerts (farm_id, animal_id, geofence_id, alert_type, severity, status, message, metadata)
+                            VALUES (:farm_id, :animal_id, :geofence_id, 'geofence_breach', :severity, 'active',
+                                    :message, :metadata)
+                        """), {
+                            "farm_id": str(gateway.farm_id),
+                            "animal_id": str(breach.animal_id),
+                            "geofence_id": str(breach.geofence_id),
+                            "severity": breach.breach_severity or "high",
+                            "message": f"{breach.animal_name} has left {breach.fence_name}",
+                            "metadata": json.dumps({"latitude": req.latitude, "longitude": req.longitude}),
+                        })
+                await db.commit()
+        except Exception as e:
+            # Don't fail the batch if breach detection errors
+            pass
 
     # Note: Animal positions from BLE sightings are stored in ble_sightings table.
     # The main positions table requires device_id (NOT NULL) which BLE-detected
