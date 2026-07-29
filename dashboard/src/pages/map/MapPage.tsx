@@ -258,7 +258,7 @@ export default function MapPage() {
     map.addLayer({ id: `fence-fill-${id}`, type: 'fill', source: `fence-${id}`, paint: { 'fill-color': color, 'fill-opacity': 0.12 } });
     map.addLayer({ id: `fence-outline-${id}`, type: 'line', source: `fence-${id}`, paint: { 'line-color': color, 'line-width': 2.5, 'line-dasharray': type === 'exclusion' ? [4, 2] : [1] } });
 
-    // Add name + area as HTML marker at polygon centroid
+    // Add name + area as HTML marker at polygon centroid (clickable to show/hide)
     const coords = geometry.coordinates?.[0];
     if (coords && coords.length > 0) {
       let cx = 0, cy = 0;
@@ -273,8 +273,22 @@ export default function MapPage() {
       }
 
       const el = document.createElement('div');
-      el.style.cssText = `font-size:11px;font-weight:bold;color:#fff;background:${color};padding:2px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;opacity:0.9;`;
+      el.style.cssText = `font-size:11px;font-weight:bold;color:#fff;background:${color};padding:2px 6px;border-radius:4px;white-space:nowrap;cursor:pointer;opacity:0.9;user-select:none;`;
       el.textContent = `${name}${areaText}`;
+      el.title = 'Click to show/hide boundary';
+
+      // Click to toggle this geofence's fill/outline visibility
+      let visible = true;
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        visible = !visible;
+        const vis = visible ? 'visible' : 'none';
+        if (map.getLayer(`fence-fill-${id}`)) map.setLayoutProperty(`fence-fill-${id}`, 'visibility', vis);
+        if (map.getLayer(`fence-outline-${id}`)) map.setLayoutProperty(`fence-outline-${id}`, 'visibility', vis);
+        el.style.opacity = visible ? '0.9' : '0.4';
+        el.style.textDecoration = visible ? 'none' : 'line-through';
+      });
+
       const marker = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat([cx, cy]).addTo(map);
       fenceLabelMarkersRef.current.set(id, marker);
     }
@@ -589,23 +603,37 @@ export default function MapPage() {
         alertMarkersRef.current.forEach(m => m.remove());
         alertMarkersRef.current = [];
 
-        // Add red pulse markers for active alerts with location
-        alerts.forEach((alert: any) => {
-          if (!alert.latitude && !alert.longitude) return;
-          const lat = alert.latitude || alert.metadata?.latitude;
-          const lon = alert.longitude || alert.metadata?.longitude;
-          if (!lat || !lon) return;
+        // For alerts without coordinates, use the animal's last known position
+        for (const alert of alerts) {
+          let lat = alert.latitude || alert.metadata?.latitude;
+          let lon = alert.longitude || alert.metadata?.longitude;
+
+          // If no coords in alert, try to get from the animal's current marker position
+          if (!lat || !lon) {
+            // Find the animal marker by checking all markers
+            const animalMarker = Array.from(markersRef.current.values()).find(m => {
+              const title = m.getElement()?.title || '';
+              return alert.animal_name && title === alert.animal_name;
+            });
+            if (animalMarker) {
+              const lngLat = animalMarker.getLngLat();
+              lat = lngLat.lat;
+              lon = lngLat.lng;
+            }
+          }
+
+          if (!lat || !lon) continue;
 
           const el = document.createElement('div');
-          el.style.cssText = `width:20px;height:20px;background:#ef4444;border:3px solid #fff;border-radius:50%;cursor:pointer;animation:pulse-badge 1.5s infinite;box-shadow:0 0 12px rgba(239,68,68,0.6);`;
+          el.style.cssText = `width:22px;height:22px;background:#ef4444;border:3px solid #fff;border-radius:50%;cursor:pointer;animation:pulse-badge 1.5s infinite;box-shadow:0 0 12px rgba(239,68,68,0.6);position:relative;z-index:100;`;
           el.title = `⚠️ ${alert.alert_type}: ${alert.message || ''}`;
 
           const popup = new maplibregl.Popup({ offset: 15 }).setHTML(`
-            <div style="padding:8px;max-width:200px;">
-              <strong style="color:#dc2626;">⚠️ ${alert.alert_type.replace('_', ' ').toUpperCase()}</strong><br/>
+            <div style="padding:8px;max-width:220px;">
+              <strong style="color:#dc2626;">⚠️ ${(alert.alert_type || '').replace(/_/g, ' ').toUpperCase()}</strong><br/>
               <span style="font-size:12px;color:#666;">
                 ${alert.message || 'Active alert'}<br/>
-                Severity: ${alert.severity}<br/>
+                Severity: <strong>${alert.severity}</strong><br/>
                 ${alert.animal_name ? `Animal: ${alert.animal_name}` : ''}
               </span>
             </div>
@@ -616,7 +644,7 @@ export default function MapPage() {
             .setPopup(popup)
             .addTo(map);
           alertMarkersRef.current.push(marker);
-        });
+        }
       } catch { /* alerts not available */ }
     }
 
