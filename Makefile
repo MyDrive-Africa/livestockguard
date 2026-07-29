@@ -169,6 +169,46 @@ dev: ## Start everything for development
 	@echo ""
 	@echo "$(CYAN)Then open http://localhost:5173 in your browser$(RESET)"
 
+demo: ## Full live demo: starts stack, seeds, simulators, dashboard (single command)
+	@echo "$(CYAN)╔══════════════════════════════════════════════════════╗$(RESET)"
+	@echo "$(CYAN)║  LivestockGuard — Full Live Demo                     ║$(RESET)"
+	@echo "$(CYAN)╚══════════════════════════════════════════════════════╝$(RESET)"
+	@echo ""
+	@echo "$(GREEN)1. Starting cloud infrastructure...$(RESET)"
+	cd cloud && docker compose up -d --build
+	@sleep 4
+	@echo "$(GREEN)2. Seeding database...$(RESET)"
+	cd cloud && docker compose exec -T postgres psql -U livestockguard -d livestockguard < ../scripts/seed_data.sql 2>&1 | grep "NOTICE" || true
+	@echo "$(GREEN)3. Running migrations...$(RESET)"
+	cd cloud && docker compose exec -T postgres psql -U livestockguard -d livestockguard < ../cloud/migrations/versions/008_geofence_breach_severity.sql 2>/dev/null || true
+	cd cloud && docker compose exec -T postgres psql -U livestockguard -d livestockguard < ../cloud/migrations/versions/009_farm_schedule_config.sql 2>/dev/null || true
+	@echo "$(GREEN)4. Starting GPS simulator (Boschhoek, 5 animals)...$(RESET)"
+	cd tools/simulator && python3 simulator.py --farm boschhoek --animals 5 --interval 10 --duration 3600 &
+	@echo "$(GREEN)5. Starting BLE simulator (Loch Vaal, breach scenario, 36 min)...$(RESET)"
+	cd tools/simulator && python3 gateway_daily_sim.py --speed 20 --scan-interval 8 --report-interval 20 --scenario breach &
+	@sleep 2
+	@echo "$(GREEN)6. Starting dashboard...$(RESET)"
+	cd dashboard && npx vite --port 5173 &
+	@sleep 3
+	@echo ""
+	@echo "$(CYAN)╔══════════════════════════════════════════════════════╗$(RESET)"
+	@echo "$(CYAN)║  ✅ DEMO RUNNING                                     ║$(RESET)"
+	@echo "$(CYAN)║                                                      ║$(RESET)"
+	@echo "$(CYAN)║  Dashboard:  http://localhost:5173                    ║$(RESET)"
+	@echo "$(CYAN)║  Login:      africa.mydrive@gmail.com / demo123      ║$(RESET)"
+	@echo "$(CYAN)║  API Docs:   http://localhost:8000/docs              ║$(RESET)"
+	@echo "$(CYAN)║                                                      ║$(RESET)"
+	@echo "$(CYAN)║  LIVE SIMULATION:                                    ║$(RESET)"
+	@echo "$(CYAN)║  • Boschhoek: 5 GPS cows moving (Free State)        ║$(RESET)"
+	@echo "$(CYAN)║  • Loch Vaal: 10 BLE cows + BREACH (Gauteng)        ║$(RESET)"
+	@echo "$(CYAN)║    - Kraal → Feed → Gate → Grazing → Breach!        ║$(RESET)"
+	@echo "$(CYAN)║    - Full day in ~36 real minutes                    ║$(RESET)"
+	@echo "$(CYAN)║                                                      ║$(RESET)"
+	@echo "$(CYAN)║  Press Ctrl+C to stop all processes                  ║$(RESET)"
+	@echo "$(CYAN)╚══════════════════════════════════════════════════════╝$(RESET)"
+	@echo ""
+	@wait
+
 # ─── VERIFICATION ───────────────────────────────────
 
 verify-api: ## Run API feature verification (requires stack running)
