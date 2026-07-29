@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "LivestockGuard",
+    "slug": "livestockguard",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "backgroundColor": "#16a34a"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "co.za.livestockguard.app",
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "LivestockGuard uses Bluetooth to detect BLE ear tags on cattle for livestock tracking.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "LivestockGuard needs your location to record where cattle are detected by the BLE scanner.",
+        "NSLocationWhenInUseUsageDescription": "LivestockGuard needs your location to show cattle positions on the map.",
+        "UIBackgroundModes": ["bluetooth-central", "location", "fetch", "remote-notification"]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#16a34a"
+      },
+      "package": "co.za.livestockguard.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_CONNECT",
+        "FOREGROUND_SERVICE",
+        "RECEIVE_BOOT_COMPLETED",
+        "WAKE_LOCK"
+      ]
+    },
+    "plugins": [
+      "expo-location",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#16a34a"
+        }
+      ]
+    ]
+  }
+}
