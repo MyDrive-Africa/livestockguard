@@ -14,6 +14,7 @@ from .routers.websocket import router as ws_router
 from .routers.notifications import router as notifications_router
 from .routers.gateway import router as gateway_router
 from .routers.system import router as system_router
+from .routers.users import router as users_router
 from .metrics import metrics, add_metrics_middleware
 
 # ─── Rate Limiter ─────────────────────────────────────
@@ -85,6 +86,7 @@ app.include_router(analytics.router, prefix=f"/api/{API_VERSION}/analytics", tag
 app.include_router(notifications_router, prefix=f"/api/{API_VERSION}/notifications", tags=["notifications"])
 app.include_router(gateway_router, prefix=f"/api/{API_VERSION}/gateway", tags=["gateway"])
 app.include_router(system_router, prefix=f"/api/{API_VERSION}/system", tags=["system"])
+app.include_router(users_router, prefix=f"/api/{API_VERSION}/users", tags=["users"])
 
 # ─── Backward-compatible unversioned routes (deprecated) ─
 
@@ -98,6 +100,7 @@ app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"]
 app.include_router(notifications_router, prefix="/api/notifications", tags=["notifications"], include_in_schema=False)
 app.include_router(gateway_router, prefix="/api/gateway", tags=["gateway"], include_in_schema=False)
 app.include_router(system_router, prefix="/api/system", tags=["system"], include_in_schema=False)
+app.include_router(users_router, prefix="/api/users", tags=["users"], include_in_schema=False)
 
 # WebSocket (unversioned — real-time endpoint)
 app.include_router(ws_router, tags=["websocket"])
