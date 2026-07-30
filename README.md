@@ -27,14 +27,21 @@ Real-time animal monitoring, virtual fencing, theft detection, and herd health �
 ## Quick Start (One Command)
 
 ```bash
-# Clone and run the full platform demo in one shot:
+# Clone and run the FULL platform (all 3 farms, all sims, dashboard + mobile):
 git clone https://github.com/MyDrive-Africa/livestockguard.git
 cd livestockguard
 make setup        # installs everything, starts Docker, seeds DB
-make demo         # launches full platform with breach scenario
+make demo-full    # launches EVERYTHING: 65 animals, 3 farms, dashboard, mobile app
 ```
 
-Open **http://localhost:5173** — log in with `africa.mydrive@gmail.com` / `demo123`.
+Open **http://localhost:5173** (dashboard) or **http://localhost:8082** (mobile app).
+
+Log in with any of:
+- `africa.mydrive@gmail.com` / `demo123` (Boschhoek, Free State)
+- `lochvaal@livestockguard.co.za` / `demo123` (Loch Vaal, Gauteng)
+- `sibanyoni@livestockguard.co.za` / `demo123` (Sibanyoni, North West)
+
+> **Lighter option:** `make demo` runs only Boschhoek + Loch Vaal without mobile app (faster startup).
 
 ---
 
@@ -88,27 +95,38 @@ After setup completes, you're ready to run everything.
 
 ## Running the Platform
 
-### Option A: Full Demo (Recommended for first time)
+### Option A: Full Platform Demo (Recommended for first time)
 
 ```bash
-make demo           # Breach scenario — a cow escapes the geofence
-make demo-normal    # Normal day — no incidents
-make demo-theft     # Theft scenario — a cow is loaded onto a vehicle
-make demo-mobile    # Breach + mobile app in browser (port 8082)
-make demo-ios       # Breach + iOS simulator build
-make demo-android   # Breach + Android emulator build
+make demo-full          # EVERYTHING: 3 farms, 65 animals, dashboard + mobile, breach scenario
+make demo-full-normal   # Everything, normal day (no incidents)
+make demo-full-theft    # Everything, theft scenario
 ```
 
-`make demo` starts **everything** automatically:
-1. Docker infrastructure (Postgres, Redis, EMQX, API, MQTT Writer)
-2. Seeds database (3 farms, 65 animals, 10+ geofences, gateways, BLE tags)
-3. Applies all migrations
-4. GPS simulator (Boschhoek Farm, 5 animals, real-time)
-5. BLE gateway simulator (Loch Vaal, 10 animals, full herdsman day at 20x speed)
-6. Web dashboard on http://localhost:5173
-7. (Optional) Mobile app on http://localhost:8082
+`make demo-full` starts **the entire platform** automatically:
+1. Docker infrastructure (Postgres, Redis, EMQX, API, MQTT Writer, Alert Engine)
+2. Seeds database (3 farms, 65 animals, 13 geofences, 2 gateways, 60 BLE tags)
+3. Applies all 9 migrations
+4. GPS simulator: Boschhoek Farm (5 animals, Free State)
+5. GPS simulator: Sibanyoni Farm (50 animals, North West)
+6. BLE gateway simulator: Loch Vaal (10 animals, full herdsman day at 20x speed)
+7. Web dashboard on http://localhost:5173
+8. Mobile app on http://localhost:8082
 
 Stop with **Ctrl+C** — kills all background processes cleanly.
+
+### Option A (Lite): Standard Demo
+
+```bash
+make demo           # Boschhoek GPS + Loch Vaal BLE + dashboard (breach)
+make demo-normal    # Normal day
+make demo-theft     # Theft scenario
+make demo-mobile    # + mobile app in browser
+make demo-ios       # + iOS simulator build
+make demo-android   # + Android emulator build
+```
+
+Lighter/faster — runs 2 farms (Boschhoek + Loch Vaal) without Sibanyoni or mobile by default.
 
 ---
 
@@ -291,12 +309,15 @@ Run `make help` to see all available commands. Full reference:
 | Target | Description |
 |--------|-------------|
 | `make dev` | Start Docker stack + print instructions for other terminals |
-| `make demo` | Full live demo with breach scenario |
-| `make demo-normal` | Full demo, normal day (no incidents) |
-| `make demo-theft` | Full demo with theft scenario |
-| `make demo-mobile` | Full demo + mobile app in browser |
-| `make demo-ios` | Full demo + iOS simulator build |
-| `make demo-android` | Full demo + Android emulator build |
+| `make demo` | Live demo: Boschhoek + Loch Vaal + dashboard (breach) |
+| `make demo-normal` | Demo with normal day (no incidents) |
+| `make demo-theft` | Demo with theft scenario |
+| `make demo-mobile` | Demo + mobile app in browser |
+| `make demo-ios` | Demo + iOS simulator build |
+| `make demo-android` | Demo + Android emulator build |
+| `make demo-full` | **EVERYTHING**: 3 farms, all sims, dashboard + mobile (breach) |
+| `make demo-full-normal` | Everything, normal day |
+| `make demo-full-theft` | Everything, theft scenario |
 
 ### Testing & Verification
 

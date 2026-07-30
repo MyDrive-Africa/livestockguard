@@ -140,6 +140,10 @@ simulate-breach: ## Run geofence breach scenario
 simulate-many: ## Simulate 50 animals at Loch Vaal (stress test)
 	cd tools/simulator && python3 simulator.py --farm lochvaal --animals 50 --interval 15
 
+simulate-sibanyoni: ## Simulate 50 animals at Sibanyoni (North West)
+	@echo "$(GREEN)Starting device simulator (Sibanyoni Farm, 50 animals)...$(RESET)"
+	cd tools/simulator && python3 simulator.py --farm sibanyoni --animals 50 --interval 15
+
 # ─── MQTT WRITER ────────────────────────────────────
 
 mqtt-writer: ## Start MQTT→DB writer (bridges simulator to database)
@@ -206,6 +210,15 @@ demo-ios: ## Full demo + iOS simulator build
 
 demo-android: ## Full demo + Android emulator build
 	@bash scripts/run-demo.sh --breach --mobile --android
+
+demo-full: ## EVERYTHING: all 3 farms + all sims + dashboard + mobile (breach)
+	@bash scripts/run-demo-full.sh --breach
+
+demo-full-normal: ## EVERYTHING with normal day (no incidents)
+	@bash scripts/run-demo-full.sh --normal
+
+demo-full-theft: ## EVERYTHING with theft scenario
+	@bash scripts/run-demo-full.sh --theft
 
 mobile-web: ## Start mobile app in browser only (port 8082)
 	@echo "$(GREEN)Starting mobile app at http://localhost:8082$(RESET)"
