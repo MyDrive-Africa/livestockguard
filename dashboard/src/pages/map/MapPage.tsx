@@ -80,6 +80,7 @@ export default function MapPage() {
   const mapReadyRef = useRef(false);
   const [animalCount, setAnimalCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [tileSource, setTileSource] = useState<TileSource>('osm');
   const [layers, setLayers] = useState<Record<LayerToggle, boolean>>({
     animals: true, geofences: true, trails: false,
@@ -149,6 +150,22 @@ export default function MapPage() {
     const farm = farms.find((f) => f.id === selectedFarmId);
     if (farm?.latitude && farm?.longitude) {
       map.flyTo({ center: [farm.longitude, farm.latitude], zoom: farmZoom(farm as any), duration: 1500 });
+
+      // Place farm centre marker (📍 pin with farm name)
+      if (farmCentreMarkerRef.current) {
+        farmCentreMarkerRef.current.remove();
+        farmCentreMarkerRef.current = null;
+      }
+      const el = document.createElement('div');
+      el.style.cssText = 'display:flex;flex-direction:column;align-items:center;pointer-events:auto;cursor:default;';
+      el.innerHTML = `
+        <div style="font-size:24px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));">📍</div>
+        <div style="font-size:10px;font-weight:bold;color:#fff;background:#1d4ed8;padding:1px 5px;border-radius:3px;margin-top:-4px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.3);">${farm.name}</div>
+        <div style="font-size:9px;color:#93c5fd;background:#1e3a5f;padding:0 4px;border-radius:2px;margin-top:1px;">${farm.latitude.toFixed(5)}, ${farm.longitude.toFixed(5)}</div>
+      `;
+      farmCentreMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+        .setLngLat([farm.longitude, farm.latitude])
+        .addTo(map);
     }
     // Load geofences & animals for the selected farm
     clearAllGeofences(map);
@@ -175,6 +192,22 @@ export default function MapPage() {
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current.clear();
     setAnimalCount(0);
+  }
+
+  // Refresh data for the currently selected farm without changing location
+  async function refreshDashboard() {
+    const map = mapRef.current;
+    if (!map || !selectedFarmId || refreshing) return;
+    setRefreshing(true);
+    try {
+      clearAllGeofences(map);
+      clearAllMarkers();
+      await loadGeofencesForFarm(map, selectedFarmId);
+      await fetchPositionsForFarm(map, selectedFarmId);
+      addToast({ title: 'Refreshed', message: 'Dashboard data updated', severity: 'info', duration: 2000 });
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   // ─── Initialize Map ─────────────────────────────────
@@ -248,6 +281,7 @@ export default function MapPage() {
 
   // ─── Geofence Polygon Overlays ─────────────────────
   const fenceLabelMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const farmCentreMarkerRef = useRef<maplibregl.Marker | null>(null);
 
   function addGeofenceToMap(map: maplibregl.Map, id: string, name: string, type: string, geometry: any, areaHectares?: number | null) {
     const color = type === 'exclusion' ? '#ef4444' : '#22c55e';
@@ -745,6 +779,25 @@ export default function MapPage() {
               ))}
             </select>
           )}
+          {/* Refresh Button */}
+          <button
+            onClick={refreshDashboard}
+            disabled={refreshing || loading}
+            className="p-1.5 sm:p-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 hover:text-gray-900 dark:hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Refresh dashboard data"
+            title="Refresh data for selected location"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
         </div>
         <div className="flex items-center gap-2">
           {selectedAnimal && (
