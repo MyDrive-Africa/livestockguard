@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
+import MapView, { Marker, Polygon, PROVIDER_GOOGLE } from 'react-native-maps';
 import { api } from '../services/api';
 
 /**
- * Map Screen — shows cattle positions.
- * On web: embeds the full dashboard map via iframe.
- * On native (Android/iOS): shows position list with live updates.
- * (Future: use react-native-maps for native map with markers)
+ * Map Screen — native interactive map with cattle markers and geofences.
+ * Uses react-native-maps (Google Maps on Android, Apple Maps on iOS).
+ * Web mode falls back to iframe of the web dashboard.
  */
 
 interface AnimalPosition {
@@ -17,122 +17,121 @@ interface AnimalPosition {
   gender?: string;
   last_latitude?: number;
   last_longitude?: number;
-  last_speed?: number;
-  battery_level?: number;
 }
+
+interface Geofence {
+  id: string;
+  name: string;
+  fence_type: string;
+  geometry?: { type: string; coordinates: number[][][] };
+}
+
+// Loch Vaal Plot 30 centre
+const INITIAL_REGION = {
+  latitude: -26.719088,
+  longitude: 27.709759,
+  latitudeDelta: 0.008,
+  longitudeDelta: 0.008,
+};
 
 export default function MapScreen() {
   const [animals, setAnimals] = useState<AnimalPosition[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
+  const [geofences, setGeofences] = useState<Geofence[]>([]);
 
-  const fetchPositions = async () => {
+  const fetchData = async () => {
     try {
-      const resp = await api.get('/api/animals');
-      setAnimals(resp.data);
+      const [animalsResp, geofencesResp] = await Promise.all([
+        api.get('/api/animals'),
+        api.get('/api/geofences?farm_id=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'),
+      ]);
+      setAnimals(animalsResp.data);
+      setGeofences(geofencesResp.data);
     } catch (err) {
-      console.warn('Failed to fetch positions:', err);
+      console.warn('Failed to fetch map data:', err);
     }
   };
 
-  useEffect(() => { fetchPositions(); }, []);
+  useEffect(() => { fetchData(); }, []);
   useEffect(() => {
-    const interval = setInterval(fetchPositions, 30000);
+    const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchPositions();
-    setRefreshing(false);
-  };
-
-  // Web: embed dashboard map
+  // Web: iframe
   if (Platform.OS === 'web') {
     return (
       <View style={styles.container}>
-        {/* @ts-ignore - iframe works on web */}
-        <iframe
-          src="http://localhost:5173"
-          style={{ width: '100%', height: '100%', border: 'none' }}
-          title="LivestockGuard Map"
-        />
+        {/* @ts-ignore */}
+        <iframe src="http://localhost:5173" style={{ width: '100%', height: '100%', border: 'none' }} title="Map" />
       </View>
     );
   }
 
-  // Native: position list (until react-native-maps is added)
+  // Native: react-native-maps
   const withPosition = animals.filter(a => a.last_latitude != null);
-  const withoutPosition = animals.filter(a => a.last_latitude == null);
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#22c55e" />}
-    >
-      <Text style={styles.title}>🗺️ Live Positions</Text>
-      <Text style={styles.subtitle}>{withPosition.length} tracked · {withoutPosition.length} no signal · Updates every 30s</Text>
+    <View style={styles.container}>
+      <MapView
+        style={styles.map}
+        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+        initialRegion={INITIAL_REGION}
+        showsUserLocation={false}
+        mapType="hybrid"
+      >
+        {/* Geofence polygons */}
+        {geofences.map((fence) => {
+          if (!fence.geometry?.coordinates?.[0]) return null;
+          const coords = fence.geometry.coordinates[0].map(([lon, lat]) => ({
+            latitude: lat,
+            longitude: lon,
+          }));
+          return (
+            <Polygon
+              key={fence.id}
+              coordinates={coords}
+              strokeColor={fence.fence_type === 'exclusion' ? '#ef4444' : '#22c55e'}
+              fillColor={fence.fence_type === 'exclusion' ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)'}
+              strokeWidth={2}
+            />
+          );
+        })}
 
-      {withPosition.map((animal) => (
-        <View key={animal.id} style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.animalName}>🐄 {animal.name}</Text>
-            <View style={styles.liveBadge}>
-              <View style={styles.liveDot} />
-              <Text style={styles.liveText}>Live</Text>
-            </View>
-          </View>
-          <Text style={styles.coords}>
-            📍 {animal.last_latitude?.toFixed(5)}, {animal.last_longitude?.toFixed(5)}
-          </Text>
-          <View style={styles.detailRow}>
-            {animal.last_speed != null && (
-              <Text style={styles.detail}>🚶 {animal.last_speed.toFixed(1)} km/h</Text>
-            )}
-            {animal.battery_level != null && (
-              <Text style={[styles.detail, animal.battery_level < 20 && styles.lowBattery]}>
-                🔋 {animal.battery_level}%
-              </Text>
-            )}
-            <Text style={styles.detail}>
-              {animal.breed || ''} {animal.gender === 'male' ? '♂' : animal.gender === 'female' ? '♀' : ''}
-            </Text>
-          </View>
-        </View>
-      ))}
+        {/* Cattle markers */}
+        {withPosition.map((animal) => (
+          <Marker
+            key={animal.id}
+            coordinate={{
+              latitude: animal.last_latitude!,
+              longitude: animal.last_longitude!,
+            }}
+            title={animal.name}
+            description={`${animal.breed || ''} ${animal.gender === 'male' ? '♂' : animal.gender === 'female' ? '♀' : ''}`}
+            pinColor="#16a34a"
+          />
+        ))}
+      </MapView>
 
-      {withoutPosition.length > 0 && (
-        <>
-          <Text style={styles.sectionTitle}>No Signal ({withoutPosition.length})</Text>
-          {withoutPosition.map((animal) => (
-            <View key={animal.id} style={[styles.card, styles.cardOffline]}>
-              <Text style={styles.offlineName}>🐄 {animal.name}</Text>
-              <Text style={styles.offlineDetail}>{animal.tag_id} · {animal.breed || '—'}</Text>
-            </View>
-          ))}
-        </>
-      )}
-
-      <View style={{ height: 40 }} />
-    </ScrollView>
+      {/* Overlay: count */}
+      <View style={styles.overlay}>
+        <Text style={styles.overlayText}>🐄 {withPosition.length} tracked · Updates every 30s</Text>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#111827', padding: 16, paddingTop: 60 },
-  title: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
-  subtitle: { fontSize: 12, color: '#6b7280', marginBottom: 16 },
-  card: { backgroundColor: '#1f2937', borderRadius: 12, padding: 14, marginBottom: 10, borderLeftWidth: 3, borderLeftColor: '#22c55e' },
-  cardOffline: { borderLeftColor: '#6b7280', opacity: 0.7 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  animalName: { fontSize: 15, fontWeight: '600', color: '#fff' },
-  liveBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#14532d', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22c55e', marginRight: 4 },
-  liveText: { fontSize: 10, color: '#86efac', fontWeight: '600' },
-  coords: { fontSize: 11, color: '#9ca3af', marginTop: 6 },
-  detailRow: { flexDirection: 'row', gap: 12, marginTop: 6 },
-  detail: { fontSize: 11, color: '#6b7280' },
-  lowBattery: { color: '#ef4444' },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#9ca3af', marginTop: 16, marginBottom: 8 },
-  offlineName: { fontSize: 14, color: '#9ca3af' },
-  offlineDetail: { fontSize: 11, color: '#4b5563', marginTop: 2 },
+  container: { flex: 1, backgroundColor: '#111827' },
+  map: { flex: 1 },
+  overlay: {
+    position: 'absolute',
+    bottom: 80,
+    left: 16,
+    right: 16,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 8,
+    padding: 8,
+    alignItems: 'center',
+  },
+  overlayText: { color: '#fff', fontSize: 12 },
 });
