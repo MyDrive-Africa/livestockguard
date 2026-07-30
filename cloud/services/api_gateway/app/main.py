@@ -67,6 +67,9 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://localhost:8082",
         "https://app.livestockguard.co.za",
     ],
     allow_credentials=True,
