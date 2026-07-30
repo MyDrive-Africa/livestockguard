@@ -446,6 +446,34 @@ export default function MapPage() {
     }
   }, [drawingPoints, drawingMode, loading]);
 
+  // ─── Live Area Calculation (Shoelace Formula) ──────
+  function calculatePolygonAreaHa(points: [number, number][]): number {
+    // points are [lng, lat] pairs
+    if (points.length < 3) return 0;
+    // Use shoelace formula with projected coordinates (approx metres)
+    const refLat = points[0][1];
+    const mPerDegLat = 111320;
+    const mPerDegLon = 111320 * Math.cos(refLat * Math.PI / 180);
+
+    let area = 0;
+    const n = points.length;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const xi = points[i][0] * mPerDegLon;
+      const yi = points[i][1] * mPerDegLat;
+      const xj = points[j][0] * mPerDegLon;
+      const yj = points[j][1] * mPerDegLat;
+      area += xi * yj - xj * yi;
+    }
+    return Math.abs(area / 2) / 10000; // m² → hectares
+  }
+
+  const drawingAreaHa = calculatePolygonAreaHa(drawingPoints);
+  const TARGET_HA_MIN = 50;
+  const TARGET_HA_MAX = 70;
+  const areaInRange = drawingAreaHa >= TARGET_HA_MIN && drawingAreaHa <= TARGET_HA_MAX;
+  const areaColor = drawingAreaHa < TARGET_HA_MIN ? '#ef4444' : areaInRange ? '#22c55e' : '#f59e0b';
+
   async function finishDrawing() {
     if (drawingPoints.length >= 3) {
       const closed = [...drawingPoints, drawingPoints[0]];
@@ -737,7 +765,18 @@ export default function MapPage() {
             <div className="flex items-center gap-2">
               <span className="text-xs text-amber-600">
                 {editingFenceId ? '✏️ ' : ''}{drawingPoints.length} pts
+                {drawingPoints.length >= 3 && (
+                  <span style={{ color: areaColor, fontWeight: 'bold', marginLeft: 6 }}>
+                    📐 {drawingAreaHa < 1 ? `${Math.round(drawingAreaHa * 10000)} m²` : `${drawingAreaHa.toFixed(1)} ha`}
+                    {drawingAreaHa > 0 && drawingAreaHa < TARGET_HA_MIN && (
+                      <span className="text-red-500 ml-1">(need {(TARGET_HA_MIN - drawingAreaHa).toFixed(1)} more ha)</span>
+                    )}
+                    {areaInRange && <span className="text-green-600 ml-1">✓ Target</span>}
+                    {drawingAreaHa > TARGET_HA_MAX && <span className="text-amber-500 ml-1">(over target)</span>}
+                  </span>
+                )}
               </span>
+              <button onClick={() => setDrawingPoints(p => p.slice(0, -1))} disabled={drawingPoints.length === 0} className="px-2 py-1 text-xs bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded disabled:opacity-50" title="Undo last point">↩</button>
               <button onClick={finishDrawing} disabled={drawingPoints.length < 3} className="px-2 py-1 text-xs bg-green-600 text-white rounded disabled:opacity-50">✓</button>
               <button onClick={() => { setDrawingMode(false); setDrawingPoints([]); setEditingFenceId(null); }} className="px-2 py-1 text-xs bg-red-600 text-white rounded">✕</button>
             </div>
@@ -758,6 +797,28 @@ export default function MapPage() {
         )}
 
         {/* Floating Map Controls — always visible */}
+
+        {/* Live Area Indicator (visible during drawing) */}
+        {drawingMode && drawingPoints.length >= 2 && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-gray-900/90 backdrop-blur-sm text-white px-4 py-2 rounded-xl shadow-lg flex items-center gap-3">
+            <span className="text-2xl">📐</span>
+            <div>
+              <div className="text-lg font-bold" style={{ color: areaColor }}>
+                {drawingAreaHa < 1 ? `${Math.round(drawingAreaHa * 10000)} m²` : `${drawingAreaHa.toFixed(2)} ha`}
+              </div>
+              <div className="text-xs text-gray-300">
+                {drawingAreaHa < TARGET_HA_MIN && `Need ~${(TARGET_HA_MIN - drawingAreaHa).toFixed(1)} more ha to reach target`}
+                {areaInRange && `✓ Within target range (${TARGET_HA_MIN}–${TARGET_HA_MAX} ha)`}
+                {drawingAreaHa > TARGET_HA_MAX && `Over target by ${(drawingAreaHa - TARGET_HA_MAX).toFixed(1)} ha`}
+                {drawingPoints.length < 3 && 'Add at least 1 more point'}
+              </div>
+            </div>
+            <div className="text-xs text-gray-400 border-l border-gray-600 pl-3">
+              {drawingPoints.length} points<br/>
+              Target: {TARGET_HA_MIN}–{TARGET_HA_MAX} ha
+            </div>
+          </div>
+        )}
         <div className="absolute top-3 left-3 z-20 flex flex-col gap-2">
           {/* Tile Source Switcher */}
           <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-lg p-1.5 flex flex-col gap-1">

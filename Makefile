@@ -85,9 +85,17 @@ simulate-lochvaal: ## Run simulator for Loch Vaal (10 animals)
 	@echo "$(GREEN)Starting device simulator (Loch Vaal Plot 30)...$(RESET)"
 	cd tools/simulator && python3 simulator.py --farm lochvaal --animals 10 --interval 10
 
+simulate-sibanyoni: ## Run simulator for Sibanyoni Farm (50 animals)
+	@echo "$(GREEN)Starting device simulator (Sibanyoni Farm, North West)...$(RESET)"
+	cd tools/simulator && python3 simulator.py --farm sibanyoni --animals 50 --interval 10
+
 simulate-gateway: ## Run herdsman gateway simulator (BLE ear tags)
 	@echo "$(GREEN)Starting herdsman gateway simulator (Loch Vaal)...$(RESET)"
 	cd tools/simulator && python3 gateway_simulator.py --farm lochvaal --animals 10
+
+simulate-gateway-sibanyoni: ## Run gateway simulator for Sibanyoni (50 BLE tags)
+	@echo "$(GREEN)Starting herdsman gateway simulator (Sibanyoni Farm)...$(RESET)"
+	cd tools/simulator && python3 gateway_simulator.py --farm sibanyoni --animals 50
 
 simulate-gateway-offline: ## Run gateway simulator without API (print only)
 	@echo "$(GREEN)Starting gateway simulator (offline mode)...$(RESET)"
@@ -96,6 +104,18 @@ simulate-gateway-offline: ## Run gateway simulator without API (print only)
 simulate-day: ## Simulate full herdsman day at Loch Vaal (12h in 6min)
 	@echo "$(GREEN)Starting herdsman daily routine simulation...$(RESET)"
 	cd tools/simulator && python3 gateway_daily_sim.py --speed 120
+
+simulate-day-sibanyoni: ## Simulate full herdsman day at Sibanyoni (50 cattle, 12h in 6min)
+	@echo "$(GREEN)Starting Sibanyoni Farm daily routine simulation (50 cattle)...$(RESET)"
+	cd tools/simulator && python3 sibanyoni_daily_sim.py --speed 120
+
+simulate-day-sibanyoni-theft: ## Simulate theft at Sibanyoni Farm
+	@echo "$(YELLOW)Starting THEFT scenario (Sibanyoni Farm)...$(RESET)"
+	cd tools/simulator && python3 sibanyoni_daily_sim.py --speed 360 --scenario theft
+
+simulate-day-sibanyoni-breach: ## Simulate geofence breach at Sibanyoni Farm
+	@echo "$(YELLOW)Starting BREACH scenario (Sibanyoni Farm)...$(RESET)"
+	cd tools/simulator && python3 sibanyoni_daily_sim.py --speed 360 --scenario breach
 
 simulate-day-offline: ## Simulate herdsman day without API
 	@echo "$(GREEN)Starting herdsman daily simulation (offline)...$(RESET)"

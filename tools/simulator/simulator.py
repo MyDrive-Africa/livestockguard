@@ -253,6 +253,7 @@ CATTLE_NAMES = [
 FARM_PRESETS = {
     'boschhoek': {'lat': -29.12, 'lon': 26.21, 'name': 'Boschhoek Farm (Free State)', 'device_base': 0x1000},
     'lochvaal': {'lat': -26.719088, 'lon': 27.709759, 'name': 'Loch Vaal Plot 30 (Gauteng)', 'device_base': 0x2000},
+    'sibanyoni': {'lat': -25.3580560, 'lon': 25.3612750, 'name': 'Sibanyoni Farm (North West)', 'device_base': 0x3000},
 }
 
 

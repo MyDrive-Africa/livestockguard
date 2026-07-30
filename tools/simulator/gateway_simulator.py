@@ -40,6 +40,11 @@ FARM_PRESETS = {
         'name': 'Loch Vaal Plot 30 (Gauteng)',
         'gateway_serial': 'GW-LV-001',
     },
+    'sibanyoni': {
+        'lat': -25.3580560, 'lon': 25.3612750,
+        'name': 'Sibanyoni Farm (North West)',
+        'gateway_serial': 'GW-SB-001',
+    },
 }
 
 # BLE simulation parameters
