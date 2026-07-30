@@ -108,7 +108,7 @@ echo -e "  ✅ All 9 migrations applied"
 
 echo -e "${GREEN}[4/9] Starting GPS simulator — Boschhoek Farm (5 animals)...${RESET}"
 cd tools/simulator
-source .venv/bin/activate 2>/dev/null || true
+if [ -d ".venv" ]; then source .venv/bin/activate 2>/dev/null; fi
 python3 simulator.py --farm boschhoek --animals 5 --interval 10 --duration 7200 > ../../logs/gps-boschhoek.log 2>&1 &
 cd "$ROOT_DIR"
 echo -e "  ✅ 5 cows with GPS collars (Free State, -29.12, 26.21)"
@@ -117,6 +117,7 @@ echo -e "  ✅ 5 cows with GPS collars (Free State, -29.12, 26.21)"
 
 echo -e "${GREEN}[5/9] Starting GPS simulator — Sibanyoni Farm (50 animals)...${RESET}"
 cd tools/simulator
+if [ -d ".venv" ]; then source .venv/bin/activate 2>/dev/null; fi
 python3 simulator.py --farm sibanyoni --animals 50 --interval 15 --duration 7200 > ../../logs/gps-sibanyoni.log 2>&1 &
 cd "$ROOT_DIR"
 echo -e "  ✅ 50 cows with GPS collars (North West, -25.358, 25.361)"
@@ -125,6 +126,7 @@ echo -e "  ✅ 50 cows with GPS collars (North West, -25.358, 25.361)"
 
 echo -e "${GREEN}[6/9] Starting BLE gateway — Loch Vaal Plot 30 (10 animals, ${SCENARIO})...${RESET}"
 cd tools/simulator
+if [ -d ".venv" ]; then source .venv/bin/activate 2>/dev/null; fi
 python3 gateway_daily_sim.py --speed 20 --scan-interval 8 --report-interval 20 --scenario "$SCENARIO" > ../../logs/ble-lochvaal.log 2>&1 &
 cd "$ROOT_DIR"
 echo -e "  ✅ 10 cows with BLE ear tags, herdsman gateway (Gauteng, -26.719, 27.710)"
@@ -137,6 +139,9 @@ fi
 # ─── 7. Web Dashboard ────────────────────────────────────────────────────────
 
 echo -e "${GREEN}[7/9] Starting web dashboard...${RESET}"
+# Kill any stale process on port 5173
+lsof -ti :5173 | xargs kill -9 2>/dev/null || true
+sleep 1
 cd dashboard
 npm install --silent 2>/dev/null
 npx vite --port 5173 > ../logs/dashboard-full.log 2>&1 &
@@ -151,11 +156,14 @@ fi
 # ─── 8. Mobile App (Web Mode) ────────────────────────────────────────────────
 
 echo -e "${GREEN}[8/9] Starting mobile app (web mode)...${RESET}"
+# Kill any stale process on port 8082
+lsof -ti :8082 | xargs kill -9 2>/dev/null || true
+sleep 1
 cd mobile
 npm install --silent 2>/dev/null
-npx expo start --web --port 8082 > ../logs/mobile-full.log 2>&1 &
+npx expo start --web --port 8082 --non-interactive > ../logs/mobile-full.log 2>&1 &
 cd "$ROOT_DIR"
-sleep 4
+sleep 6
 if lsof -i :8082 > /dev/null 2>&1; then
   echo -e "  ✅ Mobile app: http://localhost:8082"
 else

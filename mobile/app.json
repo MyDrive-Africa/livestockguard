@@ -16,7 +16,12 @@
         "NSBluetoothAlwaysUsageDescription": "LivestockGuard uses Bluetooth to detect BLE ear tags on cattle for livestock tracking.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "LivestockGuard needs your location to record where cattle are detected by the BLE scanner.",
         "NSLocationWhenInUseUsageDescription": "LivestockGuard needs your location to show cattle positions on the map.",
-        "UIBackgroundModes": ["bluetooth-central", "location", "fetch", "remote-notification"]
+        "UIBackgroundModes": [
+          "bluetooth-central",
+          "location",
+          "fetch",
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -35,7 +40,15 @@
         "WAKE_LOCK"
       ]
     },
-    "plugins": [],
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/icon.png"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font"
+    ],
     "newArchEnabled": false
   }
 }

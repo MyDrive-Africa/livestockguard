@@ -125,7 +125,10 @@ fi
 # ─── 6. Web Dashboard ────────────────────────────────────────────────────────
 
 echo -e "${GREEN}[6/8] Starting web dashboard...${RESET}"
+lsof -ti :5173 | xargs kill -9 2>/dev/null || true
+sleep 1
 cd dashboard
+npm install --silent 2>/dev/null
 npx vite --port 5173 > ../logs/dashboard-demo.log 2>&1 &
 cd "$ROOT_DIR"
 sleep 3
@@ -139,10 +142,13 @@ fi
 
 if [ "$MOBILE" = true ]; then
   echo -e "${GREEN}[7/8] Starting mobile app (web mode)...${RESET}"
+  lsof -ti :8082 | xargs kill -9 2>/dev/null || true
+  sleep 1
   cd mobile
-  npx expo start --web --port 8082 > ../logs/mobile-demo.log 2>&1 &
+  npm install --silent 2>/dev/null
+  npx expo start --web --port 8082 --non-interactive > ../logs/mobile-demo.log 2>&1 &
   cd "$ROOT_DIR"
-  sleep 4
+  sleep 5
   echo -e "  ✅ Mobile app: http://localhost:8082"
 else
   echo -e "${GREEN}[7/8] Mobile app: skipped (use --mobile flag to include)${RESET}"
