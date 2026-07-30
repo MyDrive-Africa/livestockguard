@@ -195,7 +195,12 @@ mobile-ios: ## Build and launch mobile app on iOS simulator
 	cd mobile && npm install && npx expo run:ios
 
 mobile-android: ## Build and launch mobile app on Android emulator
-	cd mobile && npm install && npx expo run:android
+	@echo "$(GREEN)Setting up Android environment...$(RESET)"
+	@mkdir -p mobile/android
+	@echo "sdk.dir=$(HOME)/Library/Android/sdk" > mobile/android/local.properties
+	export ANDROID_HOME=$(HOME)/Library/Android/sdk && \
+	export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home && \
+	cd mobile && npx expo run:android
 
 stop-all: ## Stop all running processes (Docker stays up)
 	@echo "$(YELLOW)Stopping simulators, dashboard, mobile...$(RESET)"
