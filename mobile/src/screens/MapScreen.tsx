@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
-import MapView, { Marker, Polygon, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polygon } from 'react-native-maps';
 import { api } from '../services/api';
 
 /**
@@ -74,10 +74,9 @@ export default function MapScreen() {
     <View style={styles.container}>
       <MapView
         style={styles.map}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
         initialRegion={INITIAL_REGION}
         showsUserLocation={false}
-        mapType="hybrid"
+        mapType="standard"
       >
         {/* Geofence polygons */}
         {geofences.map((fence) => {
