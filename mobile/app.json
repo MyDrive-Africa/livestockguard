@@ -35,6 +35,7 @@
         "WAKE_LOCK"
       ]
     },
-    "plugins": []
+    "plugins": [],
+    "newArchEnabled": false
   }
 }

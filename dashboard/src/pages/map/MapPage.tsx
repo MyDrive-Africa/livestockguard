@@ -659,18 +659,55 @@ export default function MapPage() {
   }
 
   // ─── Render ────────────────────────────────────────
+  // Icons for tile sources
+  const tileIcons: Record<TileSource, { icon: React.ReactNode; label: string }> = {
+    osm: {
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+        </svg>
+      ),
+      label: 'Street',
+    },
+    satellite: {
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      label: 'Satellite',
+    },
+    terrain: {
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4-4 4 4 4-8 4 8" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M2 20h20" />
+        </svg>
+      ),
+      label: 'Terrain',
+    },
+    dark: {
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+        </svg>
+      ),
+      label: 'Dark',
+    },
+  };
+
   return (
     <div className="h-full w-full flex flex-col" style={{ height: '100%' }}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 z-10 shrink-0 theme-transition">
-        <div className="flex items-center gap-4">
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-white">Live Map</h2>
+      <div className="flex items-center justify-between px-2 sm:px-4 py-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 z-10 shrink-0 theme-transition gap-2 flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-4 flex-wrap min-w-0">
+          <h2 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-white whitespace-nowrap">Live Map</h2>
           {/* Farm Selector */}
           {farms.length > 0 && (
             <select
               value={selectedFarmId}
               onChange={(e) => setSelectedFarmId(e.target.value)}
-              className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-brand-500"
+              className="px-2 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-brand-500 max-w-[140px] sm:max-w-none truncate"
               aria-label="Select farm"
             >
               {farms.map((farm) => (
@@ -680,22 +717,6 @@ export default function MapPage() {
               ))}
             </select>
           )}
-          <div className="flex items-center gap-1.5 text-xs">
-            {(['animals', 'geofences', 'trails'] as LayerToggle[]).map((l) => (
-              <button key={l} onClick={() => toggleLayer(l)}
-                className={`px-2.5 py-1 rounded-full border capitalize ${layers[l] ? 'bg-green-100 border-green-400 text-green-700' : 'bg-gray-50 border-gray-300 text-gray-500'}`}>
-                {l === 'animals' ? '🐄 ' : l === 'geofences' ? '🏗️ ' : '📍 '}{l}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-1 text-xs ml-2 border-l pl-3">
-            {(Object.keys(TILE_SOURCES) as TileSource[]).map((s) => (
-              <button key={s} onClick={() => setTileSource(s)}
-                className={`px-2 py-1 rounded ${tileSource === s ? 'bg-blue-100 text-blue-700 border border-blue-300' : 'text-gray-500 hover:text-gray-700'}`}>
-                {TILE_SOURCES[s].label}
-              </button>
-            ))}
-          </div>
         </div>
         <div className="flex items-center gap-2">
           {selectedAnimal && (
@@ -707,17 +728,17 @@ export default function MapPage() {
                 className="px-2 py-1 text-xs border border-purple-300 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 title="Select date to view that day's trail"
               />
-              <button onClick={clearTrail} className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded border border-purple-300">✕ Clear Trail</button>
+              <button onClick={clearTrail} className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded border border-purple-300">✕</button>
             </>
           )}
           {!drawingMode ? (
-            <button onClick={() => { setDrawingMode(true); setDrawingPoints([]); }} className="px-3 py-1.5 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700">+ Draw Fence</button>
+            <button onClick={() => { setDrawingMode(true); setDrawingPoints([]); }} className="px-2 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 whitespace-nowrap">+ Fence</button>
           ) : (
             <div className="flex items-center gap-2">
               <span className="text-xs text-amber-600">
-                {editingFenceId ? '✏️ Redraw: ' : ''}Click map ({drawingPoints.length} pts)
+                {editingFenceId ? '✏️ ' : ''}{drawingPoints.length} pts
               </span>
-              <button onClick={finishDrawing} disabled={drawingPoints.length < 3} className="px-2 py-1 text-xs bg-green-600 text-white rounded disabled:opacity-50">✓ Finish</button>
+              <button onClick={finishDrawing} disabled={drawingPoints.length < 3} className="px-2 py-1 text-xs bg-green-600 text-white rounded disabled:opacity-50">✓</button>
               <button onClick={() => { setDrawingMode(false); setDrawingPoints([]); setEditingFenceId(null); }} className="px-2 py-1 text-xs bg-red-600 text-white rounded">✕</button>
             </div>
           )}
@@ -735,6 +756,75 @@ export default function MapPage() {
             </div>
           </div>
         )}
+
+        {/* Floating Map Controls — always visible */}
+        <div className="absolute top-3 left-3 z-20 flex flex-col gap-2">
+          {/* Tile Source Switcher */}
+          <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-lg p-1.5 flex flex-col gap-1">
+            {(Object.keys(TILE_SOURCES) as TileSource[]).map((key) => (
+              <button
+                key={key}
+                onClick={() => setTileSource(key)}
+                className={`map-control-btn relative p-2 rounded-md transition-colors ${
+                  tileSource === key
+                    ? 'bg-brand-600 text-white shadow-sm'
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+                aria-label={tileIcons[key].label}
+              >
+                {tileIcons[key].icon}
+                <span className="map-control-tooltip">{tileIcons[key].label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Layer Toggles */}
+          <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-lg p-1.5 flex flex-col gap-1">
+            <button
+              onClick={() => toggleLayer('animals')}
+              className={`map-control-btn relative p-2 rounded-md transition-colors ${
+                layers.animals
+                  ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400'
+                  : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+              aria-label="Toggle animals"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <circle cx="12" cy="12" r="4" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 2v2m0 16v2m10-10h-2M4 12H2m15.07-7.07l-1.41 1.41M8.34 15.66l-1.41 1.41m12.14 0l-1.41-1.41M8.34 8.34L6.93 6.93" />
+              </svg>
+              <span className="map-control-tooltip">Animals</span>
+            </button>
+            <button
+              onClick={() => toggleLayer('geofences')}
+              className={`map-control-btn relative p-2 rounded-md transition-colors ${
+                layers.geofences
+                  ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400'
+                  : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+              aria-label="Toggle geofences"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+              </svg>
+              <span className="map-control-tooltip">Geofences</span>
+            </button>
+            <button
+              onClick={() => toggleLayer('trails')}
+              className={`map-control-btn relative p-2 rounded-md transition-colors ${
+                layers.trails
+                  ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400'
+                  : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+              aria-label="Toggle trails"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+              <span className="map-control-tooltip">Trails</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Status Bar */}

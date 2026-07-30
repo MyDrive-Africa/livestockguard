@@ -35,6 +35,7 @@ export default function LoginScreen({ onLogin }: Props) {
       <TextInput
         style={styles.input}
         placeholder="Email"
+        placeholderTextColor="#6b7280"
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
@@ -43,6 +44,7 @@ export default function LoginScreen({ onLogin }: Props) {
       <TextInput
         style={styles.input}
         placeholder="Password"
+        placeholderTextColor="#6b7280"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
@@ -55,10 +57,10 @@ export default function LoginScreen({ onLogin }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#f9fafb' },
-  title: { fontSize: 28, fontWeight: 'bold', textAlign: 'center', color: '#16a34a' },
-  subtitle: { fontSize: 14, textAlign: 'center', color: '#6b7280', marginBottom: 32 },
-  input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, padding: 14, marginBottom: 12, fontSize: 16 },
+  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#111827' },
+  title: { fontSize: 28, fontWeight: 'bold', textAlign: 'center', color: '#22c55e' },
+  subtitle: { fontSize: 14, textAlign: 'center', color: '#9ca3af', marginBottom: 32 },
+  input: { backgroundColor: '#1f2937', borderWidth: 1, borderColor: '#374151', borderRadius: 8, padding: 14, marginBottom: 12, fontSize: 16, color: '#f9fafb' },
   button: { backgroundColor: '#16a34a', borderRadius: 8, padding: 16, alignItems: 'center', marginTop: 8 },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

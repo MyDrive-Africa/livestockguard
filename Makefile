@@ -130,7 +130,7 @@ mqtt-writer: ## Start MQTT→DB writer (bridges simulator to database)
 
 dashboard: ## Start web dashboard dev server
 	@echo "$(GREEN)Starting dashboard at http://localhost:5173$(RESET)"
-	cd dashboard && npm run dev
+	cd dashboard && npm install --silent && npm run dev
 
 dashboard-install: ## Install dashboard dependencies
 	cd dashboard && npm install
@@ -189,13 +189,13 @@ demo-android: ## Full demo + Android emulator build
 
 mobile-web: ## Start mobile app in browser only (port 8082)
 	@echo "$(GREEN)Starting mobile app at http://localhost:8082$(RESET)"
-	cd mobile && npx expo start --web --port 8082
+	cd mobile && npm install && npx expo start --web --port 8082
 
 mobile-ios: ## Build and launch mobile app on iOS simulator
-	cd mobile && npx expo run:ios
+	cd mobile && npm install && npx expo run:ios
 
 mobile-android: ## Build and launch mobile app on Android emulator
-	cd mobile && npx expo run:android
+	cd mobile && npm install && npx expo run:android
 
 stop-all: ## Stop all running processes (Docker stays up)
 	@echo "$(YELLOW)Stopping simulators, dashboard, mobile...$(RESET)"
