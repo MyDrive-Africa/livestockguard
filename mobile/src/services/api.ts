@@ -6,9 +6,14 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// In dev, point to localhost API. In production, use the deployed URL.
+import { Platform } from 'react-native';
+
+// Android emulator uses 10.0.2.2 to reach host machine's localhost
+// iOS simulator can use localhost directly
 const API_BASE_URL = __DEV__
-  ? 'http://localhost:8000'  // iOS simulator can reach localhost directly
+  ? Platform.OS === 'android'
+    ? 'http://10.0.2.2:8000'
+    : 'http://localhost:8000'
   : 'https://api.livestockguard.co.za';
 
 export const api = axios.create({
