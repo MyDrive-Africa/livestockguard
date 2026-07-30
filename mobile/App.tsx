@@ -4,9 +4,10 @@ import LoginScreen from './src/screens/LoginScreen';
 import HerdsmanScreen from './src/screens/HerdsmanScreen';
 import AdminDashboard from './src/screens/AdminDashboard';
 import AnimalsScreen from './src/screens/AnimalsScreen';
+import MapScreen from './src/screens/MapScreen';
 import { getToken, getUserRole } from './src/services/api';
 
-type Tab = 'dashboard' | 'cattle' | 'herdsman';
+type Tab = 'dashboard' | 'map' | 'cattle' | 'herdsman';
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -42,6 +43,7 @@ export default function App() {
   const renderScreen = () => {
     switch (activeTab) {
       case 'dashboard': return <AdminDashboard />;
+      case 'map': return <MapScreen />;
       case 'cattle': return <AnimalsScreen />;
       case 'herdsman': return <HerdsmanScreen />;
     }
@@ -57,6 +59,7 @@ export default function App() {
       {/* Bottom Tab Bar */}
       <View style={styles.tabBar}>
         <TabButton icon="📊" label="Dashboard" active={activeTab === 'dashboard'} onPress={() => setActiveTab('dashboard')} />
+        <TabButton icon="🗺️" label="Map" active={activeTab === 'map'} onPress={() => setActiveTab('map')} />
         <TabButton icon="🐄" label="Cattle" active={activeTab === 'cattle'} onPress={() => setActiveTab('cattle')} />
         <TabButton icon="📶" label="Scanner" active={activeTab === 'herdsman'} onPress={() => setActiveTab('herdsman')} />
       </View>
