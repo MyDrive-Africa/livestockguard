@@ -84,36 +84,56 @@ class BLEScanner {
 
   /**
    * SIMULATOR MODE: Poll the API for cattle positions.
-   * Mimics BLE detection by checking which animals have recent sightings.
+   * Uses the herd-count endpoint to show how many cattle were seen today.
    */
   private startSimulatorMode() {
     console.log('[BLE-SIM] Starting API-based simulation...');
 
     const poll = async () => {
       try {
-        // Get herd count (which animals were seen today)
+        // Get herd count (uses actual BLE sighting data from the server)
         const resp = await api.get(`/api/gateway/herd-count/${FARM_ID}`);
         const data = resp.data;
 
-        // Update sightings based on seen_today count
-        this.recentSightings.clear();
-        const seenCount = data.seen_today || 0;
+        this.totalRegistered = data.total_registered || 0;
 
-        // Simulate: mark first N registered tags as "detected"
-        let i = 0;
-        for (const [mac, name] of this.registeredMacs.entries()) {
-          if (i >= seenCount) break;
-          this.recentSightings.set(mac, {
-            animalId: mac,
-            animalName: name,
-            mac,
-            rssi: -50 - Math.floor(Math.random() * 30), // Simulated RSSI
-            lastSeen: new Date(),
-          });
-          i++;
+        // Update sightings: animals seen today are "in range"
+        this.recentSightings.clear();
+        const seenToday = data.seen_today || 0;
+
+        // Mark seen animals as detected, missing as not
+        if (data.missing) {
+          // All registered minus missing = seen
+          const missingNames = new Set(data.missing.map((m: any) => m.name));
+          for (const [mac, name] of this.registeredMacs.entries()) {
+            if (!missingNames.has(name)) {
+              this.recentSightings.set(mac, {
+                animalId: mac,
+                animalName: name,
+                mac,
+                rssi: -50 - Math.floor(Math.random() * 20),
+                lastSeen: new Date(),
+              });
+            }
+          }
+        } else {
+          // Fallback: use seen_today count
+          let i = 0;
+          for (const [mac, name] of this.registeredMacs.entries()) {
+            if (i >= seenToday) break;
+            this.recentSightings.set(mac, {
+              animalId: mac,
+              animalName: name,
+              mac,
+              rssi: -50 - Math.floor(Math.random() * 20),
+              lastSeen: new Date(),
+            });
+            i++;
+          }
         }
       } catch (err) {
         // Offline or API error — keep last known state
+        console.warn('[BLE-SIM] Poll failed:', err);
       }
     };
 
