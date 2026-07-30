@@ -161,9 +161,9 @@ lsof -ti :8082 | xargs kill -9 2>/dev/null || true
 sleep 1
 cd mobile
 npm install --silent 2>/dev/null
-npx expo start --web --port 8082 --non-interactive > ../logs/mobile-full.log 2>&1 &
+CI=1 npx expo start --web --port 8082 > ../logs/mobile-full.log 2>&1 &
 cd "$ROOT_DIR"
-sleep 6
+sleep 8
 if lsof -i :8082 > /dev/null 2>&1; then
   echo -e "  ✅ Mobile app: http://localhost:8082"
 else

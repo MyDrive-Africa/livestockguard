@@ -146,9 +146,9 @@ if [ "$MOBILE" = true ]; then
   sleep 1
   cd mobile
   npm install --silent 2>/dev/null
-  npx expo start --web --port 8082 --non-interactive > ../logs/mobile-demo.log 2>&1 &
+  CI=1 npx expo start --web --port 8082 > ../logs/mobile-demo.log 2>&1 &
   cd "$ROOT_DIR"
-  sleep 5
+  sleep 8
   echo -e "  ✅ Mobile app: http://localhost:8082"
 else
   echo -e "${GREEN}[7/8] Mobile app: skipped (use --mobile flag to include)${RESET}"
