@@ -35,7 +35,7 @@ export default function HerdsmanScreen() {
   }, []);
 
   const allAccountedFor = cattleInRange >= totalRegistered && totalRegistered > 0;
-  const missing = totalRegistered - cattleInRange;
+  const missingCount = totalRegistered - cattleInRange;
 
   return (
     <View style={styles.container}>
