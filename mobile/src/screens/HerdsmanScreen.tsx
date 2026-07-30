@@ -11,16 +11,27 @@ export default function HerdsmanScreen() {
   const [cattleInRange, setCattleInRange] = useState(0);
   const [totalRegistered, setTotalRegistered] = useState(0);
   const [scannerActive, setScannerActive] = useState(false);
+  const [missing, setMissing] = useState<string[]>([]);
 
   useEffect(() => {
-    setTotalRegistered(bleScanner.getTotalRegistered());
-    setScannerActive(true);
+    async function startScanner() {
+      await bleScanner.init();
+      bleScanner.start();
+      setScannerActive(true);
+      setTotalRegistered(bleScanner.getTotalRegistered());
+    }
+    startScanner();
 
     const interval = setInterval(() => {
       setCattleInRange(bleScanner.getCattleInRange());
+      setTotalRegistered(bleScanner.getTotalRegistered());
+      setMissing(bleScanner.getMissing());
     }, 5000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      bleScanner.stop();
+    };
   }, []);
 
   const allAccountedFor = cattleInRange >= totalRegistered && totalRegistered > 0;
@@ -46,9 +57,10 @@ export default function HerdsmanScreen() {
         <View style={styles.allGood}>
           <Text style={styles.allGoodText}>✓ All cattle accounted for</Text>
         </View>
-      ) : missing > 0 ? (
+      ) : missing.length > 0 ? (
         <View style={styles.warning}>
-          <Text style={styles.warningText}>⚠️ {missing} cattle not detected</Text>
+          <Text style={styles.warningText}>⚠️ {missing.length} cattle not detected</Text>
+          <Text style={styles.missingList}>{missing.slice(0, 5).join(', ')}</Text>
         </View>
       ) : (
         <View style={styles.info}>
@@ -75,6 +87,7 @@ const styles = StyleSheet.create({
   allGoodText: { color: '#86efac', fontSize: 16, textAlign: 'center', fontWeight: '600' },
   warning: { backgroundColor: '#7f1d1d', padding: 16, borderRadius: 12, marginHorizontal: 20 },
   warningText: { color: '#fca5a5', fontSize: 16, textAlign: 'center', fontWeight: '600' },
+  missingList: { color: '#fca5a5', fontSize: 12, textAlign: 'center', marginTop: 4, opacity: 0.8 },
   info: { padding: 16 },
   infoText: { color: '#6b7280', fontSize: 14, textAlign: 'center' },
   footer: { position: 'absolute', bottom: 40, color: '#4b5563', fontSize: 12 },

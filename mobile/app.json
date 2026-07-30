@@ -35,16 +35,6 @@
         "WAKE_LOCK"
       ]
     },
-    "plugins": [
-      "expo-location",
-      "expo-secure-store",
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/notification-icon.png",
-          "color": "#16a34a"
-        }
-      ]
-    ]
+    "plugins": []
   }
 }

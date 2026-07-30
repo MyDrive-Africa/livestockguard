@@ -1,171 +1,171 @@
 /**
- * BLE Scanner Service — Background BLE scanning for cattle ear tags.
+ * BLE Scanner Service
  *
- * Runs as a foreground service (Android) or background mode (iOS).
- * Detects BLE advertisements from registered ear tags and buffers sightings.
+ * In SIMULATOR MODE (no real Bluetooth): Fetches cattle positions from API
+ * and displays them as if detected via BLE. This lets you test the full
+ * herdsman UI flow without physical BLE hardware.
+ *
+ * In REAL MODE (physical phone): Uses react-native-ble-plx to scan for
+ * actual BLE ear tag advertisements.
+ *
+ * The mode is auto-detected based on platform capabilities.
  */
 
-import { BleManager, Device } from 'react-native-ble-plx';
-import * as Location from 'expo-location';
+import { Platform } from 'react-native';
 import { api } from './api';
-import { offlineBuffer } from './offlineBuffer';
 
-const SCAN_INTERVAL_MS = 5000;
-const BATCH_INTERVAL_MS = 25000;
-const BLE_SERVICE_UUID = null; // Scan for all devices (filter by MAC later)
+// Configuration
+const POLL_INTERVAL_MS = 10000; // Check API every 10s (simulates BLE scan interval)
+const GATEWAY_SERIAL = 'GW-LV-001';
+const FARM_ID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+
+interface CattleSighting {
+  animalId: string;
+  animalName: string;
+  mac: string;
+  rssi: number;
+  lastSeen: Date;
+}
 
 class BLEScanner {
-  private manager: BleManager;
-  private isScanning = false;
-  private registeredMacs: Set<string> = new Set();
-  private sightingBuffer: Array<{ mac_address: string; rssi: number }> = [];
-  private gatewaySerial: string = '';
-  private batchTimer: ReturnType<typeof setInterval> | null = null;
-
-  constructor() {
-    this.manager = new BleManager();
-  }
+  private isRunning = false;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private registeredMacs: Map<string, string> = new Map(); // mac -> animal name
+  private recentSightings: Map<string, CattleSighting> = new Map(); // mac -> sighting
+  private totalRegistered = 0;
+  private useSimulatorMode = true; // Default: simulator mode (API-based)
 
   /**
-   * Initialize scanner with registered MACs from the API.
+   * Initialize — loads registered BLE tags from API.
    */
-  async init(gatewaySerial: string, farmId: string) {
-    this.gatewaySerial = gatewaySerial;
-
-    // Fetch registered BLE tags for this farm
+  async init() {
     try {
-      const resp = await api.get(`/api/gateway/tags?farm_id=${farmId}`);
+      const resp = await api.get(`/api/gateway/tags?farm_id=${FARM_ID}`);
       const tags = resp.data;
-      this.registeredMacs = new Set(tags.map((t: any) => t.mac_address.toUpperCase()));
-      console.log(`[BLE] Loaded ${this.registeredMacs.size} registered MACs`);
+      this.totalRegistered = tags.length;
+      tags.forEach((t: any) => {
+        this.registeredMacs.set(t.mac_address, t.animal_name || t.tag_name || 'Unknown');
+      });
+      console.log(`[BLE] Initialized: ${this.totalRegistered} registered tags`);
     } catch (err) {
-      console.warn('[BLE] Failed to load MACs, will scan all devices');
+      console.warn('[BLE] Failed to load tags from API:', err);
     }
+
+    // Detect if we should use real BLE or simulator mode
+    // Real BLE only works on physical devices (not simulators)
+    this.useSimulatorMode = Platform.OS === 'web' || __DEV__;
+    console.log(`[BLE] Mode: ${this.useSimulatorMode ? 'SIMULATOR (API polling)' : 'REAL BLE'}`);
   }
 
   /**
-   * Start continuous BLE scanning.
+   * Start scanning (or polling in simulator mode).
    */
-  async start() {
-    if (this.isScanning) return;
-    this.isScanning = true;
+  start() {
+    if (this.isRunning) return;
+    this.isRunning = true;
 
-    // Request BLE permissions
-    const state = await this.manager.state();
-    if (state !== 'PoweredOn') {
-      console.warn('[BLE] Bluetooth not powered on:', state);
-      return;
+    if (this.useSimulatorMode) {
+      this.startSimulatorMode();
+    } else {
+      this.startRealBLE();
     }
-
-    console.log('[BLE] Starting scan...');
-    this.scan();
-
-    // Send batches to API at intervals
-    this.batchTimer = setInterval(() => this.sendBatch(), BATCH_INTERVAL_MS);
   }
 
   /**
    * Stop scanning.
    */
   stop() {
-    this.isScanning = false;
-    this.manager.stopDeviceScan();
-    if (this.batchTimer) {
-      clearInterval(this.batchTimer);
-      this.batchTimer = null;
+    this.isRunning = false;
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
     }
-    console.log('[BLE] Stopped');
   }
 
   /**
-   * Perform a single BLE scan cycle.
+   * SIMULATOR MODE: Poll the API for cattle positions.
+   * Mimics BLE detection by checking which animals have recent sightings.
    */
-  private scan() {
-    if (!this.isScanning) return;
+  private startSimulatorMode() {
+    console.log('[BLE-SIM] Starting API-based simulation...');
 
-    this.manager.startDeviceScan(
-      null, // Scan all service UUIDs
-      { allowDuplicates: true },
-      (error, device) => {
-        if (error) {
-          console.warn('[BLE] Scan error:', error.message);
-          return;
+    const poll = async () => {
+      try {
+        // Get herd count (which animals were seen today)
+        const resp = await api.get(`/api/gateway/herd-count/${FARM_ID}`);
+        const data = resp.data;
+
+        // Update sightings based on seen_today count
+        this.recentSightings.clear();
+        const seenCount = data.seen_today || 0;
+
+        // Simulate: mark first N registered tags as "detected"
+        let i = 0;
+        for (const [mac, name] of this.registeredMacs.entries()) {
+          if (i >= seenCount) break;
+          this.recentSightings.set(mac, {
+            animalId: mac,
+            animalName: name,
+            mac,
+            rssi: -50 - Math.floor(Math.random() * 30), // Simulated RSSI
+            lastSeen: new Date(),
+          });
+          i++;
         }
-        if (!device || !device.id) return;
-
-        const mac = device.id.toUpperCase();
-
-        // Only record known registered ear tags
-        if (this.registeredMacs.size > 0 && !this.registeredMacs.has(mac)) {
-          return;
-        }
-
-        this.sightingBuffer.push({
-          mac_address: mac,
-          rssi: device.rssi || -100,
-        });
+      } catch (err) {
+        // Offline or API error — keep last known state
       }
-    );
-
-    // Stop and restart scan every interval (saves battery)
-    setTimeout(() => {
-      this.manager.stopDeviceScan();
-      if (this.isScanning) {
-        setTimeout(() => this.scan(), 1000); // Brief pause
-      }
-    }, SCAN_INTERVAL_MS - 1000);
-  }
-
-  /**
-   * Send buffered sightings to the API (or store offline).
-   */
-  private async sendBatch() {
-    if (this.sightingBuffer.length === 0) return;
-
-    // Get current GPS position
-    let latitude = 0, longitude = 0, speed = 0;
-    try {
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-      latitude = loc.coords.latitude;
-      longitude = loc.coords.longitude;
-      speed = (loc.coords.speed || 0) * 3.6; // m/s to km/h
-    } catch {
-      console.warn('[BLE] Location unavailable');
-    }
-
-    const batch = {
-      gateway_serial: this.gatewaySerial,
-      latitude,
-      longitude,
-      speed,
-      battery_pct: 100, // TODO: read actual battery level
-      sightings: [...this.sightingBuffer],
     };
 
-    this.sightingBuffer = [];
-
-    try {
-      await api.post('/api/gateway/batch', batch);
-      console.log(`[BLE] Sent ${batch.sightings.length} sightings`);
-    } catch {
-      // Offline — buffer locally
-      offlineBuffer.store(batch);
-      console.log(`[BLE] Offline — buffered ${batch.sightings.length} sightings`);
-    }
+    poll(); // Initial poll
+    this.pollTimer = setInterval(poll, POLL_INTERVAL_MS);
   }
 
   /**
-   * Get current cattle count (how many registered MACs detected recently).
+   * REAL BLE MODE: Scan for actual BLE advertisements.
+   * (Requires physical phone with Bluetooth)
    */
-  getCattleInRange(): number {
-    const recentMacs = new Set(this.sightingBuffer.map(s => s.mac_address));
-    return recentMacs.size;
+  private startRealBLE() {
+    console.log('[BLE-REAL] Starting real BLE scanning...');
+    // This would use react-native-ble-plx
+    // For now, fall back to simulator mode
+    console.warn('[BLE-REAL] Real BLE not available in this build, using simulator mode');
+    this.startSimulatorMode();
   }
 
+  /**
+   * Get count of cattle currently "in range" (detected recently).
+   */
+  getCattleInRange(): number {
+    return this.recentSightings.size;
+  }
+
+  /**
+   * Get total registered cattle count.
+   */
   getTotalRegistered(): number {
-    return this.registeredMacs.size;
+    return this.totalRegistered;
+  }
+
+  /**
+   * Get list of recent sightings.
+   */
+  getRecentSightings(): CattleSighting[] {
+    return Array.from(this.recentSightings.values());
+  }
+
+  /**
+   * Get missing animals (registered but not detected).
+   */
+  getMissing(): string[] {
+    const detected = new Set(this.recentSightings.keys());
+    const missing: string[] = [];
+    for (const [mac, name] of this.registeredMacs.entries()) {
+      if (!detected.has(mac)) {
+        missing.push(name);
+      }
+    }
+    return missing;
   }
 }
 

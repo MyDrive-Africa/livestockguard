@@ -4,11 +4,11 @@
  */
 
 import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// In dev, point to local API. In production, use the deployed URL.
+// In dev, point to localhost API. In production, use the deployed URL.
 const API_BASE_URL = __DEV__
-  ? 'http://192.168.1.100:8000'  // Replace with your machine's local IP
+  ? 'http://localhost:8000'  // iOS simulator can reach localhost directly
   : 'https://api.livestockguard.co.za';
 
 export const api = axios.create({
@@ -19,7 +19,7 @@ export const api = axios.create({
 
 // Attach auth token to every request
 api.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync('auth_token');
+  const token = await AsyncStorage.getItem('auth_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -30,20 +30,20 @@ api.interceptors.request.use(async (config) => {
 export async function login(email: string, password: string) {
   const resp = await api.post('/api/auth/login', { email, password });
   const { access_token, user } = resp.data;
-  await SecureStore.setItemAsync('auth_token', access_token);
-  await SecureStore.setItemAsync('user_role', user?.role || 'viewer');
+  await AsyncStorage.setItem('auth_token', access_token);
+  await AsyncStorage.setItem('user_role', user?.role || 'viewer');
   return resp.data;
 }
 
 export async function logout() {
-  await SecureStore.deleteItemAsync('auth_token');
-  await SecureStore.deleteItemAsync('user_role');
+  await AsyncStorage.removeItem('auth_token');
+  await AsyncStorage.removeItem('user_role');
 }
 
 export async function getToken() {
-  return SecureStore.getItemAsync('auth_token');
+  return AsyncStorage.getItem('auth_token');
 }
 
 export async function getUserRole() {
-  return SecureStore.getItemAsync('user_role');
+  return AsyncStorage.getItem('user_role');
 }
