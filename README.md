@@ -422,7 +422,7 @@ livestockguard/
 │   ├── docker-compose.yml      # Infrastructure definition
 │   ├── .env.example            # Environment variable template
 │   ├── config/                 # Firebase credentials (not committed)
-│   ├── migrations/versions/    # SQL schema migrations (001–009)
+│   ├── migrations/versions/    # SQL schema migrations (001–011)
 │   └── services/
 │       ├── api_gateway/        # FastAPI REST + WebSocket (Python)
 │       ├── mqtt_writer/        # MQTT → TimescaleDB bridge (Python)
@@ -441,13 +441,12 @@ livestockguard/
 │   └── package.json
 │
 ├── mobile/                     # Mobile app (React Native + Expo)
-│   ├── App.tsx                 # Entry point
+│   ├── App.tsx                 # Entry point (FarmProvider + FarmPicker + tab navigation)
 │   ├── src/
 │   │   ├── screens/            # Login, AdminDashboard, HerdsmanScreen, Map, Animals
-│   │   ├── components/         # Shared UI components
-│   │   ├── navigation/         # React Navigation stack
+│   │   ├── components/         # FarmPicker (header dropdown + modal selector)
+│   │   ├── context/            # FarmContext (farm list, selected farm, switchFarm)
 │   │   ├── services/           # API client, BLE scanner, background tasks
-│   │   ├── stores/             # State management
 │   │   └── utils/              # Helpers
 │   └── package.json
 │
@@ -522,6 +521,8 @@ livestockguard/
 | Mobile native map (Google Maps) | ✅ Live | Cow emoji markers, geofence polygons, trails, map type switcher |
 | Mobile interactive geofences | ✅ Live | Tap polygon to select/highlight, layer panel to show/hide |
 | Mobile BLE scanner service | ✅ Live | Herdsman screen: simulated BLE scan, cattle count |
+| Mobile farm picker (switch farms) | ✅ Live | Header bar dropdown → select farm → data reloads for that farm |
+| Multi-farm RBAC | ✅ Live | Admin sees all farms, farm_owner sees assigned only, herdsman locked |
 | Mobile offline buffer | ✅ Live | Stores sightings in AsyncStorage, syncs on reconnect |
 | Movement trail visualisation | ✅ Built | Click marker → 24h trail from history endpoint |
 | Geofence drawing tools | ✅ Built | Click-to-draw polygon, undo last point, finish/cancel |
@@ -544,21 +545,15 @@ livestockguard/
 
 ## Demo Credentials
 
-After `make db-seed`, log into the dashboard at **http://localhost:5173**:
+After `make db-seed`, log into the dashboard at **http://localhost:5173** or mobile app:
 
-| Field | Value |
-|-------|-------|
-| Email | `africa.mydrive@gmail.com` |
-| Password | `demo123` |
-| Farms | Boschhoek (Free State) + Loch Vaal Plot 30 (Gauteng) |
-| Animals | Bella, Storm, Thunder, Daisy, Rosie (Boschhoek) + 10 BLE-tagged (Loch Vaal) |
+| Email | Password | Role | Farms |
+|-------|----------|------|-------|
+| `africa.mydrive@gmail.com` | `demo123` | owner | All 3 farms (Boschhoek, Loch Vaal, Sibanyoni) |
+| `lochvaal@livestockguard.co.za` | `demo123` | owner | Loch Vaal Plot 30 only |
+| `sibanyoni@livestockguard.co.za` | `demo123` | owner | Sibanyoni Farm only |
 
-| Field | Value |
-|-------|-------|
-| Email | `sibanyoni@livestockguard.co.za` |
-| Password | `demo123` |
-| Farm | Sibanyoni Farm (North West, Lichtenburg) |
-| Animals | 50 cattle (SB-001 to SB-050) — Nguni, Bonsmara, Brahman mix |
+> **Farm switching:** The main demo user (`africa.mydrive@gmail.com`) can switch between all 3 farms using the farm picker dropdown (dashboard) or header picker (mobile app). Per-farm users only see their assigned farm.
 
 EMQX MQTT broker dashboard at **http://localhost:18083**:
 

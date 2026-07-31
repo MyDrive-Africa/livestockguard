@@ -436,23 +436,40 @@ The dashboard connects via WebSocket to `/ws` and receives:
 
 ## Mobile App (iOS/Android)
 
-A single React Native app with **two modes** based on user role:
+A single React Native app with **role-based modes** determined at login:
 
 ### Technology
 
 | Component | Library |
 |-----------|---------|
-| Framework | React Native 0.74 |
-| Platform | Expo 51 (managed + bare workflows) |
+| Framework | React Native 0.76 |
+| Platform | Expo 52 (managed + bare workflows) |
 | Maps | react-native-maps (Google Maps provider) |
 | Storage | @react-native-async-storage/async-storage |
 | HTTP | Axios |
+| State | React Context (FarmContext) |
 | Language | TypeScript |
+
+### Farm Picker (Multi-Farm Switching)
+
+After login, the app fetches the user's accessible farms via `GET /api/v1/assignments/me/farms` and displays a **persistent farm picker** in the header bar:
+
+- **Admin / Owner:** Dropdown listing all farms (Boschhoek, Loch Vaal, Sibanyoni)
+- **Farm Owner / Viewer:** Dropdown listing only assigned farms
+- **Herdsman:** Static text (locked to assigned farm, no picker interaction)
+
+Switching farms reloads all data (animals, map markers, geofences, alerts) scoped to the new farm. The last selected farm is persisted in AsyncStorage for next launch.
+
+**Implementation files:**
+- `mobile/src/context/FarmContext.tsx` — React context with farm list, selection, `switchFarm()`
+- `mobile/src/components/FarmPicker.tsx` — Header component with bottom-sheet modal
+- `mobile/src/services/api.ts` — `getMyFarms()`, field mapping, persistence
 
 ### App Modes
 
-#### Admin/Farmer Mode
+#### Admin/Farm Owner Mode
 Full monitoring capabilities — a mobile-optimized version of the web dashboard:
+- Farm picker dropdown in header (switch between farms)
 - Map with cattle markers (react-native-maps)
 - Animal list with search/filter
 - Geofence view (read-only on mobile)
@@ -463,6 +480,7 @@ Full monitoring capabilities — a mobile-optimized version of the web dashboard
 
 #### Herdsman Mode
 Turns the phone into a BLE gateway device — runs as a background foreground service:
+- **Farm locked**: Herdsman cannot switch farms — assigned farm auto-selected
 - **BLE scanning**: Every 5-10 seconds, scans for known BLE ear tags
 - **GPS tracking**: Fused location updates every 30 seconds
 - **Batch reporting**: POST `/api/gateway/batch` every 25-30s
@@ -474,13 +492,14 @@ Turns the phone into a BLE gateway device — runs as a background foreground se
 
 ### Screens
 
-| Screen | File | Admin | Herdsman |
-|--------|------|:-----:|:--------:|
-| Login | `LoginScreen.tsx` | ✅ | ✅ |
-| Admin Dashboard | `AdminDashboard.tsx` | ✅ | ❌ |
-| Map | `MapScreen.tsx` | ✅ | ❌ |
-| Animals | `AnimalsScreen.tsx` | ✅ | ❌ |
-| Herdsman BLE | `HerdsmanScreen.tsx` | ❌ | ✅ |
+| Screen | File | Admin/Owner | Farm Owner | Herdsman | Viewer |
+|--------|------|:-----------:|:----------:|:--------:|:------:|
+| Login | `LoginScreen.tsx` | ✅ | ✅ | ✅ | ✅ |
+| Farm Picker | `FarmPicker.tsx` | ✅ (all) | ✅ (assigned) | ❌ (locked) | ✅ (assigned) |
+| Dashboard | `AdminDashboard.tsx` | ✅ | ✅ | ❌ | ✅ |
+| Map | `MapScreen.tsx` | ✅ | ✅ | ❌ | ✅ |
+| Animals | `AnimalsScreen.tsx` | ✅ | ✅ | ❌ | ✅ |
+| Herdsman BLE | `HerdsmanScreen.tsx` | ❌ | ❌ | ✅ | ❌ |
 
 ### Running the Mobile App
 
@@ -759,18 +778,28 @@ Token refresh: POST /api/auth/refresh {refresh_token}
 
 ### Roles (RBAC)
 
-| Role | Permissions |
-|------|-------------|
-| Owner | Full access: all CRUD, user management, billing |
-| Admin | Manage animals, devices, geofences, view analytics |
-| Farmer | View dashboard, acknowledge alerts, view animals |
-| Herdsman | BLE gateway mode only, patrol sessions, cattle count |
+| Role | Scope | Permissions |
+|------|-------|-------------|
+| `admin` | Entire organisation | Full access: all farms, create farms, manage all users |
+| `owner` | Entire organisation | Same as admin (legacy role name used by demo accounts) |
+| `farm_owner` | Assigned farm(s) | Full control within assigned farms: animals, geofences, alerts, herdsman management |
+| `herdsman` | Single assigned farm | BLE gateway mode only, patrol sessions, cattle count. Locked to one farm |
+| `viewer` | Assigned farm(s) | Read-only access to assigned farms: map, animals, alerts |
+
+### Multi-Farm Access Control
+
+- **Admin/Owner** users see all farms in their organisation via the `farms` table
+- **Farm owner / Herdsman / Viewer** users require explicit entries in `user_farm_assignments`
+- The `GET /api/v1/assignments/me/farms` endpoint returns the farms a user can access
+- The **Farm Picker** (web dropdown / mobile header bar) allows switching between accessible farms
+- API calls are scoped to the selected `farm_id` — animals, geofences, alerts all filter by farm
+- Herdsmen are locked to their assigned farm (no picker shown)
 
 ### Multi-Tenancy
 
-- Organisation-scoped: every query filtered by `organisation_id`
-- Farm-level isolation within organisation
-- Users belong to one organisation, can access all farms in that org
+- Organisation-scoped: admin/owner queries filtered by `organisation_id`
+- Farm-level isolation: non-admin queries filtered by `user_farm_assignments`
+- Users belong to one organisation, can access farms via explicit assignments
 
 ---
 
