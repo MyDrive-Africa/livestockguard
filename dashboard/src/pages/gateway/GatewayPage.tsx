@@ -234,14 +234,28 @@ export default function GatewayPage() {
           <div className="flex items-center gap-2">
             <span className={`w-2.5 h-2.5 rounded-full ${onlineCount > 0 ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
             <button
-              onClick={() => {
-                navigator.clipboard.writeText('make simulate-loop');
-                alert('Copied: make simulate-loop\n\nRun this in your terminal to start continuous simulation.');
+              onClick={async () => {
+                try {
+                  const endpoint = onlineCount > 0 ? '/dev/simulator/stop' : '/dev/simulator/start';
+                  const resp = await fetch(endpoint, { method: 'POST' });
+                  const data = await resp.json();
+                  if (data.status === 'started') {
+                    alert('Simulators started (Loch Vaal + Sibanyoni, loop mode)');
+                  } else if (data.status === 'stopped') {
+                    alert('Simulators stopped');
+                  } else if (data.status === 'already_running') {
+                    alert('Simulators already running');
+                  }
+                } catch {
+                  // Fallback: copy command if dev endpoint not available
+                  navigator.clipboard.writeText('make simulate-loop');
+                  alert('Dev control not available.\nCopied: make simulate-loop\nRun in terminal.');
+                }
               }}
               className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-              title="Copy loop command to clipboard"
+              title={onlineCount > 0 ? 'Stop simulators' : 'Start simulators in loop mode'}
             >
-              {onlineCount > 0 ? '🟢 Running' : '▶ Start Loop'}
+              {onlineCount > 0 ? '⏹ Stop' : '▶ Start Loop'}
             </button>
           </div>
         </div>
