@@ -5,7 +5,7 @@ import HerdsmanScreen from './src/screens/HerdsmanScreen';
 import AdminDashboard from './src/screens/AdminDashboard';
 import AnimalsScreen from './src/screens/AnimalsScreen';
 import MapScreen from './src/screens/MapScreen';
-import { getToken, getUserRole } from './src/services/api';
+import { getToken, getUserRole, setLogoutCallback } from './src/services/api';
 
 type Tab = 'dashboard' | 'map' | 'cattle' | 'herdsman';
 
@@ -26,6 +26,12 @@ export default function App() {
       setLoading(false);
     }
     checkAuth();
+
+    // Register logout callback so 401 responses return to login screen
+    setLogoutCallback(() => {
+      setAuthenticated(false);
+      setRole('');
+    });
   }, []);
 
   if (loading) return <View style={styles.loading}><Text style={styles.loadingText}>Loading...</Text></View>;

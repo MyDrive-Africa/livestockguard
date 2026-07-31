@@ -39,11 +39,19 @@ class RegisterRequest(BaseModel):
     organisation_id: Optional[str] = None
 
 
+class UserInfo(BaseModel):
+    id: str
+    email: str
+    role: str
+    full_name: str
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
     expires_in: int = 3600
+    user: Optional[UserInfo] = None
 
 
 class RefreshRequest(BaseModel):
@@ -101,6 +109,12 @@ async def login(request: LoginRequest, req: Request, db: AsyncSession = Depends(
         access_token=access_token,
         refresh_token=refresh_token,
         expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        user=UserInfo(
+            id=str(user.id),
+            email=user.email,
+            role=user.role,
+            full_name=user.full_name,
+        ),
     )
 
 
