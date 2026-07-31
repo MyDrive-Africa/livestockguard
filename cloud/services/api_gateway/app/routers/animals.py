@@ -53,6 +53,8 @@ class AnimalUpdate(BaseModel):
     photo_url: Optional[str] = None
     notes: Optional[str] = None
     device_id: Optional[UUID] = None
+    last_latitude: Optional[float] = None
+    last_longitude: Optional[float] = None
 
 
 class AnimalResponse(BaseModel):
@@ -266,20 +268,65 @@ async def create_animal(animal: AnimalCreate, db: AsyncSession = Depends(get_db)
 
 @router.patch("/{animal_id}", response_model=AnimalResponse)
 async def update_animal(animal_id: UUID, updates: AnimalUpdate, db: AsyncSession = Depends(get_db)):
-    """Update animal details (name, breed, weight, photo, etc.)."""
+    """Update animal details (name, breed, weight, photo, etc.).
+    Admin/farmowner can also set last_latitude/last_longitude to manually correct position."""
     result = await db.execute(select(Animal).where(Animal.id == animal_id))
     animal = result.scalar_one_or_none()
     if not animal:
         raise HTTPException(status_code=404, detail="Animal not found")
 
     update_data = updates.model_dump(exclude_unset=True)
+
+    # Handle manual location update — insert into positions table
+    new_lat = update_data.pop("last_latitude", None)
+    new_lon = update_data.pop("last_longitude", None)
+    if new_lat is not None and new_lon is not None:
+        # Use the animal's linked device_id for the position record.
+        # If no device is linked, try to find any device on the same farm as a placeholder.
+        device_id = str(animal.device_id) if animal.device_id else None
+        if not device_id:
+            fallback = await db.execute(text("""
+                SELECT id FROM devices WHERE farm_id = :farm_id LIMIT 1
+            """), {"farm_id": str(animal.farm_id)})
+            row = fallback.first()
+            if row:
+                device_id = str(row.id)
+
+        if device_id:
+            await db.execute(text("""
+                INSERT INTO positions (animal_id, device_id, time, latitude, longitude, location, speed, heading, battery_mv)
+                VALUES (:animal_id, :device_id::uuid, NOW(), :lat, :lon, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography, 0, 0, NULL)
+            """), {"animal_id": str(animal_id), "device_id": device_id, "lat": new_lat, "lon": new_lon})
+
     for field, value in update_data.items():
         setattr(animal, field, value)
 
     await db.commit()
     await db.refresh(animal)
 
-    return _animal_to_response(animal)
+    # Re-fetch position to include the manual update
+    pos_query = text("""
+        SELECT latitude, longitude, speed, battery_mv
+        FROM positions
+        WHERE animal_id = :animal_id
+        ORDER BY time DESC LIMIT 1
+    """)
+    pos_result = await db.execute(pos_query, {"animal_id": str(animal_id)})
+    pos = pos_result.first()
+
+    if not pos:
+        ble_query = text("""
+            SELECT COALESCE(estimated_latitude, gateway_latitude) AS latitude,
+                   COALESCE(estimated_longitude, gateway_longitude) AS longitude,
+                   gateway_speed AS speed, NULL::int AS battery_mv
+            FROM ble_sightings
+            WHERE animal_id = :animal_id
+            ORDER BY time DESC LIMIT 1
+        """)
+        ble_result = await db.execute(ble_query, {"animal_id": str(animal_id)})
+        pos = ble_result.first()
+
+    return _animal_to_response(animal, pos=pos)
 
 
 # ─── Lifecycle Actions ────────────────────────────────────────────────────────
