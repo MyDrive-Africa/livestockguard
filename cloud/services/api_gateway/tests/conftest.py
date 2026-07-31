@@ -68,6 +68,7 @@ async def override_get_current_user():
         "user_id": str(TEST_USER_ID),
         "email": "farmer@test.com",
         "role": "admin",
+        "organisation_id": str(TEST_ORG_ID),
     }
 
 
