@@ -171,22 +171,19 @@ export default function HerdsmanScreen() {
         </View>
       )}
 
-      {/* Shift controls */}
-      <View style={styles.shiftControls}>
-        {!shiftActive ? (
-          <TouchableOpacity style={styles.startShiftBtn} onPress={handleStartShift}>
-            <Text style={styles.shiftBtnText}>▶ Start Shift</Text>
-          </TouchableOpacity>
-        ) : mode === 'patrol' ? (
-          <TouchableOpacity style={styles.endShiftBtn} onPress={handleEndShift}>
-            <Text style={styles.shiftBtnText}>🏠 Kraal Check (End Patrol)</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity style={styles.startShiftBtn} onPress={handleStartShift}>
-            <Text style={styles.shiftBtnText}>↺ New Shift</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      {/* Shift toggle — small icon in corner */}
+      <TouchableOpacity
+        style={styles.shiftToggle}
+        onPress={!shiftActive ? handleStartShift : mode === 'patrol' ? handleEndShift : handleStartShift}
+        accessibilityLabel={!shiftActive ? 'Start shift' : mode === 'patrol' ? 'End patrol' : 'New shift'}
+      >
+        <Text style={styles.shiftToggleIcon}>
+          {!shiftActive ? '▶' : mode === 'patrol' ? '🏠' : '↺'}
+        </Text>
+        <Text style={styles.shiftToggleLabel}>
+          {!shiftActive ? 'Shift' : mode === 'patrol' ? 'Kraal' : 'Reset'}
+        </Text>
+      </TouchableOpacity>
 
       {/* Footer */}
       <Text style={styles.footer}>
@@ -239,11 +236,10 @@ const styles = StyleSheet.create({
   kraalWarning: { color: '#fca5a5', fontSize: 13, fontWeight: '600' },
   kraalDeparture: { color: '#6b7280', fontSize: 11, marginTop: 8 },
 
-  // Shift controls
-  shiftControls: { width: '100%', marginTop: 8, marginBottom: 16 },
-  startShiftBtn: { backgroundColor: '#16a34a', borderRadius: 10, padding: 14, alignItems: 'center' },
-  endShiftBtn: { backgroundColor: '#2563eb', borderRadius: 10, padding: 14, alignItems: 'center' },
-  shiftBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  // Shift toggle (small icon)
+  shiftToggle: { position: 'absolute', top: 60, right: 20, backgroundColor: '#374151', borderRadius: 20, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  shiftToggleIcon: { fontSize: 16 },
+  shiftToggleLabel: { fontSize: 8, color: '#9ca3af', marginTop: 1 },
 
   footer: { color: '#4b5563', fontSize: 11, textAlign: 'center', marginTop: 8 },
 });
