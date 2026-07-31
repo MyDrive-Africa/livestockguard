@@ -181,7 +181,8 @@ async def list_animals(
         # BLE fallback: if no GPS position, check ble_sightings for gateway coords
         if not pos:
             ble_query = text("""
-                SELECT gateway_latitude AS latitude, gateway_longitude AS longitude,
+                SELECT COALESCE(estimated_latitude, gateway_latitude) AS latitude,
+                       COALESCE(estimated_longitude, gateway_longitude) AS longitude,
                        gateway_speed AS speed, NULL::int AS battery_mv
                 FROM ble_sightings
                 WHERE animal_id = :animal_id
@@ -219,7 +220,8 @@ async def get_animal(animal_id: UUID, db: AsyncSession = Depends(get_db)):
 
     if not pos:
         ble_query = text("""
-            SELECT gateway_latitude AS latitude, gateway_longitude AS longitude,
+            SELECT COALESCE(estimated_latitude, gateway_latitude) AS latitude,
+                   COALESCE(estimated_longitude, gateway_longitude) AS longitude,
                    gateway_speed AS speed, NULL::int AS battery_mv
             FROM ble_sightings
             WHERE animal_id = :animal_id

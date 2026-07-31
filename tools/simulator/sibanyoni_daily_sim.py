@@ -3,7 +3,8 @@
 LivestockGuard — Herdsman Daily Routine Simulator (Sibanyoni Farm, North West)
 
 Realistic cattle movement for 50 head on a 50-hectare farm near Lichtenburg.
-Cattle follow paths around the property boundary, through gate to communal grazing.
+Cattle form natural sub-groups (clusters), with leaders, followers, and stragglers.
+Herd spreads asymmetrically — not a uniform circle around the herdsman.
 
 Schedule (configurable):
   Night:  Cattle in kraal
@@ -18,6 +19,14 @@ Schedule (configurable):
   17:00-17:30: Walk to kraal, settle for night
   17:30: All in kraal
 
+Herd dynamics:
+  - Cattle split into 4-6 sub-groups of varying size
+  - Each sub-group has a "lead cow" others follow loosely
+  - Sub-groups graze at different distances/directions from herdsman
+  - Some cows are stragglers (slow, lag behind)
+  - Clusters drift and reform over time
+  - All cattle kept within 50-hectare boundary during on-farm phases
+
 Usage:
     python sibanyoni_daily_sim.py                     # Normal day
     python sibanyoni_daily_sim.py --scenario theft    # Theft at 10am
@@ -29,8 +38,8 @@ Usage:
 import time
 import math
 import random
-from dataclasses import dataclass
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import List, Optional, Tuple
 
 import click
 import requests
@@ -71,21 +80,25 @@ GRAZING_AREAS = [
         'name': 'North communal veld (past neighbour)',
         'waypoints': [(-25.36100, 25.36480), (-25.35800, 25.36550), (-25.35500, 25.36500)],
         'center': (-25.35400, 25.36450),
+        'spread_m': 200,
     },
     {
         'name': 'East riverside (along stream)',
         'waypoints': [(-25.36100, 25.36480), (-25.36150, 25.36700), (-25.36100, 25.36900)],
         'center': (-25.36050, 25.37000),
+        'spread_m': 180,
     },
     {
         'name': 'South pasture (communal grazing)',
         'waypoints': [(-25.36200, 25.36550), (-25.36400, 25.36600), (-25.36600, 25.36550)],
         'center': (-25.36700, 25.36500),
+        'spread_m': 250,
     },
     {
         'name': 'West bushveld (along fence line)',
         'waypoints': [(-25.36100, 25.36480), (-25.36050, 25.36300), (-25.36000, 25.36100)],
         'center': (-25.35950, 25.35900),
+        'spread_m': 160,
     },
 ]
 
@@ -99,6 +112,79 @@ BLE_NOISE_DB = 4
 REGISTERED_MACS = [f'B1:C2:D3:E4:F5:{i:02d}' for i in range(1, 51)]
 
 
+# ─── Herd Dynamics ────────────────────────────────────────────────────────────
+
+@dataclass
+class SubGroup:
+    """A cluster of cattle that move together loosely."""
+    group_id: int
+    leader_idx: int                # Index of the lead cow in this group
+    member_indices: List[int]      # Indices into main cows list
+    offset_heading: float          # Direction offset from herdsman (degrees)
+    offset_distance_m: float       # How far this cluster drifts from herdsman
+    cohesion: float                # How tightly members stick together (0.3-0.9)
+    drift_speed: float             # How fast the group centre drifts (m/s)
+    # Live state
+    anchor_lat: float = 0.0
+    anchor_lon: float = 0.0
+
+    def update_anchor(self, herdsman_lat: float, herdsman_lon: float):
+        """Update the sub-group's anchor point relative to herdsman."""
+        # Slowly drift the offset heading (wind, grass, terrain)
+        self.offset_heading += random.gauss(0, 2.0)
+        self.offset_heading %= 360
+        # Vary the distance slightly
+        self.offset_distance_m += random.gauss(0, 3.0)
+        self.offset_distance_m = max(10, min(self.offset_distance_m, 300))
+
+        bearing_rad = math.radians(self.offset_heading)
+        dlat = (self.offset_distance_m * math.cos(bearing_rad)) / 111320.0
+        dlon = (self.offset_distance_m * math.sin(bearing_rad)) / (
+            111320.0 * math.cos(math.radians(herdsman_lat)))
+        self.anchor_lat = herdsman_lat + dlat
+        self.anchor_lon = herdsman_lon + dlon
+
+
+def create_sub_groups(num_animals: int, num_groups: int = 5) -> List[SubGroup]:
+    """Split cattle into asymmetric sub-groups with varied sizes."""
+    indices = list(range(num_animals))
+    random.shuffle(indices)
+
+    # Assign groups with non-uniform sizes (some groups larger than others)
+    group_sizes = []
+    remaining = num_animals
+    for g in range(num_groups - 1):
+        # Each group gets between 15% and 35% of remaining
+        size = max(2, int(remaining * random.uniform(0.15, 0.35)))
+        size = min(size, remaining - (num_groups - g - 1))
+        group_sizes.append(size)
+        remaining -= size
+    group_sizes.append(remaining)  # Last group gets the rest
+
+    groups = []
+    offset = 0
+    for g_id, size in enumerate(group_sizes):
+        members = indices[offset:offset + size]
+        leader = members[0]  # First member is leader
+        # Spread groups in different directions, not evenly spaced
+        heading = random.uniform(0, 360)
+        distance = random.uniform(20, 180)
+        cohesion = random.uniform(0.3, 0.85)
+
+        groups.append(SubGroup(
+            group_id=g_id,
+            leader_idx=leader,
+            member_indices=members,
+            offset_heading=heading,
+            offset_distance_m=distance,
+            cohesion=cohesion,
+            drift_speed=random.uniform(0.02, 0.12),
+        ))
+        offset += size
+
+    return groups
+
+
 # ─── Entities ─────────────────────────────────────────────────────────────────
 
 @dataclass
@@ -107,6 +193,13 @@ class Cow:
     mac: str
     lat: float
     lon: float
+    # Personality traits (set once at creation)
+    is_straggler: bool = False    # Slow, lags behind
+    wander_factor: float = 1.0   # How much this cow wanders (0.5-2.0)
+    speed_factor: float = 1.0    # Individual speed multiplier
+    # Movement state
+    heading: float = 0.0         # Current heading (degrees)
+    _heading_inertia: float = 0.0
 
     def move_towards(self, target_lat, target_lon, speed_mps, dt):
         dy = (target_lat - self.lat) * 111320.0
@@ -114,34 +207,85 @@ class Cow:
         dist = math.sqrt(dx * dx + dy * dy)
         if dist < 2:
             return True
-        move_dist = min(speed_mps * dt, dist)
+        # Stragglers move at 60-80% speed
+        actual_speed = speed_mps * self.speed_factor
+        if self.is_straggler:
+            actual_speed *= random.uniform(0.6, 0.8)
+        move_dist = min(actual_speed * dt, dist)
         ratio = move_dist / dist
         self.lat += (target_lat - self.lat) * ratio
         self.lon += (target_lon - self.lon) * ratio
-        # Add natural wandering noise
-        self.lat += random.gauss(0, 0.000006)
-        self.lon += random.gauss(0, 0.000006)
+        # Add natural wandering noise (varies by cow personality)
+        noise = 0.000006 * self.wander_factor
+        self.lat += random.gauss(0, noise)
+        self.lon += random.gauss(0, noise)
         return False
 
-    def graze(self, dt):
-        """Slow random movement simulating grazing behaviour."""
-        speed = random.uniform(0.05, 0.3)
-        heading = random.uniform(0, 360)
+    def graze(self, dt, anchor_lat=None, anchor_lon=None, spread_m=80):
+        """Slow random movement simulating grazing behaviour with drift towards anchor."""
+        speed = random.uniform(0.05, 0.3) * self.wander_factor
+        # Bias heading towards anchor if drifted too far
+        if anchor_lat is not None:
+            dx = (anchor_lon - self.lon) * 111320.0 * math.cos(math.radians(self.lat))
+            dy = (anchor_lat - self.lat) * 111320.0
+            dist_to_anchor = math.sqrt(dx * dx + dy * dy)
+            if dist_to_anchor > spread_m * 0.7:
+                # Pull back towards anchor
+                pull_heading = math.degrees(math.atan2(dx, dy))
+                self._heading_inertia = pull_heading + random.gauss(0, 25)
+            else:
+                self._heading_inertia += random.gauss(0, 40)
+        else:
+            self._heading_inertia += random.gauss(0, 45)
+
+        self.heading = self._heading_inertia % 360
         dist = speed * dt
-        self.lat += (dist * math.cos(math.radians(heading))) / 111320.0
-        self.lon += (dist * math.sin(math.radians(heading))) / (111320.0 * math.cos(math.radians(self.lat)))
+        self.lat += (dist * math.cos(math.radians(self.heading))) / 111320.0
+        self.lon += (dist * math.sin(math.radians(self.heading))) / (
+            111320.0 * math.cos(math.radians(self.lat)))
 
     def random_in_kraal(self):
         angle = random.uniform(0, 2 * math.pi)
         r = random.uniform(0, KRAAL_RADIUS_M)
         self.lat = KRAAL_CENTER[0] + (r * math.cos(angle)) / 111320.0
-        self.lon = KRAAL_CENTER[1] + (r * math.sin(angle)) / (111320.0 * math.cos(math.radians(KRAAL_CENTER[0])))
+        self.lon = KRAAL_CENTER[1] + (r * math.sin(angle)) / (
+            111320.0 * math.cos(math.radians(KRAAL_CENTER[0])))
 
     def random_near(self, center, radius_m):
         angle = random.uniform(0, 2 * math.pi)
         r = random.uniform(0, radius_m)
         self.lat = center[0] + (r * math.cos(angle)) / 111320.0
-        self.lon = center[1] + (r * math.sin(angle)) / (111320.0 * math.cos(math.radians(center[0])))
+        self.lon = center[1] + (r * math.sin(angle)) / (
+            111320.0 * math.cos(math.radians(center[0])))
+
+
+def clamp_to_property(cow: Cow):
+    """Keep cow within the 50-hectare property boundary (soft bounce)."""
+    margin = 0.00005  # ~5m inside fence
+    clamped = False
+    if cow.lat < PROPERTY_BOUNDS['min_lat'] + margin:
+        cow.lat = PROPERTY_BOUNDS['min_lat'] + margin + random.uniform(0, 0.00008)
+        cow._heading_inertia = random.uniform(330, 390) % 360  # Push north
+        clamped = True
+    elif cow.lat > PROPERTY_BOUNDS['max_lat'] - margin:
+        cow.lat = PROPERTY_BOUNDS['max_lat'] - margin - random.uniform(0, 0.00008)
+        cow._heading_inertia = random.uniform(150, 210)  # Push south
+        clamped = True
+    if cow.lon < PROPERTY_BOUNDS['min_lon'] + margin:
+        cow.lon = PROPERTY_BOUNDS['min_lon'] + margin + random.uniform(0, 0.00008)
+        cow._heading_inertia = random.uniform(60, 120)  # Push east
+        clamped = True
+    elif cow.lon > PROPERTY_BOUNDS['max_lon'] - margin:
+        cow.lon = PROPERTY_BOUNDS['max_lon'] - margin - random.uniform(0, 0.00008)
+        cow._heading_inertia = random.uniform(240, 300)  # Push west
+        clamped = True
+    return clamped
+
+
+def is_on_property(lat: float, lon: float) -> bool:
+    """Check if a position is within farm boundary."""
+    return (PROPERTY_BOUNDS['min_lat'] <= lat <= PROPERTY_BOUNDS['max_lat'] and
+            PROPERTY_BOUNDS['min_lon'] <= lon <= PROPERTY_BOUNDS['max_lon'])
 
 
 @dataclass
@@ -193,6 +337,26 @@ def rssi_from_distance(dist):
     return max(-120, min(-30, int(rssi)))
 
 
+def herd_spread_position(herdsman_lat, herdsman_lon, group: SubGroup,
+                         cow_idx_in_group: int, total_in_group: int) -> Tuple[float, float]:
+    """
+    Generate a target position for a cow within its sub-group.
+    Cows closer to the front of the group list are closer to the leader.
+    Creates a natural elongated, asymmetric cluster rather than a circle.
+    """
+    # Position relative to group anchor
+    group_spread = 15 + (cow_idx_in_group / max(1, total_in_group)) * 35  # 15-50m from anchor
+    # Non-uniform angle — elongated along the group's drift direction
+    base_angle = math.radians(group.offset_heading)
+    # Elongate: stretch along heading axis
+    along = random.gauss(0, group_spread * 0.6)
+    across = random.gauss(0, group_spread * 0.3)
+    dlat = (along * math.cos(base_angle) + across * math.sin(base_angle)) / 111320.0
+    dlon = (along * math.sin(base_angle) - across * math.cos(base_angle)) / (
+        111320.0 * math.cos(math.radians(herdsman_lat)))
+    return (group.anchor_lat + dlat, group.anchor_lon + dlon)
+
+
 def send_batch(api_url, gateway_serial, herdsman, sightings, session_id=None):
     if not sightings:
         return None
@@ -209,7 +373,15 @@ def send_batch(api_url, gateway_serial, herdsman, sightings, session_id=None):
             "speed": herdsman.speed_kmh,
             "battery_pct": int(herdsman.battery),
             "session_id": session_id,
-            "sightings": [{"mac_address": s["mac_address"], "rssi": s["rssi"]} for s in chunk],
+            "sightings": [
+                {
+                    "mac_address": s["mac_address"],
+                    "rssi": s["rssi"],
+                    "latitude": s.get("_lat"),
+                    "longitude": s.get("_lon"),
+                }
+                for s in chunk
+            ],
         }
         try:
             resp = requests.post(f"{api_url}/api/gateway/batch", json=payload, timeout=10)
@@ -429,11 +601,15 @@ def main(api_url, gateway_serial, animals, speed, scenario, offline,
                 dist = distance_m(herdsman.lat, herdsman.lon, cow.lat, cow.lon)
                 if dist <= BLE_MAX_RANGE_M:
                     rssi = rssi_from_distance(dist)
+                    # Use the cow's actual position with slight GPS-like noise
+                    # This gives each cow a unique, realistic location on the map
+                    gps_noise_lat = random.gauss(0, 0.000015)  # ~1.7m noise
+                    gps_noise_lon = random.gauss(0, 0.000015)
                     batch_buffer.append({
                         "mac_address": cow.mac,
                         "rssi": rssi,
-                        "_lat": cow.lat + random.gauss(0, 0.00002),
-                        "_lon": cow.lon + random.gauss(0, 0.00002),
+                        "_lat": cow.lat + gps_noise_lat,
+                        "_lon": cow.lon + gps_noise_lon,
                     })
                     detected += 1
             total_sightings += detected

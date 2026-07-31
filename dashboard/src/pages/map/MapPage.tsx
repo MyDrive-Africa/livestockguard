@@ -582,7 +582,7 @@ export default function MapPage() {
         positionMap.set(key, (positionMap.get(key) || 0) + 1);
       });
 
-      // For each animal, if it shares a position with others, spread in a circle
+      // For animals sharing a position, scatter naturally (not in a uniform circle)
       const placed = new Map<string, number>(); // tracks how many placed at each key
       animals.forEach((a: any) => {
         const key = `${a.last_latitude.toFixed(5)},${a.last_longitude.toFixed(5)}`;
@@ -593,12 +593,20 @@ export default function MapPage() {
         let lng = a.last_longitude;
         let lat = a.last_latitude;
 
-        // Spread markers in a circle if multiple at same point
+        // Natural scatter for overlapping positions (seeded by animal index for stability)
         if (total > 1) {
-          const angle = (idx / total) * 2 * Math.PI;
-          const radius = 0.0003 + (total > 5 ? 0.0002 : 0); // ~30-50m spread
-          lng += Math.cos(angle) * radius;
-          lat += Math.sin(angle) * radius;
+          // Use a deterministic but non-uniform distribution:
+          // Golden angle spiral + random radial jitter for organic look
+          const goldenAngle = 2.399963; // radians (137.508 degrees)
+          const angle = idx * goldenAngle + (idx * 0.7 % 1) * 0.4;
+          // Vary radius: inner cows closer, outer cows further — not a perfect ring
+          const normIdx = (idx + 1) / (total + 1);
+          const baseRadius = 0.00015 + normIdx * 0.00035; // ~17-55m spread
+          // Add per-animal jitter so positions don't align on a spiral either
+          const jitterR = baseRadius * (0.7 + ((idx * 13 + 7) % 11) / 11 * 0.6);
+          const jitterA = angle + ((idx * 7 + 3) % 9) / 9 * 0.5;
+          lng += Math.cos(jitterA) * jitterR;
+          lat += Math.sin(jitterA) * jitterR * 0.8; // Slightly elongated (N-S vs E-W)
         }
 
         addOrUpdateMarker(map, a.id, a.name, lng, lat, a.battery_level);
