@@ -148,6 +148,85 @@ The farm picker is fully wired into the React Native app with the following file
 
 ---
 
+## Cumulative Daily Scan (Seen Today)
+
+### Concept
+
+The BLE scanner tracks two counts simultaneously:
+1. **In Range (now):** Cattle within BLE range this instant (~100m) — fluctuates as herdsman moves
+2. **Seen Today (cumulative):** Unique tags detected at any point since shift start — only goes UP
+
+On a large farm like Sibanyoni (50 cattle across 50ha), the herdsman can't see all cattle at once.
+But as they patrol through different areas, the cumulative count climbs toward 100%.
+
+### Daily Cycle
+
+```
+NIGHT (kraal)      → 50/50 confirmed (all cattle penned)
+~06:00             → Shift auto-resets "seen today" set
+~08:30 kraal opens → DEPARTURE COUNT: scan before cattle scatter (baseline = 100%)
+09:00–17:00        → PATROL: cumulative unique tags accumulate
+                     Alert if < 90% seen by midday
+~17:30 kraal close → RETURN COUNT (Kraal Check): all must be present
+                     Missing from kraal at night = CRITICAL alert
+```
+
+### Shift Management
+
+| Action | What Happens |
+|--------|-------------|
+| **Start Shift** | Resets "seen today" set, records departure count from current scan |
+| **Patrol Mode** | Each BLE scan adds new unique MACs to the cumulative set |
+| **End Patrol (Kraal Check)** | Switches to kraal mode — compares current hard count to departure |
+| **New Shift** | Resets everything for a new day |
+
+### Herdsman Screen UI
+
+```
+┌─── PATROL MODE ─────────────────────┐
+│                                       │
+│   📶 Scanner Active · On Patrol       │
+│                                       │
+│            38                         │
+│       / 50 in range now               │
+│                                       │
+│   ┌─────────────────────────────┐    │
+│   │ 📋 Seen Today (Cumulative)   │    │
+│   │ ████████████░░░░  86%        │    │
+│   │ 43 / 50 unique tags detected │    │
+│   │ Last new tag: 11:34          │    │
+│   └─────────────────────────────┘    │
+│                                       │
+│   ┌─────────────────────────────┐    │
+│   │ ⚠️ Not Seen Today (7)        │    │
+│   │ Never detected since shift   │    │
+│   │ • SB-023                     │    │
+│   │ • SB-041                     │    │
+│   │ • SB-009  ...                │    │
+│   └─────────────────────────────┘    │
+│                                       │
+│   [🏠 Kraal Check (End Patrol)]      │
+└───────────────────────────────────────┘
+```
+
+### Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `mobile/src/services/bleScanner.ts` | Core logic: `seenToday` Map, `startShift()`, `endShift()`, `addToSeenToday()`, AsyncStorage persistence |
+| `mobile/src/screens/HerdsmanScreen.tsx` | UI: patrol mode, kraal mode, progress bar, not-seen-today list, shift buttons |
+
+### Key Behaviours
+
+- **Persistence:** `seenToday` is saved to AsyncStorage every poll cycle — survives app restart mid-shift
+- **Farm-aware:** Switching farms in the picker resets and re-initializes for the new farm's registered tags
+- **Large farm simulation:** Sibanyoni (50 cattle, 50ha) detects 40–80% per scan cycle; cumulative climbs over hours
+- **Small farm:** Loch Vaal (10 cattle, small plot) detects 70–95% per cycle; reaches 100% quickly
+- **Kraal verification:** Evening mode does a hard count — all cattle must be within BLE range at the kraal
+- **Threshold alert (future):** If < 90% seen by midday → push notification to farm owner
+
+---
+
 ## Herdsman Background Service
 
 The herdsman's phone runs a **foreground service** that:
