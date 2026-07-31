@@ -90,3 +90,29 @@ export async function getToken() {
 export async function getUserRole() {
   return AsyncStorage.getItem('user_role');
 }
+
+// Farm functions
+
+export interface Farm {
+  id: string;
+  name: string;
+  location?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+/** Fetch farms accessible to the current user */
+export async function getMyFarms(): Promise<Farm[]> {
+  const resp = await api.get('/api/v1/assignments/me/farms');
+  return resp.data;
+}
+
+/** Get the last selected farm ID from local storage */
+export async function getSelectedFarmId(): Promise<string | null> {
+  return AsyncStorage.getItem('selected_farm_id');
+}
+
+/** Persist the selected farm ID to local storage */
+export async function setSelectedFarmId(farmId: string): Promise<void> {
+  await AsyncStorage.setItem('selected_farm_id', farmId);
+}

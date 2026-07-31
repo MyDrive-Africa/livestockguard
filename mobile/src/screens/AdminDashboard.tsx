@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { api } from '../services/api';
+import { useFarm } from '../context/FarmContext';
 
 interface FarmStats {
   animals: number;
@@ -12,15 +13,17 @@ interface FarmStats {
 }
 
 export default function AdminDashboard() {
+  const { selectedFarm } = useFarm();
   const [stats, setStats] = useState<FarmStats | null>(null);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = async () => {
+    if (!selectedFarm) return;
     try {
       const [systemResp, alertsResp] = await Promise.all([
-        api.get('/api/system/status'),
-        api.get('/api/alerts?status=active'),
+        api.get(`/api/system/status?farm_id=${selectedFarm.id}`),
+        api.get(`/api/alerts?status=active&farm_id=${selectedFarm.id}`),
       ]);
       setStats(systemResp.data.counts);
       setAlerts(alertsResp.data.slice(0, 10));
@@ -29,7 +32,7 @@ export default function AdminDashboard() {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [selectedFarm]);
 
   const onRefresh = async () => {
     setRefreshing(true);

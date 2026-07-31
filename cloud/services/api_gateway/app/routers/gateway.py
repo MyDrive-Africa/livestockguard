@@ -38,6 +38,8 @@ class BleTagSighting(BaseModel):
     mac_address: str = Field(..., description="BLE MAC address e.g. AA:BB:CC:DD:EE:FF")
     rssi: int = Field(..., description="Signal strength in dBm (e.g. -65)")
     timestamp: Optional[str] = None  # ISO format; defaults to server time if omitted
+    latitude: Optional[float] = Field(None, description="Estimated animal latitude (if known)")
+    longitude: Optional[float] = Field(None, description="Estimated animal longitude (if known)")
 
 
 class BatchSightingRequest(BaseModel):
@@ -222,6 +224,8 @@ async def ingest_batch(req: BatchSightingRequest, db: AsyncSession = Depends(get
             gateway_altitude=req.altitude,
             gateway_speed=req.speed,
             gateway_battery_pct=req.battery_pct,
+            estimated_latitude=sighting.latitude,
+            estimated_longitude=sighting.longitude,
         )
         db.add(new_sighting)
         accepted += 1
@@ -449,7 +453,9 @@ async def get_gateway_status(gateway_serial: str, db: AsyncSession = Depends(get
         SELECT DISTINCT ON (s.animal_id)
             s.animal_id, a.name AS animal_name, a.tag_id,
             s.mac_address, s.time AS last_seen, s.rssi,
-            s.estimated_distance_m, s.gateway_latitude, s.gateway_longitude
+            s.estimated_distance_m,
+            COALESCE(s.estimated_latitude, s.gateway_latitude) AS latitude,
+            COALESCE(s.estimated_longitude, s.gateway_longitude) AS longitude
         FROM ble_sightings s
         JOIN animals a ON a.id = s.animal_id
         WHERE s.gateway_id = :gateway_id
@@ -469,8 +475,8 @@ async def get_gateway_status(gateway_serial: str, db: AsyncSession = Depends(get
             last_seen=row.last_seen.isoformat(),
             rssi=row.rssi,
             estimated_distance_m=row.estimated_distance_m,
-            latitude=row.gateway_latitude,
-            longitude=row.gateway_longitude,
+            latitude=row.latitude,
+            longitude=row.longitude,
         )
         for row in recent_rows
     ]

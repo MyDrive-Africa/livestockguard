@@ -289,6 +289,8 @@ class BleSighting(Base):
     gateway_altitude = Column(Float)
     gateway_speed = Column(Float)
     gateway_battery_pct = Column(Integer)
+    estimated_latitude = Column(Float)
+    estimated_longitude = Column(Float)
 
 
 class HerdsmanSession(Base):

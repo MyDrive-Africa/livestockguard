@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Platform, TouchableOpacity, ScrollView } from 'react-native';
 import MapView, { Marker, Polygon, Polyline, Callout } from 'react-native-maps';
 import { api } from '../services/api';
+import { useFarm } from '../context/FarmContext';
 
 interface AnimalPosition {
   id: string;
@@ -32,6 +33,7 @@ const INITIAL_REGION = {
 };
 
 export default function MapScreen() {
+  const { selectedFarm } = useFarm();
   const [animals, setAnimals] = useState<AnimalPosition[]>([]);
   const [geofences, setGeofences] = useState<Geofence[]>([]);
   const [mapType, setMapType] = useState<MapType>('standard');
@@ -43,10 +45,11 @@ export default function MapScreen() {
   const [showLayerPanel, setShowLayerPanel] = useState(false);
 
   const fetchData = async () => {
+    if (!selectedFarm) return;
     try {
       const [animalsResp, geofencesResp] = await Promise.all([
-        api.get('/api/animals'),
-        api.get('/api/geofences?farm_id=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'),
+        api.get(`/api/animals?farm_id=${selectedFarm.id}`),
+        api.get(`/api/geofences?farm_id=${selectedFarm.id}`),
       ]);
       setAnimals(animalsResp.data);
       setGeofences(geofencesResp.data);
@@ -65,7 +68,7 @@ export default function MapScreen() {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [selectedFarm]);
   useEffect(() => {
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);

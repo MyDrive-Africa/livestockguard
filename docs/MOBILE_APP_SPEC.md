@@ -126,6 +126,26 @@ One app, three modes based on user role:
 - **Persistence:** Last selected farm stored in AsyncStorage, auto-selected on next launch
 - **Switching:** Changing farm reloads all data (animals, map, alerts) for new farm context
 
+### Farm Picker Implementation (Native App)
+
+**Status:** Implemented
+
+The farm picker is fully wired into the React Native app with the following files:
+
+| File | Purpose |
+|------|---------|
+| `mobile/src/services/api.ts` | `getMyFarms()` calls `GET /api/v1/assignments/me/farms`; `getSelectedFarmId()` / `setSelectedFarmId()` persist selection in AsyncStorage |
+| `mobile/src/context/FarmContext.tsx` | React context (`FarmProvider` + `useFarm` hook) — holds farm list, selected farm, and `switchFarm()` function |
+| `mobile/src/components/FarmPicker.tsx` | Header bar component — shows current farm name; tapping opens a bottom-sheet modal with all available farms |
+| `mobile/App.tsx` | Wraps authenticated app in `FarmProvider`; renders `FarmPicker` in a `SafeAreaView` header above all screens |
+
+**Behaviour:**
+1. After login, `FarmProvider` fetches accessible farms from the API
+2. Restores last selected farm from AsyncStorage (or auto-selects if single farm)
+3. Header bar displays current farm name with ▼ chevron (non-interactive for locked herdsmen)
+4. Tapping opens a modal listing farms — selecting one calls `switchFarm(id)` which updates context and persists
+5. All screens (`AdminDashboard`, `MapScreen`, `AnimalsScreen`) pass `selectedFarm.id` as `farm_id` query param and re-fetch when farm changes
+
 ---
 
 ## Herdsman Background Service
