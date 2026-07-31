@@ -109,6 +109,11 @@ simulate-day-sibanyoni: ## Simulate full herdsman day at Sibanyoni (50 cattle, 1
 	@echo "$(GREEN)Starting Sibanyoni Farm daily routine simulation (50 cattle)...$(RESET)"
 	cd tools/simulator && python3 sibanyoni_daily_sim.py --speed 120
 
+simulate-loop: ## Run both simulators in continuous loop (random days, never stops)
+	@echo "$(GREEN)Starting LOOP simulation (both farms, Ctrl+C to stop)...$(RESET)"
+	@cd tools/simulator && python3 gateway_daily_sim.py --speed 120 --loop &
+	@cd tools/simulator && python3 sibanyoni_daily_sim.py --speed 120 --loop
+
 simulate-day-sibanyoni-theft: ## Simulate theft at Sibanyoni Farm
 	@echo "$(YELLOW)Starting THEFT scenario (Sibanyoni Farm)...$(RESET)"
 	cd tools/simulator && python3 sibanyoni_daily_sim.py --speed 360 --scenario theft

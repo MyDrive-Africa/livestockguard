@@ -232,13 +232,14 @@ def send_batch(api_url, gateway_serial, herdsman, sightings, session_id=None):
 @click.option('--weather', default='dry', type=click.Choice(['dry', 'wet']))
 @click.option('--scenario', default='normal', type=click.Choice(['normal', 'theft', 'breach']))
 @click.option('--offline', is_flag=True)
+@click.option('--loop', is_flag=True, help='Repeat simulation continuously with random variation')
 @click.option('--scan-interval', default=5, help='Real seconds per tick')
 @click.option('--report-interval', default=25, help='Real seconds between API batches')
 @click.option('--kraal-open', default=8.5, help='Hour kraal gate opens (8.5=08:30)')
 @click.option('--exit-time', default=9.33, help='Hour cattle exit yard gate (9.33=09:20)')
 @click.option('--return-time', default=16.5, help='Hour cattle start returning (16.5=16:30)')
 @click.option('--settle-time', default=17.75, help='Hour cattle settled in kraal (17.75=17:45)')
-def main(api_url, gateway_serial, animals, speed, weather, scenario, offline,
+def main(api_url, gateway_serial, animals, speed, weather, scenario, offline, loop,
          scan_interval, report_interval, kraal_open, exit_time, return_time, settle_time):
     """Simulate a realistic herdsman day at Loch Vaal Plot 30."""
 
@@ -480,6 +481,22 @@ def main(api_url, gateway_serial, animals, speed, weather, scenario, offline,
     print(f"  Battery remaining:    {herdsman.battery:.0f}%")
     print(f"  Final position:       ({'Kraal' if weather == 'dry' else 'Yard'})")
     print(f"  Route taken:          {todays_grazing['name']}")
+
+    if not loop:
+        return
+
+    # Loop mode: brief pause then restart with fresh random variation
+    pause = random.uniform(2, 5)
+    print(f"\n🔄 Loop mode: restarting in {pause:.0f}s with new random day...\n")
+    time.sleep(pause)
+    # Re-invoke via Click's context to restart with same args
+    ctx = click.get_current_context()
+    ctx.invoke(main, api_url=api_url, gateway_serial=gateway_serial, animals=animals,
+               speed=speed, weather=random.choice(['dry', 'wet']),
+               scenario='normal', offline=offline, loop=True,
+               scan_interval=scan_interval, report_interval=report_interval,
+               kraal_open=kraal_open, exit_time=exit_time,
+               return_time=return_time, settle_time=settle_time)
 
 
 if __name__ == '__main__':

@@ -219,6 +219,34 @@ export default function GatewayPage() {
         </AnimatedCard>
       </div>
 
+      {/* Simulator Status Card */}
+      <AnimatedCard delay={0.4} className="mb-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-xl">🔄</span>
+            <div>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Simulator</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {onlineCount > 0 ? 'Data flowing — simulator active' : 'No recent data — simulator stopped'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`w-2.5 h-2.5 rounded-full ${onlineCount > 0 ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText('make simulate-loop');
+                alert('Copied: make simulate-loop\n\nRun this in your terminal to start continuous simulation.');
+              }}
+              className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              title="Copy loop command to clipboard"
+            >
+              {onlineCount > 0 ? '🟢 Running' : '▶ Start Loop'}
+            </button>
+          </div>
+        </div>
+      </AnimatedCard>
+
       {/* Cattle Count / Herd Reconciliation */}
       {herdCount && (
         <div className="mb-6">

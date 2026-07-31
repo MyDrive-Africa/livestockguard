@@ -409,8 +409,9 @@ def send_batch(api_url, gateway_serial, herdsman, sightings, session_id=None):
 @click.option('--exit-time', default=7.0, help='Hour cattle exit main gate (7.0=07:00)')
 @click.option('--return-time', default=16.0, help='Hour cattle start returning (16.0=16:00)')
 @click.option('--settle-time', default=17.5, help='Hour cattle settled in kraal (17.5=17:30)')
+@click.option('--loop', is_flag=True, help='Repeat simulation continuously with random variation')
 def main(api_url, gateway_serial, animals, speed, scenario, offline,
-         scan_interval, report_interval, kraal_open, exit_time, return_time, settle_time):
+         scan_interval, report_interval, kraal_open, exit_time, return_time, settle_time, loop):
     """Simulate a realistic herdsman day at Sibanyoni Farm (North West)."""
 
     animals = min(animals, len(REGISTERED_MACS))
@@ -651,6 +652,20 @@ def main(api_url, gateway_serial, animals, speed, scenario, offline,
     print(f"  Final position:       Kraal")
     print(f"  Route taken:          {todays_grazing['name']}")
     print(f"  Cattle:               {animals} head")
+
+    if not loop:
+        return
+
+    # Loop mode: brief pause then restart with fresh random variation
+    pause = random.uniform(2, 5)
+    print(f"\n🔄 Loop mode: restarting in {pause:.0f}s with new random day...\n")
+    time.sleep(pause)
+    ctx = click.get_current_context()
+    ctx.invoke(main, api_url=api_url, gateway_serial=gateway_serial, animals=animals,
+               speed=speed, scenario='normal', offline=offline,
+               scan_interval=scan_interval, report_interval=report_interval,
+               kraal_open=kraal_open, exit_time=exit_time,
+               return_time=return_time, settle_time=settle_time, loop=True)
 
 
 if __name__ == '__main__':
