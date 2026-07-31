@@ -81,7 +81,7 @@ export default function MapPage() {
   const [animalCount, setAnimalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [tileSource, setTileSource] = useState<TileSource>('osm');
+  const [tileSource, setTileSource] = useState<TileSource>('satellite');
   const [layers, setLayers] = useState<Record<LayerToggle, boolean>>({
     animals: true, geofences: true, trails: false,
   });
@@ -120,6 +120,7 @@ export default function MapPage() {
   const [farms, setFarms] = useState<Farm[]>([]);
   const [selectedFarmId, setSelectedFarmId] = useState<string>(currentFarm || '');
   const [geofenceIds, setGeofenceIds] = useState<string[]>([]);
+  const geofenceIdsRef = useRef<string[]>([]);
 
   // Fetch available farms on mount
   useEffect(() => {
@@ -175,7 +176,7 @@ export default function MapPage() {
   }, [selectedFarmId, farms, loading]);
 
   function clearAllGeofences(map: maplibregl.Map) {
-    geofenceIds.forEach((id) => {
+    geofenceIdsRef.current.forEach((id) => {
       ['fill', 'outline'].forEach((t) => {
         const layerId = `fence-${t}-${id}`;
         if (map.getLayer(layerId)) map.removeLayer(layerId);
@@ -185,6 +186,7 @@ export default function MapPage() {
       const labelMarker = fenceLabelMarkersRef.current.get(id);
       if (labelMarker) { labelMarker.remove(); fenceLabelMarkersRef.current.delete(id); }
     });
+    geofenceIdsRef.current = [];
     setGeofenceIds([]);
   }
 
@@ -341,6 +343,7 @@ export default function MapPage() {
             ids.push(fence.id);
           }
         });
+        geofenceIdsRef.current = ids;
         setGeofenceIds(ids);
         return;
       }
@@ -350,7 +353,9 @@ export default function MapPage() {
     // Fallback: demo geofences (only if Boschhoek farm)
     if (!farmId || farmId === '22222222-2222-2222-2222-222222222222') {
       addDemoGeofences(map);
-      setGeofenceIds(DEMO_GEOFENCES.map((f) => f.id));
+      const demoIds = DEMO_GEOFENCES.map((f) => f.id);
+      geofenceIdsRef.current = demoIds;
+      setGeofenceIds(demoIds);
     }
   }
 
@@ -624,13 +629,21 @@ export default function MapPage() {
     if (existing) { existing.setLngLat([lng, lat]); return; }
 
     const isLow = battery != null && battery < 20;
+    const pinColor = isLow ? '#ea580c' : '#dc2626';
     const el = document.createElement('div');
-    el.style.cssText = `width:32px;height:32px;background:${isLow ? '#ea580c' : '#16a34a'};border:2px solid ${resolved === 'dark' ? '#374151' : 'white'};border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 6px rgba(0,0,0,0.3);transition:transform 0.3s;`;
-    el.innerHTML = '🐄';
+    el.style.cssText = `display:flex;flex-direction:column;align-items:center;cursor:pointer;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));transition:transform 0.2s;`;
+    el.innerHTML = `
+      <div style="width:30px;height:30px;background:${pinColor};border:2px solid ${resolved === 'dark' ? '#374151' : 'white'};border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;">
+        <span style="transform:rotate(45deg);font-size:14px;">🐄</span>
+      </div>
+      <div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:6px solid ${pinColor};margin-top:-2px;"></div>
+    `;
     el.title = name;
+    el.addEventListener('mouseenter', () => { el.style.transform = 'scale(1.15)'; });
+    el.addEventListener('mouseleave', () => { el.style.transform = 'scale(1)'; });
     el.addEventListener('click', (e) => { e.stopPropagation(); showTrail(id); });
 
-    const popup = new maplibregl.Popup({ offset: 20 }).setHTML(`
+    const popup = new maplibregl.Popup({ offset: 25 }).setHTML(`
       <div style="padding:8px;min-width:140px;">
         <strong>${name}</strong><br/>
         <span style="color:#666;font-size:12px;">
@@ -641,7 +654,7 @@ export default function MapPage() {
       </div>
     `);
 
-    const marker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).setPopup(popup).addTo(map);
+    const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([lng, lat]).setPopup(popup).addTo(map);
     markersRef.current.set(id, marker);
   }
 
@@ -653,9 +666,18 @@ export default function MapPage() {
 
   // Auto-refresh (fallback — primary updates come via WebSocket)
   useEffect(() => {
-    const i = setInterval(() => { if (mapRef.current && selectedFarmId) fetchPositionsForFarm(mapRef.current, selectedFarmId); }, 30000);
+    if (!selectedFarmId) return;
+    const i = setInterval(() => {
+      const map = mapRef.current;
+      if (map && selectedFarmId) {
+        fetchPositionsForFarm(map, selectedFarmId);
+        // Also refresh geofences to keep in sync
+        clearAllGeofences(map);
+        loadGeofencesForFarm(map, selectedFarmId);
+      }
+    }, 30000);
     return () => clearInterval(i);
-  }, []);
+  }, [selectedFarmId]);
 
   // ─── Breach Alert Markers ──────────────────────────
   const alertMarkersRef = useRef<maplibregl.Marker[]>([]);

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, Platform, TouchableOpacity, ScrollView } from 'react-native';
-import MapView, { Marker, Polygon, Polyline, Callout, Region } from 'react-native-maps';
+import MapView, { Marker, Polygon, Polyline, Region } from 'react-native-maps';
 import { api } from '../services/api';
 import { useFarm } from '../context/FarmContext';
 
@@ -37,7 +37,7 @@ export default function MapScreen() {
   const mapRef = useRef<MapView>(null);
   const [animals, setAnimals] = useState<AnimalPosition[]>([]);
   const [geofences, setGeofences] = useState<Geofence[]>([]);
-  const [mapType, setMapType] = useState<MapType>('standard');
+  const [mapType, setMapType] = useState<MapType>('satellite');
   const [trail, setTrail] = useState<{ lat: number; lon: number }[]>([]);
   const [selectedAnimal, setSelectedAnimal] = useState<string | null>(null);
   const [showGeofences, setShowGeofences] = useState(true);
@@ -108,9 +108,10 @@ export default function MapScreen() {
 
   useEffect(() => { fetchData(); }, [selectedFarm]);
   useEffect(() => {
+    if (!selectedFarm) return;
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedFarm]);
 
   // Web: iframe
   if (Platform.OS === 'web') {
@@ -151,6 +152,29 @@ export default function MapScreen() {
         showsCompass={true}
         showsScale={true}
       >
+        {/* Farm centre location pin 📍 */}
+        {selectedFarm?.latitude && selectedFarm?.longitude && (
+          <Marker
+            coordinate={{
+              latitude: selectedFarm.latitude,
+              longitude: selectedFarm.longitude,
+            }}
+            anchor={{ x: 0.5, y: 1 }}
+            title={selectedFarm.name}
+            description={`📍 ${selectedFarm.latitude.toFixed(5)}, ${selectedFarm.longitude.toFixed(5)}`}
+          >
+            <View style={styles.farmPin}>
+              <Text style={styles.farmPinIcon}>📍</Text>
+              <View style={styles.farmPinLabel}>
+                <Text style={styles.farmPinName}>{selectedFarm.name}</Text>
+                <Text style={styles.farmPinCoords}>
+                  {selectedFarm.latitude.toFixed(5)}, {selectedFarm.longitude.toFixed(5)}
+                </Text>
+              </View>
+            </View>
+          </Marker>
+        )}
+
         {/* Geofence polygons with labels */}
         {showGeofences && geofences.map((fence) => {
           if (!fence.geometry?.coordinates?.[0]) return null;
@@ -212,7 +236,7 @@ export default function MapScreen() {
           />
         )}
 
-        {/* Cattle markers with cow emoji */}
+        {/* Cattle markers — orange pin for both iOS and Android */}
         {withPosition.map((animal) => (
           <Marker
             key={animal.id}
@@ -221,21 +245,12 @@ export default function MapScreen() {
               longitude: animal.last_longitude!,
             }}
             onPress={() => fetchTrail(animal.id)}
-            tracksViewChanges={false}
+            title={animal.name}
+            description={`${animal.breed || ''} ${animal.gender === 'male' ? '♂' : animal.gender === 'female' ? '♀' : ''}\n📍 ${animal.last_latitude!.toFixed(5)}, ${animal.last_longitude!.toFixed(5)}${animal.last_speed != null ? `\nSpeed: ${animal.last_speed.toFixed(1)} km/h` : ''}`}
           >
-            <View style={styles.cowMarker}>
-              <Text style={styles.cowEmoji}>🐄</Text>
+            <View style={styles.markerPin}>
+              <Text style={styles.markerEmoji}>🐄</Text>
             </View>
-            <Callout>
-              <View style={styles.callout}>
-                <Text style={styles.calloutTitle}>{animal.name}</Text>
-                <Text style={styles.calloutDetail}>
-                  {animal.breed || ''} {animal.gender === 'male' ? '♂' : animal.gender === 'female' ? '♀' : ''}
-                </Text>
-                {animal.last_speed != null && <Text style={styles.calloutDetail}>Speed: {animal.last_speed.toFixed(1)} km/h</Text>}
-                <Text style={styles.calloutHint}>Tap for trail</Text>
-              </View>
-            </Callout>
           </Marker>
         ))}
       </MapView>
@@ -351,15 +366,28 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#111827' },
   map: { flex: 1 },
-  cowMarker: { alignItems: 'center', justifyContent: 'center' },
-  cowEmoji: { fontSize: 24 },
+  markerPin: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: '#ea580c',
+    borderWidth: 2, borderColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3, shadowRadius: 3, elevation: 5,
+  },
+  markerEmoji: { fontSize: 14 },
+  farmPin: { alignItems: 'center' },
+  farmPinIcon: { fontSize: 28 },
+  farmPinLabel: {
+    backgroundColor: '#1d4ed8', paddingHorizontal: 6, paddingVertical: 2,
+    borderRadius: 4, marginTop: -4, alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3, shadowRadius: 2, elevation: 3,
+  },
+  farmPinName: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
+  farmPinCoords: { color: '#93c5fd', fontSize: 8 },
   fenceLabel: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   fenceLabelSelected: { borderWidth: 2, borderColor: '#fff', transform: [{ scale: 1.1 }] },
   fenceLabelText: { color: '#fff', fontSize: 9, fontWeight: 'bold' },
-  callout: { padding: 4, minWidth: 120 },
-  calloutTitle: { fontWeight: 'bold', fontSize: 13 },
-  calloutDetail: { fontSize: 11, color: '#666' },
-  calloutHint: { fontSize: 10, color: '#8b5cf6', marginTop: 2 },
   mapTypeSwitcher: {
     position: 'absolute', top: 60, right: 12,
     backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: 8,

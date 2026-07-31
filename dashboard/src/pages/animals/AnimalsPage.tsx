@@ -67,6 +67,10 @@ export default function AnimalsPage() {
   const [genderFilter, setGenderFilter] = useState<string>('');
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingLocation, setEditingLocation] = useState(false);
+  const [editLat, setEditLat] = useState('');
+  const [editLng, setEditLng] = useState('');
+  const [savingLocation, setSavingLocation] = useState(false);
   const [addForm, setAddForm] = useState({
     name: '', tag_id: '', breed: '', gender: '', colour: '',
     description: '', weight_kg: '', date_of_birth: '', photo_url: '',
@@ -75,6 +79,8 @@ export default function AnimalsPage() {
   const [addSubmitting, setAddSubmitting] = useState(false);
 
   const currentFarm = useAuthStore((state) => state.currentFarm);
+  const userRole = useAuthStore((state) => state.user?.role);
+  const canEditLocation = userRole === 'admin' || userRole === 'farmowner';
   const positions = useRealtimeStore((state) => state.positions);
 
   const fetchAnimals = useCallback(async () => {
@@ -318,7 +324,7 @@ export default function AnimalsPage() {
       {selectedAnimal && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-          onClick={() => setSelectedAnimal(null)}
+          onClick={() => { setSelectedAnimal(null); setEditingLocation(false); }}
         >
           <div
             className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-lg w-full mx-4 overflow-hidden theme-transition max-h-[90vh] overflow-y-auto"
@@ -397,14 +403,189 @@ export default function AnimalsPage() {
               {/* Position */}
               {selectedAnimal.last_latitude != null && (
                 <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Last Known Position</p>
-                  <p className="font-mono text-sm text-gray-900 dark:text-white">
-                    {selectedAnimal.last_latitude.toFixed(6)}, {selectedAnimal.last_longitude!.toFixed(6)}
-                  </p>
-                  {selectedAnimal.last_speed != null && (
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Speed: {selectedAnimal.last_speed.toFixed(1)} km/h
-                    </p>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Last Known Position</p>
+                    {canEditLocation && !editingLocation && (
+                      <button
+                        onClick={() => {
+                          setEditLat(selectedAnimal.last_latitude!.toFixed(6));
+                          setEditLng(selectedAnimal.last_longitude!.toFixed(6));
+                          setEditingLocation(true);
+                        }}
+                        className="text-xs px-2 py-1 bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 rounded hover:bg-brand-200 dark:hover:bg-brand-900/50 transition-colors"
+                      >
+                        ✏️ Edit
+                      </button>
+                    )}
+                  </div>
+                  {!editingLocation ? (
+                    <>
+                      <p className="font-mono text-sm text-gray-900 dark:text-white">
+                        {selectedAnimal.last_latitude.toFixed(6)}, {selectedAnimal.last_longitude!.toFixed(6)}
+                      </p>
+                      {selectedAnimal.last_speed != null && (
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Speed: {selectedAnimal.last_speed.toFixed(1)} km/h
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-0.5">Latitude</label>
+                          <input
+                            type="number"
+                            step="0.000001"
+                            value={editLat}
+                            onChange={(e) => setEditLat(e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-mono"
+                            placeholder="-26.719088"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-0.5">Longitude</label>
+                          <input
+                            type="number"
+                            step="0.000001"
+                            value={editLng}
+                            onChange={(e) => setEditLng(e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-mono"
+                            placeholder="27.709759"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            const lat = parseFloat(editLat);
+                            const lng = parseFloat(editLng);
+                            if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+                              alert('Invalid coordinates. Latitude: -90 to 90, Longitude: -180 to 180.');
+                              return;
+                            }
+                            setSavingLocation(true);
+                            try {
+                              await apiClient.patch(`/api/animals/${selectedAnimal.id}`, {
+                                last_latitude: lat,
+                                last_longitude: lng,
+                              });
+                              // Update local state
+                              setSelectedAnimal({ ...selectedAnimal, last_latitude: lat, last_longitude: lng });
+                              setAnimals((prev) =>
+                                prev.map((a) => a.id === selectedAnimal.id ? { ...a, last_latitude: lat, last_longitude: lng } : a)
+                              );
+                              setEditingLocation(false);
+                            } catch (err) {
+                              console.error('Failed to update location:', err);
+                              alert('Failed to save location. Please try again.');
+                            } finally {
+                              setSavingLocation(false);
+                            }
+                          }}
+                          disabled={savingLocation}
+                          className="px-3 py-1.5 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 transition-colors"
+                        >
+                          {savingLocation ? 'Saving...' : 'Save'}
+                        </button>
+                        <button
+                          onClick={() => setEditingLocation(false)}
+                          className="px-3 py-1.5 text-xs bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* No position — allow admin/farmowner to set one */}
+              {selectedAnimal.last_latitude == null && canEditLocation && (
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Position</p>
+                  </div>
+                  {!editingLocation ? (
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">No position data</p>
+                      <button
+                        onClick={() => {
+                          setEditLat('');
+                          setEditLng('');
+                          setEditingLocation(true);
+                        }}
+                        className="text-xs px-2 py-1 bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 rounded hover:bg-brand-200 dark:hover:bg-brand-900/50 transition-colors"
+                      >
+                        + Set Location
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-0.5">Latitude</label>
+                          <input
+                            type="number"
+                            step="0.000001"
+                            value={editLat}
+                            onChange={(e) => setEditLat(e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-mono"
+                            placeholder="-26.719088"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-0.5">Longitude</label>
+                          <input
+                            type="number"
+                            step="0.000001"
+                            value={editLng}
+                            onChange={(e) => setEditLng(e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-mono"
+                            placeholder="27.709759"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            const lat = parseFloat(editLat);
+                            const lng = parseFloat(editLng);
+                            if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+                              alert('Invalid coordinates. Latitude: -90 to 90, Longitude: -180 to 180.');
+                              return;
+                            }
+                            setSavingLocation(true);
+                            try {
+                              await apiClient.patch(`/api/animals/${selectedAnimal.id}`, {
+                                last_latitude: lat,
+                                last_longitude: lng,
+                              });
+                              setSelectedAnimal({ ...selectedAnimal, last_latitude: lat, last_longitude: lng });
+                              setAnimals((prev) =>
+                                prev.map((a) => a.id === selectedAnimal.id ? { ...a, last_latitude: lat, last_longitude: lng } : a)
+                              );
+                              setEditingLocation(false);
+                            } catch (err) {
+                              console.error('Failed to update location:', err);
+                              alert('Failed to save location. Please try again.');
+                            } finally {
+                              setSavingLocation(false);
+                            }
+                          }}
+                          disabled={savingLocation}
+                          className="px-3 py-1.5 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 transition-colors"
+                        >
+                          {savingLocation ? 'Saving...' : 'Save'}
+                        </button>
+                        <button
+                          onClick={() => setEditingLocation(false)}
+                          className="px-3 py-1.5 text-xs bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -412,7 +593,7 @@ export default function AnimalsPage() {
               {/* Close button */}
               <div className="flex justify-end pt-2">
                 <button
-                  onClick={() => setSelectedAnimal(null)}
+                  onClick={() => { setSelectedAnimal(null); setEditingLocation(false); }}
                   className="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                 >
                   Close
