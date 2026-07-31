@@ -291,6 +291,7 @@ Run `make help` to see all available commands. Full reference:
 | `make simulate-gateway-offline` | BLE gateway: print only, no API |
 | `make simulate-day` | BLE full day: Loch Vaal, 12h in ~6 min (speed 120x) |
 | `make simulate-day-sibanyoni` | BLE full day: Sibanyoni, 50 cattle, 12h in ~6 min |
+| `make simulate-loop` | Both sims in continuous loop (random days, never stops) |
 | `make simulate-day-sibanyoni-theft` | Sibanyoni theft scenario (speed 360x) |
 | `make simulate-day-sibanyoni-breach` | Sibanyoni breach scenario (speed 360x) |
 | `make simulate-day-offline` | BLE full day: offline mode |
@@ -524,6 +525,10 @@ livestockguard/
 | Mobile farm picker (switch farms) | ✅ Live | Header bar dropdown → select farm → data reloads for that farm |
 | Multi-farm RBAC | ✅ Live | Admin sees all farms, farm_owner sees assigned only, herdsman locked |
 | Map fly-to-farm on switch | ✅ Live | Native map animates to farm coordinates when switching farms |
+| Cumulative daily scan (Seen Today) | ✅ Live | Scanner tracks unique tags across patrol — climbs toward 100% |
+| Shift management (patrol/kraal) | ✅ Live | Start shift → patrol → kraal check with departure/return counts |
+| Simulator loop mode | ✅ Live | `make simulate-loop` or dashboard button — continuous random days |
+| Dashboard simulator control | ✅ Live | Start/Stop button on Gateway page (dev-only, spawns processes) |
 | Mobile offline buffer | ✅ Live | Stores sightings in AsyncStorage, syncs on reconnect |
 | Movement trail visualisation | ✅ Built | Click marker → 24h trail from history endpoint |
 | Geofence drawing tools | ✅ Built | Click-to-draw polygon, undo last point, finish/cancel |

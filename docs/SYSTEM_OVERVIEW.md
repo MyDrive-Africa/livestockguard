@@ -646,7 +646,14 @@ make simulate-day              # Normal day, speed 120x (~6 min)
 make simulate-day-offline      # Same without API
 make simulate-day-theft        # Theft at 10:00, speed 360x
 make simulate-day-breach       # Breach scenario, speed 360x
+make simulate-loop             # Both farms in continuous loop (random days, never stops)
 ```
+
+**Loop Mode (`--loop` flag):**
+Both simulators support `--loop` which automatically restarts with random variation after each day completes. Each new day picks a random grazing area and random weather. Use `make simulate-loop` to run both farms continuously for extended testing.
+
+**Dashboard Control:**
+The Gateway page on the web dashboard has a Start/Stop button that spawns simulators directly (via a dev-only Vite plugin). Only works during `npm run dev` — not in production builds.
 
 ---
 
@@ -654,7 +661,7 @@ make simulate-day-breach       # Breach scenario, speed 360x
 
 PostgreSQL 16 with TimescaleDB extension for time-series data.
 
-### Schema Overview (9 migrations)
+### Schema Overview (11 migrations)
 
 | Migration | What It Creates |
 |-----------|----------------|
