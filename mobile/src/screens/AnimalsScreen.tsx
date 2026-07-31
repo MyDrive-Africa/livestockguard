@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { api } from '../services/api';
+import { useFarm } from '../context/FarmContext';
 
 interface Animal {
   id: string;
@@ -13,19 +14,21 @@ interface Animal {
 }
 
 export default function AnimalsScreen() {
+  const { selectedFarm } = useFarm();
   const [animals, setAnimals] = useState<Animal[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchAnimals = async () => {
+    if (!selectedFarm) return;
     try {
-      const resp = await api.get('/api/animals');
+      const resp = await api.get(`/api/animals?farm_id=${selectedFarm.id}`);
       setAnimals(resp.data);
     } catch (err) {
       console.warn('Failed to fetch animals:', err);
     }
   };
 
-  useEffect(() => { fetchAnimals(); }, []);
+  useEffect(() => { fetchAnimals(); }, [selectedFarm]);
 
   const onRefresh = async () => {
     setRefreshing(true);
