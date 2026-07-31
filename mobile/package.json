@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "expo/AppEntry.js",
   "scripts": {
+    "postinstall": "bash scripts/postinstall.sh",
     "start": "expo start",
     "ios": "expo run:ios",
     "android": "expo run:android",

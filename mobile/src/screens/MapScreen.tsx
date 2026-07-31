@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, Platform, TouchableOpacity, ScrollView } from 'react-native';
-import MapView, { Marker, Polygon, Polyline, Callout } from 'react-native-maps';
+import MapView, { Marker, Polygon, Polyline, Callout, Region } from 'react-native-maps';
 import { api } from '../services/api';
 import { useFarm } from '../context/FarmContext';
 
@@ -34,6 +34,7 @@ const INITIAL_REGION = {
 
 export default function MapScreen() {
   const { selectedFarm } = useFarm();
+  const mapRef = useRef<MapView>(null);
   const [animals, setAnimals] = useState<AnimalPosition[]>([]);
   const [geofences, setGeofences] = useState<Geofence[]>([]);
   const [mapType, setMapType] = useState<MapType>('standard');
@@ -57,6 +58,43 @@ export default function MapScreen() {
       console.warn('Failed to fetch map data:', err);
     }
   };
+
+  // Fly to new farm location when farm changes
+  useEffect(() => {
+    if (!selectedFarm) return;
+
+    // Use farm coordinates if available, otherwise fit to animals
+    if (selectedFarm.latitude && selectedFarm.longitude) {
+      mapRef.current?.animateToRegion({
+        latitude: selectedFarm.latitude,
+        longitude: selectedFarm.longitude,
+        latitudeDelta: 0.008,
+        longitudeDelta: 0.008,
+      }, 800);
+    }
+  }, [selectedFarm]);
+
+  // Fit map to animal positions after data loads (fallback if farm has no coords)
+  useEffect(() => {
+    if (!selectedFarm?.latitude && animals.length > 0 && mapRef.current) {
+      const withPos = animals.filter(a => a.last_latitude != null);
+      if (withPos.length > 0) {
+        const lats = withPos.map(a => a.last_latitude!);
+        const lons = withPos.map(a => a.last_longitude!);
+        const minLat = Math.min(...lats);
+        const maxLat = Math.max(...lats);
+        const minLon = Math.min(...lons);
+        const maxLon = Math.max(...lons);
+        const padding = 0.002;
+        mapRef.current.animateToRegion({
+          latitude: (minLat + maxLat) / 2,
+          longitude: (minLon + maxLon) / 2,
+          latitudeDelta: Math.max(maxLat - minLat + padding, 0.004),
+          longitudeDelta: Math.max(maxLon - minLon + padding, 0.004),
+        }, 800);
+      }
+    }
+  }, [animals]);
 
   const fetchTrail = async (animalId: string) => {
     try {
@@ -105,6 +143,7 @@ export default function MapScreen() {
   return (
     <View style={styles.container}>
       <MapView
+        ref={mapRef}
         style={styles.map}
         initialRegion={INITIAL_REGION}
         mapType={mapType}

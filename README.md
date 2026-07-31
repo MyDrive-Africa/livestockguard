@@ -520,9 +520,10 @@ livestockguard/
 | Mobile app (iOS + Android + Web) | ✅ Live | `make mobile-web` → admin + herdsman modes |
 | Mobile native map (Google Maps) | ✅ Live | Cow emoji markers, geofence polygons, trails, map type switcher |
 | Mobile interactive geofences | ✅ Live | Tap polygon to select/highlight, layer panel to show/hide |
-| Mobile BLE scanner service | ✅ Live | Herdsman screen: simulated BLE scan, cattle count |
+| Mobile BLE scanner service | ✅ Live | Herdsman screen: farm-aware BLE scan, cattle count varies by farm size |
 | Mobile farm picker (switch farms) | ✅ Live | Header bar dropdown → select farm → data reloads for that farm |
 | Multi-farm RBAC | ✅ Live | Admin sees all farms, farm_owner sees assigned only, herdsman locked |
+| Map fly-to-farm on switch | ✅ Live | Native map animates to farm coordinates when switching farms |
 | Mobile offline buffer | ✅ Live | Stores sightings in AsyncStorage, syncs on reconnect |
 | Movement trail visualisation | ✅ Built | Click marker → 24h trail from history endpoint |
 | Geofence drawing tools | ✅ Built | Click-to-draw polygon, undo last point, finish/cancel |

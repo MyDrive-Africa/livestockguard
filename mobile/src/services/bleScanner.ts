@@ -1,23 +1,22 @@
 /**
- * BLE Scanner Service
+ * BLE Scanner Service — Farm-Aware
  *
  * In SIMULATOR MODE (no real Bluetooth): Fetches cattle positions from API
- * and displays them as if detected via BLE. This lets you test the full
- * herdsman UI flow without physical BLE hardware.
+ * for the SELECTED FARM and simulates realistic BLE detection based on
+ * distance/RSSI. On larger farms (e.g. Sibanyoni 50ha), cattle further from
+ * the herdsman will drop in and out of range realistically.
  *
  * In REAL MODE (physical phone): Uses react-native-ble-plx to scan for
  * actual BLE ear tag advertisements.
- *
- * The mode is auto-detected based on platform capabilities.
  */
 
 import { Platform } from 'react-native';
 import { api } from './api';
 
 // Configuration
-const POLL_INTERVAL_MS = 10000; // Check API every 10s (simulates BLE scan interval)
-const GATEWAY_SERIAL = 'GW-LV-001';
-const FARM_ID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+const POLL_INTERVAL_MS = 8000; // Poll every 8s (simulates BLE scan interval)
+const BLE_MAX_RANGE_M = 100; // BLE max detection range in metres
+const BLE_RELIABLE_RANGE_M = 50; // Reliable detection range
 
 interface CattleSighting {
   animalId: string;
@@ -25,6 +24,7 @@ interface CattleSighting {
   mac: string;
   rssi: number;
   lastSeen: Date;
+  inRange: boolean;
 }
 
 class BLEScanner {
@@ -33,28 +33,56 @@ class BLEScanner {
   private registeredMacs: Map<string, string> = new Map(); // mac -> animal name
   private recentSightings: Map<string, CattleSighting> = new Map(); // mac -> sighting
   private totalRegistered = 0;
-  private useSimulatorMode = true; // Default: simulator mode (API-based)
+  private farmId: string | null = null;
+  private farmName: string = '';
+  private useSimulatorMode = true;
 
   /**
-   * Initialize — loads registered BLE tags from API.
+   * Initialize with a specific farm ID — loads registered BLE tags for that farm.
    */
-  async init() {
+  async init(farmId?: string) {
+    // Update farm context
+    if (farmId) {
+      this.farmId = farmId;
+    }
+
+    if (!this.farmId) {
+      console.warn('[BLE] No farm ID set — cannot initialize');
+      return;
+    }
+
+    // Clear previous state when switching farms
+    this.registeredMacs.clear();
+    this.recentSightings.clear();
+    this.totalRegistered = 0;
+
     try {
-      const resp = await api.get(`/api/gateway/tags?farm_id=${FARM_ID}`);
+      const resp = await api.get(`/api/gateway/tags?farm_id=${this.farmId}`);
       const tags = resp.data;
       this.totalRegistered = tags.length;
       tags.forEach((t: any) => {
         this.registeredMacs.set(t.mac_address, t.animal_name || t.tag_name || 'Unknown');
       });
-      console.log(`[BLE] Initialized: ${this.totalRegistered} registered tags`);
+      console.log(`[BLE] Initialized for farm ${this.farmId}: ${this.totalRegistered} registered tags`);
     } catch (err) {
-      console.warn('[BLE] Failed to load tags from API:', err);
+      console.warn('[BLE] Failed to load tags from API, falling back to animal count:', err);
+      // Fallback: use animals endpoint to get count
+      try {
+        const animalsResp = await api.get(`/api/animals?farm_id=${this.farmId}`);
+        const animals = animalsResp.data;
+        this.totalRegistered = animals.length;
+        animals.forEach((a: any) => {
+          const mac = a.tag_id || `SIM:${a.id.substring(0, 11)}`;
+          this.registeredMacs.set(mac, a.name || `Animal-${a.id.substring(0, 6)}`);
+        });
+        console.log(`[BLE] Fallback: loaded ${this.totalRegistered} animals for farm`);
+      } catch {
+        console.warn('[BLE] Could not load animals either');
+      }
     }
 
-    // Detect if we should use real BLE or simulator mode
-    // Real BLE only works on physical devices (not simulators)
     this.useSimulatorMode = Platform.OS === 'web' || __DEV__;
-    console.log(`[BLE] Mode: ${this.useSimulatorMode ? 'SIMULATOR (API polling)' : 'REAL BLE'}`);
+    console.log(`[BLE] Mode: ${this.useSimulatorMode ? 'SIMULATOR' : 'REAL BLE'}`);
   }
 
   /**
@@ -83,27 +111,30 @@ class BLEScanner {
   }
 
   /**
-   * SIMULATOR MODE: Poll the API for cattle positions.
-   * Uses the herd-count endpoint to show how many cattle were seen today.
+   * SIMULATOR MODE: Simulates realistic BLE detection.
+   * On each poll cycle, a random subset of registered cattle are "in range"
+   * based on simulated distance. Larger herds on bigger farms will have more
+   * variability — some cattle drift in/out of BLE range naturally.
    */
   private startSimulatorMode() {
-    console.log('[BLE-SIM] Starting API-based simulation...');
+    console.log(`[BLE-SIM] Starting simulation for ${this.totalRegistered} cattle...`);
 
     const poll = async () => {
+      if (!this.farmId || this.totalRegistered === 0) return;
+
       try {
-        // Get herd count (uses actual BLE sighting data from the server)
-        const resp = await api.get(`/api/gateway/herd-count/${FARM_ID}`);
+        // Try herd-count endpoint first (uses real sighting data from simulator)
+        const resp = await api.get(`/api/gateway/herd-count/${this.farmId}`);
         const data = resp.data;
 
-        this.totalRegistered = data.total_registered || 0;
+        if (data.total_registered) {
+          this.totalRegistered = data.total_registered;
+        }
 
-        // Update sightings: animals seen today are "in range"
         this.recentSightings.clear();
         const seenToday = data.seen_today || 0;
 
-        // Mark seen animals as detected, missing as not
         if (data.missing) {
-          // All registered minus missing = seen
           const missingNames = new Set(data.missing.map((m: any) => m.name));
           for (const [mac, name] of this.registeredMacs.entries()) {
             if (!missingNames.has(name)) {
@@ -111,13 +142,13 @@ class BLEScanner {
                 animalId: mac,
                 animalName: name,
                 mac,
-                rssi: -50 - Math.floor(Math.random() * 20),
+                rssi: -45 - Math.floor(Math.random() * 25),
                 lastSeen: new Date(),
+                inRange: true,
               });
             }
           }
-        } else {
-          // Fallback: use seen_today count
+        } else if (seenToday > 0) {
           let i = 0;
           for (const [mac, name] of this.registeredMacs.entries()) {
             if (i >= seenToday) break;
@@ -125,58 +156,87 @@ class BLEScanner {
               animalId: mac,
               animalName: name,
               mac,
-              rssi: -50 - Math.floor(Math.random() * 20),
+              rssi: -45 - Math.floor(Math.random() * 25),
               lastSeen: new Date(),
+              inRange: true,
             });
             i++;
           }
         }
-      } catch (err) {
-        // Offline or API error — keep last known state
-        console.warn('[BLE-SIM] Poll failed:', err);
+      } catch {
+        // Herd-count endpoint not available — use realistic local simulation
+        this.simulateLocalBLE();
       }
     };
 
-    poll(); // Initial poll
+    poll();
     this.pollTimer = setInterval(poll, POLL_INTERVAL_MS);
   }
 
   /**
-   * REAL BLE MODE: Scan for actual BLE advertisements.
-   * (Requires physical phone with Bluetooth)
+   * Local BLE simulation fallback: simulates a herdsman walking through the herd.
+   * On each cycle, a percentage of cattle are "in range" based on a moving
+   * detection window. This creates realistic variation — especially on large farms
+   * where 50 cattle are scattered across 50ha.
    */
-  private startRealBLE() {
-    console.log('[BLE-REAL] Starting real BLE scanning...');
-    // This would use react-native-ble-plx
-    // For now, fall back to simulator mode
-    console.warn('[BLE-REAL] Real BLE not available in this build, using simulator mode');
-    this.startSimulatorMode();
+  private simulateLocalBLE() {
+    this.recentSightings.clear();
+
+    // Simulate: herdsman detects 60-90% of cattle on small farms,
+    // 40-75% on large farms (more spread out)
+    const isLargeFarm = this.totalRegistered > 20;
+    const minDetectPct = isLargeFarm ? 0.40 : 0.70;
+    const maxDetectPct = isLargeFarm ? 0.80 : 0.95;
+    const detectPct = minDetectPct + Math.random() * (maxDetectPct - minDetectPct);
+    const numDetected = Math.round(this.totalRegistered * detectPct);
+
+    // Randomly select which cattle are "in range" this cycle
+    const allMacs = Array.from(this.registeredMacs.entries());
+    const shuffled = allMacs.sort(() => Math.random() - 0.5);
+
+    for (let i = 0; i < Math.min(numDetected, shuffled.length); i++) {
+      const [mac, name] = shuffled[i];
+      // Simulate RSSI based on "distance" — closer cattle have stronger signal
+      const distance = Math.random() * BLE_MAX_RANGE_M;
+      const rssi = distance < BLE_RELIABLE_RANGE_M
+        ? -40 - Math.floor(Math.random() * 15)  // Strong: -40 to -55
+        : -60 - Math.floor(Math.random() * 25); // Weak: -60 to -85
+
+      this.recentSightings.set(mac, {
+        animalId: mac,
+        animalName: name,
+        mac,
+        rssi,
+        lastSeen: new Date(),
+        inRange: rssi > -80,
+      });
+    }
   }
 
   /**
-   * Get count of cattle currently "in range" (detected recently).
+   * REAL BLE MODE placeholder.
    */
+  private startRealBLE() {
+    console.log('[BLE-REAL] Real BLE not available in this build, using simulator mode');
+    this.startSimulatorMode();
+  }
+
+  /** Get count of cattle currently "in range" (detected recently). */
   getCattleInRange(): number {
     return this.recentSightings.size;
   }
 
-  /**
-   * Get total registered cattle count.
-   */
+  /** Get total registered cattle count for this farm. */
   getTotalRegistered(): number {
     return this.totalRegistered;
   }
 
-  /**
-   * Get list of recent sightings.
-   */
+  /** Get list of recent sightings. */
   getRecentSightings(): CattleSighting[] {
     return Array.from(this.recentSightings.values());
   }
 
-  /**
-   * Get missing animals (registered but not detected).
-   */
+  /** Get missing animals (registered but not detected this cycle). */
   getMissing(): string[] {
     const detected = new Set(this.recentSightings.keys());
     const missing: string[] = [];
@@ -186,6 +246,11 @@ class BLEScanner {
       }
     }
     return missing;
+  }
+
+  /** Get current farm ID. */
+  getFarmId(): string | null {
+    return this.farmId;
   }
 }
 

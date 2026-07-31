@@ -38,7 +38,12 @@
         "FOREGROUND_SERVICE",
         "RECEIVE_BOOT_COMPLETED",
         "WAKE_LOCK"
-      ]
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyA700m5_dbbWsKZLOg0Q-KcxdE--CGxuoY"
+        }
+      }
     },
     "web": {
       "bundler": "metro",

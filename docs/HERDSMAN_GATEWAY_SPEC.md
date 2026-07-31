@@ -329,7 +329,8 @@ python3 gateway_simulator.py --farm lochvaal --animals 50 --duration 300 --scan-
 ```
 
 The simulator:
-- Creates N virtual animals with random BLE MACs
+- Fetches registered BLE tags from the API (so MACs resolve to real animals on the dashboard)
+- Falls back to random MACs in offline mode or if no tags are registered
 - Simulates a herdsman walking a rectangular patrol route
 - Calculates realistic RSSI based on distance (log-distance path loss model)
 - Sends batches to the API at configurable intervals

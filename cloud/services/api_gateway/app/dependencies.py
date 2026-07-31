@@ -146,7 +146,7 @@ async def get_user_farms(
         )
         org_farms = result.scalars().all()
         farm_map = {
-            str(f.id): {"farm_id": str(f.id), "farm_name": f.name, "role_at_farm": "admin"}
+            str(f.id): {"farm_id": str(f.id), "farm_name": f.name, "role_at_farm": "admin", "latitude": f.latitude, "longitude": f.longitude}
             for f in org_farms
         }
 
@@ -162,7 +162,7 @@ async def get_user_farms(
         for assignment, farm in assigned_result.all():
             fid = str(farm.id)
             if fid not in farm_map:
-                farm_map[fid] = {"farm_id": fid, "farm_name": farm.name, "role_at_farm": assignment.role_at_farm}
+                farm_map[fid] = {"farm_id": fid, "farm_name": farm.name, "role_at_farm": assignment.role_at_farm, "latitude": farm.latitude, "longitude": farm.longitude}
 
         return list(farm_map.values())
     else:
@@ -177,7 +177,7 @@ async def get_user_farms(
         )
         rows = result.all()
         return [
-            {"farm_id": str(assignment.farm_id), "farm_name": farm.name, "role_at_farm": assignment.role_at_farm}
+            {"farm_id": str(assignment.farm_id), "farm_name": farm.name, "role_at_farm": assignment.role_at_farm, "latitude": farm.latitude, "longitude": farm.longitude}
             for assignment, farm in rows
         ]
 

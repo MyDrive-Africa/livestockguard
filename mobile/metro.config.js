@@ -4,6 +4,26 @@ const path = require('path');
 
 const config = getDefaultConfig(__dirname);
 
+// Fix hoisted dependency resolution — ensures Metro can always find
+// @react-native/* packages that npm hoists out of react-native/node_modules
+const rnPkg = require('./node_modules/react-native/package.json');
+const rnDeps = Object.keys(rnPkg.dependencies || {}).filter(d => d.startsWith('@react-native/'));
+const extraModules = { ...config.resolver.extraNodeModules };
+rnDeps.forEach(dep => {
+  const depPath = path.resolve(__dirname, 'node_modules', dep);
+  try {
+    require('fs').statSync(depPath);
+    extraModules[dep] = depPath;
+  } catch (e) { /* not installed, skip */ }
+});
+config.resolver.extraNodeModules = extraModules;
+
+// Ensure Metro watches the top-level node_modules
+config.watchFolders = [
+  ...(config.watchFolders || []),
+  path.resolve(__dirname, 'node_modules'),
+];
+
 // Shim native-only modules for web platform
 const originalResolveRequest = config.resolver.resolveRequest;
 

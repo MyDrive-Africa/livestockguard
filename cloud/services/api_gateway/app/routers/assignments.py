@@ -54,6 +54,8 @@ class MyFarmsResponse(BaseModel):
     farm_id: str
     farm_name: str
     role_at_farm: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 # ─── Endpoints ────────────────────────────────────────

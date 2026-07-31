@@ -34,16 +34,19 @@ FARM_PRESETS = {
         'lat': -29.12, 'lon': 26.21,
         'name': 'Boschhoek Farm (Free State)',
         'gateway_serial': 'GW-BH-001',
+        'farm_id': 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     },
     'lochvaal': {
         'lat': -26.719088, 'lon': 27.709759,
         'name': 'Loch Vaal Plot 30 (Gauteng)',
         'gateway_serial': 'GW-LV-001',
+        'farm_id': 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
     },
     'sibanyoni': {
         'lat': -25.3580560, 'lon': 25.3612750,
         'name': 'Sibanyoni Farm (North West)',
         'gateway_serial': 'GW-SB-001',
+        'farm_id': 'dddddddd-1111-2222-3333-555555555555',
     },
 }
 
@@ -151,6 +154,23 @@ def generate_mac() -> str:
 
 
 # ─── API Client ──────────────────────────────────────────────────────────────
+
+def fetch_registered_tags(api_url: str, farm_id: str) -> Optional[List[dict]]:
+    """Fetch registered BLE tags from the API for a given farm.
+
+    Returns list of dicts with 'mac_address' and 'animal_name', or None if unavailable.
+    """
+    try:
+        resp = requests.get(f"{api_url}/api/gateway/tags", params={"farm_id": farm_id}, timeout=10)
+        if resp.status_code == 200:
+            tags = resp.json()
+            if tags:
+                return [{"mac_address": t["mac_address"], "animal_name": t.get("animal_name") or t["mac_address"]}
+                        for t in tags if t.get("status", "active") == "active"]
+        return None
+    except Exception:
+        return None
+
 
 def send_batch(api_url: str, gateway_serial: str, gateway: SimulatedGateway,
                sightings: List[dict], session_id: Optional[str] = None):
@@ -266,13 +286,39 @@ def main(api_url, farm, gateway_serial, herdsman, animals, scan_interval,
 
     # Create animals scattered around farm
     tags: List[SimulatedEarTag] = []
-    for i in range(animals):
-        mac = generate_mac()
-        lat = farm_lat + random.uniform(-offset * 1.5, offset * 1.5)
-        lon = farm_lon + random.uniform(-offset * 1.5, offset * 1.5)
-        name = f"Cow-{i + 1:03d}"
-        tags.append(SimulatedEarTag(mac_address=mac, animal_name=name, lat=lat, lon=lon))
-        print(f"  Tag: {mac} → {name} @ ({lat:.5f}, {lon:.5f})")
+
+    # Try to fetch registered tags from the API (so MACs resolve to animals)
+    registered_tags = None
+    if not offline and preset.get('farm_id'):
+        print(f"Fetching registered BLE tags from API...")
+        registered_tags = fetch_registered_tags(api_url, preset['farm_id'])
+        if registered_tags:
+            print(f"  Found {len(registered_tags)} registered tags in database")
+        else:
+            print(f"  No registered tags found — using random MACs (will show as unresolved)")
+
+    if registered_tags:
+        # Use registered MACs so sightings resolve to actual animals
+        num_tags = min(animals, len(registered_tags))
+        for i in range(num_tags):
+            rt = registered_tags[i]
+            lat = farm_lat + random.uniform(-offset * 1.5, offset * 1.5)
+            lon = farm_lon + random.uniform(-offset * 1.5, offset * 1.5)
+            tags.append(SimulatedEarTag(
+                mac_address=rt['mac_address'],
+                animal_name=rt['animal_name'],
+                lat=lat, lon=lon,
+            ))
+            print(f"  Tag: {rt['mac_address']} → {rt['animal_name']} @ ({lat:.5f}, {lon:.5f})")
+    else:
+        # Fallback: generate random MACs (won't resolve to animals)
+        for i in range(animals):
+            mac = generate_mac()
+            lat = farm_lat + random.uniform(-offset * 1.5, offset * 1.5)
+            lon = farm_lon + random.uniform(-offset * 1.5, offset * 1.5)
+            name = f"Cow-{i + 1:03d}"
+            tags.append(SimulatedEarTag(mac_address=mac, animal_name=name, lat=lat, lon=lon))
+            print(f"  Tag: {mac} → {name} @ ({lat:.5f}, {lon:.5f})")
 
     print(f"\nGateway starting at ({gateway.lat:.5f}, {gateway.lon:.5f})")
     print(f"{'─' * 50}")

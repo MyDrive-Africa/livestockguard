@@ -1,24 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { bleScanner } from '../services/bleScanner';
+import { useFarm } from '../context/FarmContext';
 
 /**
- * Herdsman view — simple cattle count and scanner status.
- * This is what the herdsman sees if they open the app.
- * The BLE scanner runs in the background regardless.
+ * Herdsman view — cattle count and scanner status, scoped to selected farm.
+ * On Sibanyoni (50 cattle, 50ha) the count will vary as cattle move in/out
+ * of BLE range. On Loch Vaal (10 cattle, small area) most stay in range.
  */
 export default function HerdsmanScreen() {
+  const { selectedFarm } = useFarm();
   const [cattleInRange, setCattleInRange] = useState(0);
   const [totalRegistered, setTotalRegistered] = useState(0);
   const [scannerActive, setScannerActive] = useState(false);
   const [missing, setMissing] = useState<string[]>([]);
 
   useEffect(() => {
+    if (!selectedFarm) return;
+
     async function startScanner() {
-      await bleScanner.init();
+      // Re-init scanner with new farm ID
+      await bleScanner.init(selectedFarm!.id);
       bleScanner.start();
       setScannerActive(true);
       setTotalRegistered(bleScanner.getTotalRegistered());
+      setCattleInRange(bleScanner.getCattleInRange());
     }
     startScanner();
 
@@ -32,13 +38,17 @@ export default function HerdsmanScreen() {
       clearInterval(interval);
       bleScanner.stop();
     };
-  }, []);
+  }, [selectedFarm]);
 
   const allAccountedFor = cattleInRange >= totalRegistered && totalRegistered > 0;
-  const missingCount = totalRegistered - cattleInRange;
 
   return (
     <View style={styles.container}>
+      {/* Farm name */}
+      <View style={styles.farmBadge}>
+        <Text style={styles.farmBadgeText}>{selectedFarm?.name || 'No farm'}</Text>
+      </View>
+
       {/* Status */}
       <View style={[styles.statusBar, { backgroundColor: scannerActive ? '#16a34a' : '#ef4444' }]}>
         <Text style={styles.statusText}>
@@ -60,7 +70,11 @@ export default function HerdsmanScreen() {
       ) : missing.length > 0 ? (
         <View style={styles.warning}>
           <Text style={styles.warningText}>⚠️ {missing.length} cattle not detected</Text>
-          <Text style={styles.missingList}>{missing.slice(0, 5).join(', ')}</Text>
+          <Text style={styles.missingList}>{missing.slice(0, 5).join(', ')}{missing.length > 5 ? ` +${missing.length - 5} more` : ''}</Text>
+        </View>
+      ) : totalRegistered === 0 ? (
+        <View style={styles.info}>
+          <Text style={styles.infoText}>No cattle registered for this farm</Text>
         </View>
       ) : (
         <View style={styles.info}>
@@ -70,7 +84,7 @@ export default function HerdsmanScreen() {
 
       {/* Footer */}
       <Text style={styles.footer}>
-        BLE scan every 5s · GPS every 30s · Batch every 25s
+        BLE scan every 8s · {totalRegistered > 20 ? 'Large herd — range varies' : 'Small herd — close range'}
       </Text>
     </View>
   );
@@ -78,6 +92,8 @@ export default function HerdsmanScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#111827', justifyContent: 'center', alignItems: 'center' },
+  farmBadge: { position: 'absolute', top: 100, backgroundColor: '#374151', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
+  farmBadgeText: { color: '#9ca3af', fontSize: 12, fontWeight: '500' },
   statusBar: { position: 'absolute', top: 60, left: 20, right: 20, padding: 8, borderRadius: 8, alignItems: 'center' },
   statusText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   countContainer: { alignItems: 'center', marginBottom: 24 },
@@ -90,5 +106,5 @@ const styles = StyleSheet.create({
   missingList: { color: '#fca5a5', fontSize: 12, textAlign: 'center', marginTop: 4, opacity: 0.8 },
   info: { padding: 16 },
   infoText: { color: '#6b7280', fontSize: 14, textAlign: 'center' },
-  footer: { position: 'absolute', bottom: 40, color: '#4b5563', fontSize: 12 },
+  footer: { position: 'absolute', bottom: 40, color: '#4b5563', fontSize: 12, textAlign: 'center', paddingHorizontal: 20 },
 });
