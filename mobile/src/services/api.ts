@@ -104,7 +104,12 @@ export interface Farm {
 /** Fetch farms accessible to the current user */
 export async function getMyFarms(): Promise<Farm[]> {
   const resp = await api.get('/api/v1/assignments/me/farms');
-  return resp.data;
+  // Map API response shape {farm_id, farm_name} to our Farm interface {id, name}
+  return resp.data.map((f: any) => ({
+    id: f.farm_id,
+    name: f.farm_name,
+    location: f.role_at_farm,
+  }));
 }
 
 /** Get the last selected farm ID from local storage */

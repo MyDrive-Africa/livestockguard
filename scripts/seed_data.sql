@@ -556,3 +556,26 @@ RAISE NOTICE '  Farm ID: dddddddd-1111-2222-3333-555555555555';
 RAISE NOTICE '  Gateway: GW-SB-001';
 RAISE NOTICE '  BLE MACs: B1:C2:D3:E4:F5:01 through F5:50';
 END $$;
+
+
+-- ═══════════════════════════════════════════════════════════════════
+-- USER-FARM ASSIGNMENTS
+-- Links users to specific farms for the farm picker / RBAC system
+-- ═══════════════════════════════════════════════════════════════════
+
+-- Main demo user (africa.mydrive@gmail.com) gets access to all 3 farms
+INSERT INTO user_farm_assignments (user_id, farm_id, role_at_farm) VALUES
+    ('33333333-3333-3333-3333-333333333333', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'farm_owner'),
+    ('33333333-3333-3333-3333-333333333333', 'dddddddd-1111-2222-3333-555555555555', 'farm_owner'),
+    ('33333333-3333-3333-3333-333333333333', '22222222-2222-2222-2222-222222222222', 'farm_owner')
+ON CONFLICT (user_id, farm_id) DO NOTHING;
+
+-- Loch Vaal user — assigned to Loch Vaal Plot 30
+INSERT INTO user_farm_assignments (user_id, farm_id, role_at_farm) VALUES
+    ('cccccccc-cccc-cccc-cccc-cccccccccccc', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'farm_owner')
+ON CONFLICT (user_id, farm_id) DO NOTHING;
+
+-- Sibanyoni user — assigned to Sibanyoni Farm
+INSERT INTO user_farm_assignments (user_id, farm_id, role_at_farm) VALUES
+    ('dddddddd-1111-2222-3333-666666666666', 'dddddddd-1111-2222-3333-555555555555', 'farm_owner')
+ON CONFLICT (user_id, farm_id) DO NOTHING;

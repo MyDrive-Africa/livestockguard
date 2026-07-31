@@ -131,8 +131,8 @@ async def get_user_farms(
     user_id = user["user_id"]
     role = user["role"]
 
-    if role == "admin":
-        # Admin sees all farms in their org — look up org from user record
+    if role in ("admin", "owner"):
+        # Admin/owner sees all farms in their org + any explicitly assigned farms
         user_record = await db.execute(
             select(User).where(User.id == UUID(user_id))
         )
@@ -140,14 +140,31 @@ async def get_user_farms(
         if not db_user:
             raise HTTPException(status_code=404, detail="User not found")
 
+        # Farms in user's org
         result = await db.execute(
             select(Farm).where(Farm.organisation_id == db_user.organisation_id)
         )
-        farms = result.scalars().all()
-        return [
-            {"farm_id": str(f.id), "farm_name": f.name, "role_at_farm": "admin"}
-            for f in farms
-        ]
+        org_farms = result.scalars().all()
+        farm_map = {
+            str(f.id): {"farm_id": str(f.id), "farm_name": f.name, "role_at_farm": "admin"}
+            for f in org_farms
+        }
+
+        # Also include explicitly assigned farms (may be in other orgs)
+        assigned_result = await db.execute(
+            select(UserFarmAssignment, Farm)
+            .join(Farm, UserFarmAssignment.farm_id == Farm.id)
+            .where(
+                UserFarmAssignment.user_id == UUID(user_id),
+                UserFarmAssignment.revoked_at.is_(None),
+            )
+        )
+        for assignment, farm in assigned_result.all():
+            fid = str(farm.id)
+            if fid not in farm_map:
+                farm_map[fid] = {"farm_id": fid, "farm_name": farm.name, "role_at_farm": assignment.role_at_farm}
+
+        return list(farm_map.values())
     else:
         # Non-admin: only assigned farms
         result = await db.execute(
