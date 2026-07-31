@@ -57,6 +57,7 @@ class Farm(Base):
     devices = relationship("Device", back_populates="farm")
     geofences = relationship("Geofence", back_populates="farm")
     alerts = relationship("Alert", back_populates="farm")
+    user_assignments = relationship("UserFarmAssignment", back_populates="farm")
 
 
 class User(Base):
@@ -67,13 +68,37 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=False)
-    role = Column(String(50), nullable=False, default="viewer")
+    role = Column(String(50), nullable=False, default="viewer")  # admin, farm_owner, herdsman, viewer
     active = Column(Boolean, nullable=False, default=True)
     last_login = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=func.now())
     updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
 
     organisation = relationship("Organisation", back_populates="users")
+    farm_assignments = relationship("UserFarmAssignment", back_populates="user", foreign_keys="UserFarmAssignment.user_id")
+
+
+class UserFarmAssignment(Base):
+    """Links a user to a specific farm with a scoped role.
+    Admin users bypass this table — they have access to all farms in their org.
+    """
+    __tablename__ = "user_farm_assignments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    farm_id = Column(UUID(as_uuid=True), ForeignKey("farms.id", ondelete="CASCADE"), nullable=False)
+    role_at_farm = Column(String(50), nullable=False)  # farm_owner, herdsman, viewer
+    assigned_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    assigned_at = Column(DateTime(timezone=True), default=func.now())
+    revoked_at = Column(DateTime(timezone=True))  # NULL = active
+
+    user = relationship("User", back_populates="farm_assignments", foreign_keys=[user_id])
+    farm = relationship("Farm", back_populates="user_assignments")
+    assigner = relationship("User", foreign_keys=[assigned_by], uselist=False)
+
+    __table_args__ = (
+        Index("idx_user_farm_assign_active", user_id, farm_id, postgresql_where=(revoked_at.is_(None))),
+    )
 
 
 class Device(Base):

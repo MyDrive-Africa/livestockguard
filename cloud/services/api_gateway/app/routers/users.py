@@ -1,5 +1,10 @@
 """
-User management router — admin can add/edit users, change passwords, assign roles.
+User management router — admin/farm_owner can add/edit users, change passwords, assign roles.
+
+Role model:
+  - admin: can create any user role, manage all users in org
+  - farm_owner: can create herdsman/viewer users for their farms
+  - herdsman/viewer: no user management permissions
 """
 
 import os
@@ -15,10 +20,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'shared'))
 
 from livestockguard_common.db_models import User
-from app.dependencies import get_db, get_current_user
+from app.dependencies import get_db, get_current_user, ROLE_HIERARCHY
 from app.routers.auth import pwd_context
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
+
+# Valid roles in the system
+VALID_ROLES = ("admin", "farm_owner", "herdsman", "viewer")
 
 
 class UserResponse(BaseModel):
@@ -38,7 +46,7 @@ class UserCreate(BaseModel):
     email: str
     password: str
     full_name: str
-    role: str = "viewer"  # owner, manager, viewer, herdsman
+    role: str = "viewer"  # admin, farm_owner, herdsman, viewer
 
 
 class UserUpdate(BaseModel):
@@ -89,9 +97,31 @@ async def create_user(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    """Create a new user (admin only)."""
-    if user["role"] not in ("owner", "admin", "manager"):
-        raise HTTPException(status_code=403, detail="Only managers+ can create users")
+    """
+    Create a new user in the organisation.
+
+    Permissions:
+      - admin: can create users with any role
+      - farm_owner: can create herdsman or viewer users only
+      - herdsman/viewer: cannot create users
+    """
+    # Check permission to create users
+    if user["role"] not in ("admin", "farm_owner"):
+        raise HTTPException(status_code=403, detail="Only admin or farm_owner can create users")
+
+    # Validate requested role
+    if req.role not in VALID_ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid role. Must be one of: {', '.join(VALID_ROLES)}",
+        )
+
+    # Farm owners can only create herdsman or viewer
+    if user["role"] == "farm_owner" and req.role not in ("herdsman", "viewer"):
+        raise HTTPException(
+            status_code=403,
+            detail="Farm owners can only create herdsman or viewer users",
+        )
 
     # Get org from current user
     current = await db.execute(select(User).where(User.id == UUID(user["user_id"])))
@@ -131,14 +161,41 @@ async def update_user(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    """Update user details (name, role, active status)."""
-    if user["role"] not in ("owner", "admin", "manager"):
-        raise HTTPException(status_code=403, detail="Only managers+ can edit users")
+    """
+    Update user details (name, role, active status).
+
+    Permissions:
+      - admin: can edit any user
+      - farm_owner: can edit herdsman/viewer users only
+    """
+    if user["role"] not in ("admin", "farm_owner"):
+        raise HTTPException(status_code=403, detail="Only admin or farm_owner can edit users")
 
     result = await db.execute(select(User).where(User.id == user_id))
     target = result.scalar_one_or_none()
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Farm owners cannot edit admin or other farm_owners
+    if user["role"] == "farm_owner" and target.role in ("admin", "farm_owner"):
+        raise HTTPException(
+            status_code=403,
+            detail="Farm owners cannot edit admin or other farm_owner users",
+        )
+
+    # Validate role if being changed
+    if req.role is not None:
+        if req.role not in VALID_ROLES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid role. Must be one of: {', '.join(VALID_ROLES)}",
+            )
+        # Farm owners cannot promote to admin or farm_owner
+        if user["role"] == "farm_owner" and req.role not in ("herdsman", "viewer"):
+            raise HTTPException(
+                status_code=403,
+                detail="Farm owners can only assign herdsman or viewer roles",
+            )
 
     if req.full_name is not None:
         target.full_name = req.full_name
@@ -172,7 +229,7 @@ async def change_password(
 ):
     """Change a user's password (admin or self)."""
     # Allow self-change or admin change
-    if str(user_id) != user["user_id"] and user["role"] not in ("owner", "admin"):
+    if str(user_id) != user["user_id"] and user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Can only change own password or admin required")
 
     result = await db.execute(select(User).where(User.id == user_id))
@@ -192,9 +249,9 @@ async def delete_user(
     db: AsyncSession = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    """Deactivate a user (soft delete)."""
-    if user["role"] not in ("owner", "admin"):
-        raise HTTPException(status_code=403, detail="Only admins can delete users")
+    """Deactivate a user (soft delete). Admin only."""
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can deactivate users")
 
     result = await db.execute(select(User).where(User.id == user_id))
     target = result.scalar_one_or_none()

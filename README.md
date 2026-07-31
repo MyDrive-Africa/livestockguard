@@ -66,10 +66,15 @@ Log in with any of:
 
 | Requirement | Purpose | Install |
 |-------------|---------|---------|
+| fnm | Node version manager (mobile needs Node 20) | `brew install fnm` + add `eval "$(fnm env --use-on-cd)"` to `~/.zshrc` |
+| Node 20 LTS | Required for Metro bundler (Expo SDK 52) | `fnm install 20 && fnm default 20` |
 | Expo CLI | React Native mobile builds | `npm install -g expo-cli` |
 | Xcode 15+ | iOS simulator builds | Mac App Store |
 | Android Studio + SDK | Android emulator builds | [developer.android.com](https://developer.android.com/studio) |
 | OpenJDK 17 | Android Gradle builds | `brew install openjdk@17` |
+
+> **Node version note:** The mobile app requires Node 20 LTS. Node 22+ causes Metro bundler crashes.
+> A `.node-version` file in `mobile/` will auto-switch via fnm when you `cd` into the directory.
 
 ---
 
@@ -648,7 +653,7 @@ Runs automatically on push/PR to `main`:
 | Database | PostgreSQL 16 + TimescaleDB (time-series), Redis 7 (cache/pub-sub) |
 | Messaging | EMQX 5.5 (MQTT 5.0 broker), Redis Streams |
 | Web Dashboard | React 18, TypeScript, Vite, MapLibre GL JS, TailwindCSS, Zustand, Recharts, Framer Motion |
-| Mobile App | React Native, Expo 51, React Native Maps, AsyncStorage |
+| Mobile App | React Native, Expo 52, React Native Maps, AsyncStorage |
 | Protocols | MQTT 5.0 (binary), REST/JSON, WebSocket, BLE 5.0 |
 | Infrastructure | Docker Compose, AWS af-south-1 (production), GitHub Actions CI |
 | Hardware | nRF9160 (cellular GPS collar), nRF52840 (BLE ear tag), ESP32-S3 (gateway option) |

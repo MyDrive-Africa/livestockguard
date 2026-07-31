@@ -18,3 +18,8 @@ dist/
 coverage/
 *.log
 firebase-credentials.json
+
+# Mobile (Expo / React Native)
+mobile/.expo/
+mobile/ios/
+mobile/android/
