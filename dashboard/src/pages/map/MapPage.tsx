@@ -291,20 +291,39 @@ export default function MapPage() {
   const farmCentreMarkerRef = useRef<maplibregl.Marker | null>(null);
 
   function addGeofenceToMap(map: maplibregl.Map, id: string, name: string, type: string, geometry: any, areaHectares?: number | null) {
-    const color = type === 'exclusion' ? '#ef4444' : '#22c55e';
+    // Distinct colors per zone type (based on emoji/name prefix)
+    let color = type === 'exclusion' ? '#ef4444' : '#22c55e';
+    let labelBg = color;
+    let labelColor = '#fff';
+    if (name.includes('Option A') || name.includes('Option B') || name.includes('Option C') || name.includes('⬜')) { color = '#3b82f6'; labelBg = '#60a5fa'; labelColor = '#000'; }
+    else if (name.includes('🔥') || name.includes('Firebreak')) { color = '#f97316'; labelBg = '#fb923c'; labelColor = '#000'; }
+    else if (name.includes('🐄') || name.includes('Kraal')) { color = '#a855f7'; labelBg = '#c084fc'; labelColor = '#000'; }
+    else if (name.includes('🏗️') || name.includes('Handling')) { color = '#6366f1'; labelBg = '#a5b4fc'; labelColor = '#000'; }
+    else if (name.includes('🦶') || name.includes('Foot Bath')) { color = '#14b8a6'; labelBg = '#5eead4'; labelColor = '#000'; }
+    else if (name.includes('🌱') || name.includes('Lucerne')) { color = '#84cc16'; labelBg = '#bef264'; labelColor = '#000'; }
+    else if (name.includes('🌿') || name.includes('Grazing')) { color = '#22c55e'; labelBg = '#86efac'; labelColor = '#000'; }
+    else if (name.includes('🏠') || name.includes('Herdsman')) { color = '#f59e0b'; labelBg = '#fcd34d'; labelColor = '#000'; }
+    else if (name.includes('🚜') || name.includes('Machinery') || name.includes('Storage')) { color = '#64748b'; labelBg = '#cbd5e1'; labelColor = '#000'; }
+    else if (name.includes('🏡') || name.includes('Homestead')) { color = '#ec4899'; labelBg = '#f9a8d4'; labelColor = '#000'; }
+    else if (type === 'exclusion') { color = '#ef4444'; labelBg = '#fca5a5'; labelColor = '#000'; }
+
     map.addSource(`fence-${id}`, {
       type: 'geojson',
       data: { type: 'Feature', properties: { name }, geometry },
     });
-    map.addLayer({ id: `fence-fill-${id}`, type: 'fill', source: `fence-${id}`, paint: { 'fill-color': color, 'fill-opacity': 0.12 } });
+    map.addLayer({ id: `fence-fill-${id}`, type: 'fill', source: `fence-${id}`, paint: { 'fill-color': color, 'fill-opacity': 0.15 } });
     map.addLayer({ id: `fence-outline-${id}`, type: 'line', source: `fence-${id}`, paint: { 'line-color': color, 'line-width': 2.5, 'line-dasharray': type === 'exclusion' ? [4, 2] : [1] } });
 
     // Add name + area as HTML marker at polygon centroid (clickable to show/hide)
     const coords = geometry.coordinates?.[0];
     if (coords && coords.length > 0) {
       let cx = 0, cy = 0;
-      coords.forEach((c: number[]) => { cx += c[0]; cy += c[1]; });
+      let minLat = 90, maxLat = -90;
+      coords.forEach((c: number[]) => { cx += c[0]; cy += c[1]; if (c[1] < minLat) minLat = c[1]; if (c[1] > maxLat) maxLat = c[1]; });
       cx /= coords.length; cy /= coords.length;
+
+      // Place label at top-centre of polygon (north edge) to reduce overlap
+      const labelLat = maxLat;
 
       let areaText = '';
       if (areaHectares != null && areaHectares > 0) {
@@ -314,7 +333,9 @@ export default function MapPage() {
       }
 
       const el = document.createElement('div');
-      el.style.cssText = `font-size:11px;font-weight:bold;color:#fff;background:${color};padding:2px 6px;border-radius:4px;white-space:nowrap;cursor:pointer;opacity:0.9;user-select:none;`;
+      const fontSize = (areaHectares != null && areaHectares < 1) ? '10px' : '12px';
+      el.style.cssText = `font-size:${fontSize};font-weight:bold;background:${labelBg};padding:2px 6px;border-radius:4px;white-space:nowrap;cursor:pointer;opacity:0.95;user-select:none;border:1px solid ${color};box-shadow:0 2px 4px rgba(0,0,0,0.4);`;
+      el.style.setProperty('color', '#000', 'important');
       el.textContent = `${name}${areaText}`;
       el.title = 'Click to show/hide boundary';
 
@@ -330,7 +351,7 @@ export default function MapPage() {
         el.style.textDecoration = visible ? 'none' : 'line-through';
       });
 
-      const marker = new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat([cx, cy]).addTo(map);
+      const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([cx, labelLat]).addTo(map);
       fenceLabelMarkersRef.current.set(id, marker);
     }
   }
@@ -677,9 +698,6 @@ export default function MapPage() {
       if (map && selectedFarmId) {
         fetchPositionsForFarm(map, selectedFarmId);
         fetchHerdsmanPositions(map, selectedFarmId);
-        // Also refresh geofences to keep in sync
-        clearAllGeofences(map);
-        loadGeofencesForFarm(map, selectedFarmId);
       }
     }, 30000);
     return () => clearInterval(i);
