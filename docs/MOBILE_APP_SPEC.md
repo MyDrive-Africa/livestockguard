@@ -227,6 +227,51 @@ NIGHT (kraal)      → 50/50 confirmed (all cattle penned)
 
 ---
 
+## Herdsman Device Identity (Unique Marker)
+
+The herdsman's phone serves as their **unique marker** in the system. Every BLE scan batch is stamped with the `gateway_serial` (e.g. `GW-LV-001`), which is the primary reference linking scans to a specific herdsman.
+
+### Identity Resolution
+
+```
+Phone (gateway_serial: GW-LV-001)
+  → assigned to: Sipho Molefe (herdsman_name)
+  → registered to: Loch Vaal (farm_id)
+  → every batch includes: gateway_serial + GPS + sightings
+  → cloud resolves: gateway_serial → gateway_id → herdsman identity
+```
+
+### Recommended Device: Samsung Galaxy XCover 7
+
+| Spec | Value |
+|------|-------|
+| Bluetooth | 5.3 (coded PHY — max BLE scanning range ~120m) |
+| IP Rating | IP68 + MIL-STD-810H |
+| Battery | 4,050 mAh (removable — swap mid-shift) |
+| GPS | Dual-band L1+L5 (±2m outdoor accuracy) |
+| OS | Android 14 |
+| Price (ZA) | ~R5,000–R6,500 |
+
+See [HERDSMAN_GATEWAY_SPEC.md](HERDSMAN_GATEWAY_SPEC.md#recommended-gateway-phone-samsung-galaxy-xcover-7) for full hardware selection rationale and BLE range compatibility matrix.
+
+### How the Marker is Used in the App
+
+1. **On login:** App fetches herdsman's assigned gateway via user profile / farm assignment
+2. **On patrol start:** App includes `gateway_serial` in `POST /api/gateway/sessions/start`
+3. **Every batch:** `gateway_serial` is sent with every `POST /api/gateway/batch` — this is the scan reference
+4. **On dashboard:** Farm owner sees herdsman name + gateway serial on patrol tracking views
+5. **If phone replaced:** Admin re-registers the same `gateway_serial` to the new device — all history preserved
+
+### Why the Phone (Not a Separate BLE Beacon)
+
+The herdsman does not need a separate BLE beacon tag on their person. The phone itself is the marker because:
+- It actively submits data (not passively detected)
+- The `gateway_serial` is a human-readable, portable identifier
+- If the phone dies or is replaced, the serial transfers to the new device
+- The phone's GPS provides the position reference for all detected cattle
+
+---
+
 ## Herdsman Background Service
 
 The herdsman's phone runs a **foreground service** that:

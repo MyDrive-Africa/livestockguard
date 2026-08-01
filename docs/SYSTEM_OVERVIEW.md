@@ -398,7 +398,7 @@ The web dashboard is a single-page application providing real-time livestock mon
 
 | Page | Path | Features |
 |------|------|----------|
-| **Map** | `/map` | Live animal markers, movement trails (24h), geofence polygon overlays, tile switching (Street/Satellite/Terrain), click-to-draw geofence, 📍 farm coordinate pin marker (shows exact farm centre, name label, coordinate readout — pin moves when switching farms, stays visible on satellite view for geofence orientation) |
+| **Map** | `/map` | Live animal markers, movement trails (24h), geofence polygon overlays, tile switching (Street/Satellite/Terrain), click-to-draw geofence, 📍 farm coordinate pin marker (shows exact farm centre, name label, coordinate readout — pin moves when switching farms, stays visible on satellite view for geofence orientation), 🚶 herdsman marker (blue person icon, distinct from cattle markers, shows gateway position updated every 30s, click for patrol info) |
 | **Animals** | `/animals` | Sortable/searchable list, filter by species/status/farm, detail view with history trail |
 | **Alerts** | `/alerts` | Real-time alert feed, severity badges, acknowledge/resolve workflow, filter by type |
 | **Analytics** | `/analytics` | Area/line/bar/donut charts, sparklines in summary cards, date range picker, dark-mode tooltips |
@@ -912,11 +912,15 @@ cd e2e && npx playwright test tests/features.spec.ts --reporter=list
 
 ### Hardware (Production)
 
-| Device | Chip | Role |
-|--------|------|------|
-| GPS Collar | Nordic nRF9160 | Cellular + GPS tracker |
-| BLE Ear Tag | Nordic nRF52840 | Passive BLE beacon |
-| Gateway (option) | ESP32-S3 | Dedicated BLE scanner + LTE |
+| Device | Chip / Model | Role | BLE | Price (ZA) |
+|--------|-------------|------|-----|------------|
+| GPS Collar | Nordic nRF9160 | Cellular + GPS tracker | N/A | ~R800+ |
+| BLE Ear Tag (budget) | Skylab VDB06 | Passive BLE beacon (70m range) | 5.0 | ~R50–R90 |
+| BLE Ear Tag (premium) | GAORFID SKU#127555 | BLE beacon + temp + accelerometer (100m range) | BLE | ~R140–R180 |
+| Gateway Phone | Samsung Galaxy XCover 7 | Herdsman BLE scanner + GPS (unique marker) | **5.3** | ~R5,500 |
+| Gateway (dedicated) | ESP32-S3 | Dedicated BLE scanner + LTE | 5.0 | ~R800–R1,500 |
+
+The herdsman's phone is identified by its `gateway_serial` (e.g. `GW-LV-001`) — this serves as the herdsman's unique marker for all scan references. See [HERDSMAN_GATEWAY_SPEC.md](HERDSMAN_GATEWAY_SPEC.md#herdsman-unique-marker) for full details.
 
 ---
 
@@ -1076,11 +1080,13 @@ All 10 BLE-tagged cattle start in the kraal (-26.719, 27.70883) and follow the d
 |-------|-------|
 | Serial | GW-LV-001 |
 | Herdsman | Sipho Molefe |
-| Type | Phone |
+| Type | Phone (Samsung Galaxy XCover 7 recommended) |
+| Bluetooth | 5.3 (coded PHY, ~120m receive range) |
 | Start Position | Kraal (-26.719, 27.70883) |
 | Scan Interval | 5000ms |
 | Report Interval | 30s |
 | Max BLE Range | 100m |
+| Map Marker | 🚶 Blue person icon (distinct from cattle dots) |
 
 ### Coordinate Reference (How to Verify on Map)
 

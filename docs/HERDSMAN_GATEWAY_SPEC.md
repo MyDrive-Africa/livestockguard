@@ -231,28 +231,160 @@ End a patrol session.
 
 ---
 
+## Herdsman Unique Marker
+
+Each herdsman is uniquely identified in the system through their **gateway device serial number** (e.g. `GW-LV-001`). This serial serves as the herdsman's marker — every BLE scan batch references it, creating a clear audit trail: who scanned, where, when, and which animals were detected.
+
+### Identity Chain
+
+```
+Herdsman (gateway_serial) → detects → Cattle (ear tag MAC) → at → GPS position
+```
+
+Every batch submission to `POST /api/gateway/batch` includes `gateway_serial` as the identifying marker. The cloud resolves this to the registered herdsman via the `gateway_devices` table (`herdsman_name`, `herdsman_phone`).
+
+### How the Marker Works
+
+| Layer | Identifier | Purpose |
+|-------|-----------|---------|
+| Physical device | Phone IMEI / Android ID | Hardware-level uniqueness (not transmitted) |
+| **System marker** | **`gateway_serial`** (e.g. `GW-LV-001`) | **Primary reference for all scans** |
+| Session | `session_id` (UUID) | Groups scans within a patrol shift |
+| User account | `user_id` (JWT) | Auth-level identity, links to `herdsman` role |
+
+### Marker Assignment Flow
+
+1. Admin/Farm Owner registers gateway: `POST /api/gateway/register` with `serial_number` + `herdsman_name`
+2. Herdsman logs into mobile app → app reads assigned gateway serial from user profile
+3. Every BLE batch includes `gateway_serial` — this is the scan reference
+4. Dashboard displays herdsman name + gateway serial on patrol tracking views
+5. Historical queries can filter all sightings by `gateway_id` (resolved from serial)
+
+### Why gateway_serial (Not Phone MAC or IMEI)
+
+- **Portable:** If the herdsman's phone breaks, assign the same serial to a new phone — history preserved
+- **Human-readable:** `GW-LV-001` is meaningful; `A4:C1:38:7B:2D:E9` is not
+- **Already implemented:** The batch API, simulator, and database all reference `gateway_serial`
+- **Multi-device safe:** A herdsman could switch between phone and dedicated hardware without losing identity
+
+### Map Marker Visual Distinction
+
+The herdsman marker on the dashboard/mobile map must be visually distinct from cattle markers:
+
+| Marker Type | Icon | Colour | Label | Data Source |
+|-------------|------|--------|-------|-------------|
+| **Cattle** | Cow/circle dot | Green (normal), Orange (warning), Red (breach/theft) | Animal name (e.g. `LV-003`) | `positions` table (from BLE sighting, uses gateway GPS) |
+| **Herdsman** | Person/phone icon | **Blue** | Herdsman name + serial (e.g. `Sipho · GW-LV-001`) | `gateway_devices.last_latitude/longitude` |
+
+**Rendering rules:**
+- Herdsman marker updates every 30s (each batch updates `gateway_devices.last_latitude/longitude`)
+- Cattle markers cluster around the herdsman marker (detected within 100m of the phone)
+- Herdsman marker has a subtle **100m radius ring** (optional, togglable) showing BLE detection range
+- When herdsman is offline (no batch for > 5 min), marker turns grey with "Last seen: X min ago" tooltip
+- Multiple herdsmen on same farm render as separate blue markers (future multi-gateway support)
+
+**Click/tap interaction:**
+- Cattle marker → shows animal detail (name, breed, last seen, signal strength)
+- Herdsman marker → shows patrol info (name, shift duration, animals detected, battery %, walking speed)
+
+---
+
 ## Hardware Requirements
 
-### BLE Ear Tags (Cattle)
+### Recommended BLE Ear Tags (Cattle)
+
+The system requires passive BLE beacons in cattle ear tag form factor. These are the validated options:
+
+#### Option 1: Skylab VDB06 (Budget — Best for Large Herds)
+
+| Spec | Value |
+|------|-------|
+| Protocol | BLE 5.0 (iBeacon / Eddystone) |
+| Range | ~70m advertise range |
+| Battery | CR2477 button lithium cell |
+| Battery Life | 2–4 years (at 1s advertising interval) |
+| Features | Step counting, position tracking |
+| Form Factor | Cattle ear tag |
+| Applications | Cattle, sheep, horses |
+| IP Rating | IP65 |
+| Cost | ~R50–R90 per unit at volume |
+
+Best fit for: Sibanyoni (50 cattle), budget-constrained deployments. The 70m range works because the herdsman walks among the herd, and the XCover 7's BLE 5.3 receiver extends effective detection to ~80m.
+
+#### Option 2: GAORFID SKU#127555 (Premium — Best for Small Herds with Health Monitoring)
+
+| Spec | Value |
+|------|-------|
+| Protocol | BLE (Bluetooth Low Energy) |
+| Range | 100m stable, up to 200m max to gateway |
+| Battery | Built-in replaceable button cell |
+| Battery Life | 2–3 years |
+| Features | Body temperature (±0.1°C), 3-axis accelerometer (steps, running, head shaking) |
+| Data Upload | Every 20 min (adjustable) |
+| Weight | 14g |
+| Dimensions | 55 × 30 × 12 mm |
+| IP Rating | IP67 |
+| Operating Temp | -30°C to +60°C |
+| Cost | ~R140–R180 per unit |
+
+Best fit for: Loch Vaal (10 cattle), where per-head investment is affordable and temperature/activity data enables early disease detection.
+
+#### General Ear Tag Requirements
+
 - **Type:** Bluetooth Low Energy 5.0 beacon
 - **Form factor:** Cattle ear tag (weather/UV resistant)
 - **Advertising interval:** 1000ms (configurable)
 - **TX Power:** -4 dBm to 0 dBm
-- **Battery:** CR2032 (estimated 3-5 year life at 1s interval)
+- **Battery:** CR2032 or CR2477 (estimated 2-5 year life at 1s interval)
 - **IP Rating:** IP67 minimum (dust/water resistant)
 - **Temperature:** -20°C to +60°C operating
-- **Cost:** R40–R80 per unit at volume
-- **Examples:** Minew C6, April Beacon N02, custom cattle tag
+- **Cost:** R50–R180 per unit depending on features
 
-### Gateway Device Option A: Smartphone
-- **OS:** Android 8+ with BLE 5.0 support
-- **App:** LivestockGuard Gateway (future mobile app)
-- **GPS:** Built-in
-- **Cellular:** Built-in (data SIM for API calls)
-- **Pros:** Herdsman already has phone, no extra hardware
-- **Cons:** Battery drain, may not be waterproof
+### Recommended Gateway Phone: Samsung Galaxy XCover 7
+
+The primary gateway device is the herdsman's phone. The Samsung Galaxy XCover 7 is the recommended model for South African deployments:
+
+| Spec | Value |
+|------|-------|
+| **Bluetooth** | **5.3** (coded PHY long-range support) |
+| IP Rating | IP68 + MIL-STD-810H (drops, dust, rain, temperature extremes) |
+| Battery | 4,050 mAh (**removable** — carry a spare for full-day patrols) |
+| GPS | Dual-band (L1+L5) — excellent outdoor accuracy (±2m) |
+| OS | Android 14 (full BLE scanning API support) |
+| Processor | MediaTek Dimensity 6100+ |
+| Storage | 128GB + microSD up to 1TB |
+| Connectivity | 5G / 4G LTE (for batch uploads over cellular) |
+| NFC | Yes (tap-to-register ear tags in future) |
+| Display | 6.6" PLS LCD (1080×2408) — readable in direct sunlight |
+| Price (ZA) | ~R5,000–R6,500 (Samsung ZA, Vodacom, MTN, Takealot) |
+
+**Why this phone:**
+1. **BLE 5.3 with coded PHY** — maximum scanning range (~120m receive sensitivity in open field)
+2. **IP68 + MIL-STD-810H** — survives being dropped in mud, rained on, left in 60°C sun
+3. **Removable battery** — herdsman swaps battery mid-shift without losing GPS track
+4. **Enterprise-grade** — Samsung Knox security, reliable BLE stack, no bloatware
+5. **Available in South Africa** — official Samsung channels, Vodacom, MTN contract options
+6. **NFC** — future tap-to-register workflow for new ear tags
+
+**Alternative (budget):** Samsung Galaxy A15 (~R3,500) — BLE 5.3 but no ruggedization or removable battery.
+
+### BLE Range Compatibility Matrix
+
+The effective detection range is the minimum of phone receive range and tag transmit range:
+
+| Phone BLE Version | Tag Model | Tag TX Range | Effective Detection Range |
+|-------------------|-----------|-------------|--------------------------|
+| BLE 5.3 (XCover 7) | Skylab VDB06 | 70m | **~70–80m** |
+| BLE 5.3 (XCover 7) | GAORFID SKU#127555 | 100–200m | **~100–120m** |
+| BLE 5.0 (budget phone) | Skylab VDB06 | 70m | ~50–60m |
+| BLE 5.0 (budget phone) | GAORFID SKU#127555 | 100–200m | ~80–100m |
+
+For the system's 100m design assumption: XCover 7 + GAORFID tags meets it fully. XCover 7 + Skylab VDB06 is slightly under but acceptable since the herdsman walks within the herd.
 
 ### Gateway Device Option B: Dedicated Hardware
+
+For farms wanting a no-touch solution (no phone interaction required):
+
 - **MCU:** ESP32-S3 or nRF52840 (BLE + WiFi/LTE)
 - **GPS:** u-blox M8N or similar
 - **Cellular:** SIM7600 (4G LTE) or SIM800L (2G fallback)
@@ -260,6 +392,25 @@ End a patrol session.
 - **Enclosure:** IP67 rugged plastic, belt-clip mount
 - **Cost:** R800–R1500 per unit
 - **Pros:** Dedicated, waterproof, longer battery, no user interaction needed
+- **Cons:** Extra hardware cost, no display feedback for herdsman
+
+### Cost Summary (Loch Vaal — 10 Cattle)
+
+| Item | Model | Unit Cost | Qty | Total |
+|------|-------|-----------|-----|-------|
+| Gateway phone | Samsung Galaxy XCover 7 | R5,500 | 1 | R5,500 |
+| BLE ear tags | GAORFID SKU#127555 | R160 | 10 | R1,600 |
+| Data SIM | Vodacom 1GB/mo | R99/mo | 1 | R1,188/yr |
+| **Year 1 Total** | | | | **R8,288** |
+
+### Cost Summary (Sibanyoni — 50 Cattle)
+
+| Item | Model | Unit Cost | Qty | Total |
+|------|-------|-----------|-----|-------|
+| Gateway phone | Samsung Galaxy XCover 7 | R5,500 | 1 | R5,500 |
+| BLE ear tags | Skylab VDB06 | R70 | 50 | R3,500 |
+| Data SIM | Vodacom 1GB/mo | R99/mo | 1 | R1,188/yr |
+| **Year 1 Total** | | | | **R10,188** |
 
 ---
 
