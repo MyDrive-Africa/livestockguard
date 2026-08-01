@@ -111,6 +111,7 @@ export default function MapPage() {
     }
   }, []);
 
+  const connectionStatus = useRealtimeStore((state) => state.connectionStatus);
   const positions = useRealtimeStore((state) => state.positions);
   const currentFarm = useAuthStore((state) => state.currentFarm);
   const resolved = useThemeStore((state) => state.resolved);
@@ -979,7 +980,12 @@ export default function MapPage() {
           {selectedAnimal && <span className="text-purple-600">Trail: {trailData.length} pts</span>}
           {drawingMode && <span className="text-amber-600 font-medium">Drawing active</span>}
         </div>
-        <span className="text-gray-400">Tiles: {TILE_SOURCES[tileSource].label} | Live via WebSocket</span>
+        <span className="text-gray-400">
+          Tiles: {TILE_SOURCES[tileSource].label} |{' '}
+          {connectionStatus === 'connected' && <span className="text-green-500">Live via WebSocket</span>}
+          {connectionStatus === 'connecting' && <span className="text-yellow-500">Connecting...</span>}
+          {connectionStatus === 'disconnected' && <span className="text-red-400">Disconnected (polling)</span>}
+        </span>
       </div>
     </div>
   );

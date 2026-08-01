@@ -19,7 +19,7 @@ const navItems = [
 export default function AppLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const alerts = useRealtimeStore((state) => state.alerts);
-  const wsConnected = useRealtimeStore((state) => state.wsConnected);
+  const connectionStatus = useRealtimeStore((state) => state.connectionStatus);
   const logout = useAuthStore((state) => state.logout);
   const activeAlerts = alerts.filter((a) => a.status === 'active').length;
 
@@ -95,8 +95,16 @@ export default function AppLayout() {
           {!sidebarCollapsed && <ThemeToggle />}
 
           <div className={`flex items-center gap-2 text-xs text-brand-300 dark:text-gray-400 ${sidebarCollapsed ? 'justify-center' : ''}`}>
-            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${wsConnected ? 'bg-green-400' : 'bg-red-400'}`}></span>
-            {!sidebarCollapsed && (wsConnected ? 'Live' : 'Connecting...')}
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+              connectionStatus === 'connected' ? 'bg-green-400' :
+              connectionStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' :
+              'bg-red-400'
+            }`}></span>
+            {!sidebarCollapsed && (
+              connectionStatus === 'connected' ? 'Live' :
+              connectionStatus === 'connecting' ? 'Connecting...' :
+              'Disconnected'
+            )}
           </div>
           {!sidebarCollapsed && (
             <button

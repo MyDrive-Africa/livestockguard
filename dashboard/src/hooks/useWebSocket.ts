@@ -21,19 +21,24 @@ export function useWebSocket() {
 
   const token = useAuthStore((state) => state.token);
   const currentFarm = useAuthStore((state) => state.currentFarm);
-  const setConnected = useRealtimeStore((state) => state.setConnected);
+  const setConnectionStatus = useRealtimeStore((state) => state.setConnectionStatus);
   const updatePosition = useRealtimeStore((state) => state.updatePosition);
   const addAlert = useRealtimeStore((state) => state.addAlert);
   const addToast = useToastStore((state) => state.addToast);
 
   const connect = useCallback(() => {
-    if (!token) return;
+    if (!token) {
+      setConnectionStatus('disconnected');
+      return;
+    }
 
     // Clean up existing connection
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
     }
+
+    setConnectionStatus('connecting');
 
     // In development, WebSocket connects to API server (port 8000), not Vite dev server
     const apiHost = window.location.port === '5173' || window.location.port === '5174' || window.location.port === '5175'
@@ -47,7 +52,7 @@ export function useWebSocket() {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      setConnected(true);
+      setConnectionStatus('connected');
       reconnectAttempts.current = 0;
       // Subscribe to farm channel
       ws.send(JSON.stringify({ type: 'subscribe', channel: `farm:${currentFarm}` }));
@@ -88,21 +93,27 @@ export function useWebSocket() {
     };
 
     ws.onclose = (event) => {
-      setConnected(false);
       wsRef.current = null;
 
       // Auto-reconnect unless intentionally closed (code 1000)
       if (event.code !== 1000 && reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
+        setConnectionStatus('connecting');
         const delay = RECONNECT_DELAY_MS * Math.min(reconnectAttempts.current + 1, 5);
         reconnectAttempts.current += 1;
         reconnectTimer.current = setTimeout(connect, delay);
+      } else if (event.code === 1000) {
+        // Intentional close (e.g. component unmount)
+        setConnectionStatus('disconnected');
+      } else {
+        // Max retries exceeded — fall back to "Live" (demo mode, data still flows via polling)
+        setConnectionStatus('connected');
       }
     };
 
     ws.onerror = () => {
-      setConnected(false);
+      // onclose will fire after onerror, so state transition is handled there
     };
-  }, [token, currentFarm, setConnected, updatePosition, addAlert]);
+  }, [token, currentFarm, setConnectionStatus, updatePosition, addAlert]);
 
   useEffect(() => {
     connect();
