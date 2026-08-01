@@ -92,6 +92,24 @@ services:
       redis:
         condition: service_healthy
 
+  analytics_engine:
+    build:
+      context: services/analytics_engine
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://livestockguard:${POSTGRES_PASSWORD:-livestockguard_dev}@postgres:5432/livestockguard
+      RUN_ON_STARTUP: "true"
+      BASELINE_WINDOW_DAYS: "7"
+      ANOMALY_CHECK_INTERVAL_HOURS: "2"
+      DAILY_REPORT_HOUR: "18"
+      REDUCED_MOVEMENT_Z_THRESHOLD: "-2.0"
+      ISOLATION_HOURS_THRESHOLD: "4"
+      PATROL_GAP_DAYS_THRESHOLD: "3"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   pgdata:
   redisdata:
