@@ -77,6 +77,7 @@ export default function MapPage() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const herdsmanMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
   const mapReadyRef = useRef(false);
   const [animalCount, setAnimalCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -194,6 +195,8 @@ export default function MapPage() {
   function clearAllMarkers() {
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current.clear();
+    herdsmanMarkersRef.current.forEach((marker) => marker.remove());
+    herdsmanMarkersRef.current.clear();
     setAnimalCount(0);
   }
 
@@ -207,6 +210,7 @@ export default function MapPage() {
       clearAllMarkers();
       await loadGeofencesForFarm(map, selectedFarmId);
       await fetchPositionsForFarm(map, selectedFarmId);
+      await fetchHerdsmanPositions(map, selectedFarmId);
       addToast({ title: 'Refreshed', message: 'Dashboard data updated', severity: 'info', duration: 2000 });
     } finally {
       setRefreshing(false);
@@ -672,6 +676,7 @@ export default function MapPage() {
       const map = mapRef.current;
       if (map && selectedFarmId) {
         fetchPositionsForFarm(map, selectedFarmId);
+        fetchHerdsmanPositions(map, selectedFarmId);
         // Also refresh geofences to keep in sync
         clearAllGeofences(map);
         loadGeofencesForFarm(map, selectedFarmId);
@@ -679,6 +684,93 @@ export default function MapPage() {
     }, 30000);
     return () => clearInterval(i);
   }, [selectedFarmId]);
+
+  // ─── Herdsman Gateway Markers (Blue Person Icon) ───
+  function addOrUpdateHerdsmanMarker(
+    map: maplibregl.Map,
+    id: string,
+    name: string,
+    serial: string,
+    lng: number,
+    lat: number,
+    battery?: number | null,
+    lastSeen?: string | null,
+  ) {
+    const existing = herdsmanMarkersRef.current.get(id);
+    if (existing) { existing.setLngLat([lng, lat]); return; }
+
+    const el = document.createElement('div');
+    el.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:pointer;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));transition:transform 0.2s;';
+    el.innerHTML = `
+      <div style="width:32px;height:32px;background:#2563eb;border:2px solid ${resolved === 'dark' ? '#374151' : 'white'};border-radius:50%;display:flex;align-items:center;justify-content:center;">
+        <span style="font-size:16px;">🚶</span>
+      </div>
+      <div style="font-size:9px;font-weight:bold;color:#fff;background:#1d4ed8;padding:1px 5px;border-radius:3px;margin-top:2px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.3);">${name}</div>
+    `;
+    el.title = `${name} (${serial})`;
+    el.addEventListener('mouseenter', () => { el.style.transform = 'scale(1.15)'; });
+    el.addEventListener('mouseleave', () => { el.style.transform = 'scale(1)'; });
+
+    const timeDiff = lastSeen ? Math.floor((Date.now() - new Date(lastSeen).getTime()) / 60000) : null;
+    const timeStr = timeDiff === null ? 'Never' : timeDiff < 1 ? 'Just now' : timeDiff < 60 ? `${timeDiff}m ago` : `${Math.floor(timeDiff / 60)}h ago`;
+
+    const popup = new maplibregl.Popup({ offset: 25 }).setHTML(`
+      <div style="padding:8px;min-width:160px;">
+        <strong>🚶 ${name}</strong><br/>
+        <span style="color:#666;font-size:12px;">
+          📡 ${serial}<br/>
+          📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}<br/>
+          🔋 ${battery ?? '?'}%<br/>
+          🕐 ${timeStr}
+        </span>
+      </div>
+    `);
+
+    const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+      .setLngLat([lng, lat])
+      .setPopup(popup)
+      .addTo(map);
+    herdsmanMarkersRef.current.set(id, marker);
+  }
+
+  function clearHerdsmanMarkers() {
+    herdsmanMarkersRef.current.forEach((marker) => marker.remove());
+    herdsmanMarkersRef.current.clear();
+  }
+
+  async function fetchHerdsmanPositions(map: maplibregl.Map, farmId: string) {
+    try {
+      const fid = farmId || currentFarm || '';
+      if (!fid) return;
+      const resp = await apiClient.get('/api/gateway', { params: { farm_id: fid } });
+      const gateways = resp.data;
+
+      // Remove markers for gateways no longer in response
+      const activeIds = new Set(gateways.map((g: any) => g.id));
+      herdsmanMarkersRef.current.forEach((marker, id) => {
+        if (!activeIds.has(id)) { marker.remove(); herdsmanMarkersRef.current.delete(id); }
+      });
+
+      // Add/update markers for gateways with positions
+      gateways.forEach((g: any) => {
+        if (g.last_latitude && g.last_longitude) {
+          addOrUpdateHerdsmanMarker(
+            map, g.id, g.herdsman_name || g.name, g.serial_number,
+            g.last_longitude, g.last_latitude, g.last_battery_pct, g.last_seen,
+          );
+        }
+      });
+    } catch {
+      // Gateway fetch failed — silently ignore, cattle markers still work
+    }
+  }
+
+  // Load herdsman markers when farm changes
+  useEffect(() => {
+    if (!mapRef.current || !selectedFarmId || loading) return;
+    clearHerdsmanMarkers();
+    fetchHerdsmanPositions(mapRef.current, selectedFarmId);
+  }, [selectedFarmId, loading]);
 
   // ─── Breach Alert Markers ──────────────────────────
   const alertMarkersRef = useRef<maplibregl.Marker[]>([]);

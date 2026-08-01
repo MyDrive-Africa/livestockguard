@@ -23,6 +23,17 @@ interface Geofence {
   geometry?: { type: string; coordinates: number[][][] };
 }
 
+interface GatewayPosition {
+  id: string;
+  serial_number: string;
+  name: string;
+  herdsman_name?: string;
+  last_latitude?: number;
+  last_longitude?: number;
+  last_battery_pct?: number;
+  last_seen?: string;
+}
+
 type MapType = 'standard' | 'satellite' | 'hybrid';
 
 const INITIAL_REGION = {
@@ -37,6 +48,7 @@ export default function MapScreen() {
   const mapRef = useRef<MapView>(null);
   const [animals, setAnimals] = useState<AnimalPosition[]>([]);
   const [geofences, setGeofences] = useState<Geofence[]>([]);
+  const [gateways, setGateways] = useState<GatewayPosition[]>([]);
   const [mapType, setMapType] = useState<MapType>('satellite');
   const [trail, setTrail] = useState<{ lat: number; lon: number }[]>([]);
   const [selectedAnimal, setSelectedAnimal] = useState<string | null>(null);
@@ -48,12 +60,14 @@ export default function MapScreen() {
   const fetchData = async () => {
     if (!selectedFarm) return;
     try {
-      const [animalsResp, geofencesResp] = await Promise.all([
+      const [animalsResp, geofencesResp, gatewaysResp] = await Promise.all([
         api.get(`/api/animals?farm_id=${selectedFarm.id}`),
         api.get(`/api/geofences?farm_id=${selectedFarm.id}`),
+        api.get(`/api/gateway?farm_id=${selectedFarm.id}`),
       ]);
       setAnimals(animalsResp.data);
       setGeofences(geofencesResp.data);
+      setGateways(gatewaysResp.data);
     } catch (err) {
       console.warn('Failed to fetch map data:', err);
     }
@@ -253,6 +267,27 @@ export default function MapScreen() {
             </View>
           </Marker>
         ))}
+
+        {/* Herdsman markers — blue person icon, distinct from cattle */}
+        {gateways.filter(g => g.last_latitude && g.last_longitude).map((gw) => (
+          <Marker
+            key={`herdsman-${gw.id}`}
+            coordinate={{
+              latitude: gw.last_latitude!,
+              longitude: gw.last_longitude!,
+            }}
+            anchor={{ x: 0.5, y: 0.5 }}
+            title={gw.herdsman_name || gw.name}
+            description={`📡 ${gw.serial_number}\n🔋 ${gw.last_battery_pct ?? '?'}%\n📍 ${gw.last_latitude!.toFixed(5)}, ${gw.last_longitude!.toFixed(5)}`}
+          >
+            <View style={styles.herdsmanPin}>
+              <Text style={styles.herdsmanEmoji}>🚶</Text>
+            </View>
+            <View style={styles.herdsmanLabel}>
+              <Text style={styles.herdsmanLabelText}>{gw.herdsman_name || gw.name}</Text>
+            </View>
+          </Marker>
+        ))}
       </MapView>
 
       {/* Map type switcher */}
@@ -375,6 +410,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3, shadowRadius: 3, elevation: 5,
   },
   markerEmoji: { fontSize: 14 },
+  herdsmanPin: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: '#2563eb',
+    borderWidth: 2, borderColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3, shadowRadius: 3, elevation: 5,
+  },
+  herdsmanEmoji: { fontSize: 16 },
+  herdsmanLabel: {
+    backgroundColor: '#1d4ed8', paddingHorizontal: 5, paddingVertical: 1,
+    borderRadius: 3, marginTop: 2, alignItems: 'center',
+  },
+  herdsmanLabelText: { color: '#fff', fontSize: 9, fontWeight: 'bold' },
   farmPin: { alignItems: 'center' },
   farmPinIcon: { fontSize: 28 },
   farmPinLabel: {
