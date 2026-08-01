@@ -4,7 +4,7 @@ import { useRealtimeStore } from '@/stores/realtimeStore';
 import { useToastStore } from '@/stores/toastStore';
 
 const RECONNECT_DELAY_MS = 3000;
-const MAX_RECONNECT_ATTEMPTS = 10;
+const MAX_RECONNECT_ATTEMPTS = 3;
 
 const SEVERITY_DURATIONS: Record<string, number> = {
   critical: 0,      // Manual dismiss only

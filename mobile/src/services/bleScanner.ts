@@ -182,50 +182,95 @@ class BLEScanner {
   }
 
   /**
-   * SIMULATOR MODE: Simulates BLE detection + updates cumulative "seen today".
+   * SIMULATOR MODE: Simulates BLE detection using herdsman position + animal positions.
+   * Only detects cattle within BLE range of the herdsman, so cumulative "seen today"
+   * grows gradually as the herdsman moves through the farm.
    */
   private startSimulatorMode() {
     const poll = async () => {
       if (!this.farmId || this.totalRegistered === 0) return;
 
       try {
-        const resp = await api.get(`/api/gateway/herd-count/${this.farmId}`);
-        const data = resp.data;
+        // Step 1: Get gateways for this farm to find herdsman position
+        const gwResp = await api.get(`/api/gateway`, { params: { farm_id: this.farmId } });
+        const gateways = gwResp.data as Array<{
+          serial_number: string;
+          last_latitude?: number;
+          last_longitude?: number;
+          last_seen?: string;
+          max_ble_range_m?: number;
+        }>;
 
-        if (data.total_registered) {
-          this.totalRegistered = data.total_registered;
+        // Find the most recently active gateway with a position
+        const activeGw = gateways
+          .filter((g) => g.last_latitude != null && g.last_longitude != null && g.last_seen)
+          .sort((a, b) => new Date(b.last_seen!).getTime() - new Date(a.last_seen!).getTime())[0];
+
+        if (!activeGw || activeGw.last_latitude == null || activeGw.last_longitude == null) {
+          // No active gateway with position — fall back to herd-count based mode
+          await this.pollFallbackHerdCount();
+          return;
         }
 
+        const herdsmanLat = activeGw.last_latitude;
+        const herdsmanLon = activeGw.last_longitude;
+        const bleRange = activeGw.max_ble_range_m || BLE_MAX_RANGE_M;
+
+        // Step 2: Get recent animal sightings with positions from gateway status
+        const statusResp = await api.get(`/api/gateway/status/${activeGw.serial_number}`);
+        const statusData = statusResp.data;
+        const recentAnimals = (statusData.recent_animals || []) as Array<{
+          animal_id: string;
+          animal_name: string;
+          mac_address: string;
+          rssi: number;
+          latitude: number;
+          longitude: number;
+        }>;
+
+        // Step 3: Calculate distance and only detect cattle within BLE range
         this.recentSightings.clear();
 
-        if (data.missing) {
-          const missingNames = new Set(data.missing.map((m: any) => m.name));
-          for (const [mac, name] of this.registeredMacs.entries()) {
-            if (!missingNames.has(name)) {
-              const rssi = -45 - Math.floor(Math.random() * 25);
-              this.recentSightings.set(mac, {
-                animalId: mac, animalName: name, mac, rssi, lastSeen: new Date(), inRange: true,
-              });
-              this.addToSeenToday(mac, name);
-            }
-          }
-        } else {
-          // Use seen_today from API if available
-          const seenCount = data.seen_today || 0;
-          let i = 0;
-          for (const [mac, name] of this.registeredMacs.entries()) {
-            if (i >= seenCount) break;
-            const rssi = -45 - Math.floor(Math.random() * 25);
+        for (const animal of recentAnimals) {
+          if (!animal.latitude || !animal.longitude) continue;
+
+          const dist = this.distanceMeters(
+            herdsmanLat, herdsmanLon,
+            animal.latitude, animal.longitude
+          );
+
+          if (dist <= bleRange) {
+            // Within BLE detection range — simulate RSSI from distance
+            const rssi = this.rssiFromDistance(dist);
+            const mac = animal.mac_address;
+            const name = animal.animal_name || this.registeredMacs.get(mac) || 'Unknown';
+
             this.recentSightings.set(mac, {
-              animalId: mac, animalName: name, mac, rssi, lastSeen: new Date(), inRange: true,
+              animalId: animal.animal_id,
+              animalName: name,
+              mac,
+              rssi,
+              lastSeen: new Date(),
+              inRange: true,
             });
+
+            // Add to cumulative "seen today"
             this.addToSeenToday(mac, name);
-            i++;
           }
         }
+
+        // Also update total registered from API if available
+        try {
+          const herdResp = await api.get(`/api/gateway/herd-count/${this.farmId}`);
+          if (herdResp.data.total_registered) {
+            this.totalRegistered = herdResp.data.total_registered;
+          }
+        } catch {
+          // Non-critical
+        }
       } catch {
-        // Fallback: local simulation
-        this.simulateLocalBLE();
+        // Fallback: use herd-count based approach
+        await this.pollFallbackHerdCount();
       }
 
       // Persist cumulative state periodically
@@ -234,6 +279,85 @@ class BLEScanner {
 
     poll();
     this.pollTimer = setInterval(poll, POLL_INTERVAL_MS);
+  }
+
+  /**
+   * Fallback polling when no gateway position is available.
+   * Uses herd-count API but does NOT add all cattle at once —
+   * adds a realistic subset each tick to simulate gradual discovery.
+   */
+  private async pollFallbackHerdCount() {
+    try {
+      const resp = await api.get(`/api/gateway/herd-count/${this.farmId}`);
+      const data = resp.data;
+
+      if (data.total_registered) {
+        this.totalRegistered = data.total_registered;
+      }
+
+      this.recentSightings.clear();
+
+      // Simulate gradual discovery: each tick can only detect a fraction
+      // proportional to what a herdsman walking would encounter
+      const isLargeFarm = this.totalRegistered > 20;
+      const maxNewPerTick = isLargeFarm ? 3 : 2;
+      const alreadySeen = this.seenToday.size;
+      const totalToDiscover = data.seen_today || this.totalRegistered;
+
+      // Determine how many are currently "in range" (subset of total)
+      const inRangePct = isLargeFarm ? 0.15 : 0.40;
+      const inRangeCount = Math.min(
+        Math.round(this.totalRegistered * inRangePct),
+        totalToDiscover
+      );
+
+      const allMacs = Array.from(this.registeredMacs.entries());
+      // Prioritize cattle already seen (they stay in memory)
+      const seenMacs = allMacs.filter(([mac]) => this.seenToday.has(mac));
+      const unseenMacs = allMacs.filter(([mac]) => !this.seenToday.has(mac));
+
+      // In-range: show some already-seen + a few new ones
+      let inRangeSlots = inRangeCount;
+      const inRangeFromSeen = seenMacs.slice(0, Math.min(seenMacs.length, Math.round(inRangeSlots * 0.7)));
+      inRangeSlots -= inRangeFromSeen.length;
+
+      // Add new discoveries (limited per tick)
+      const newDiscoveries = unseenMacs
+        .sort(() => Math.random() - 0.5)
+        .slice(0, Math.min(maxNewPerTick, inRangeSlots, totalToDiscover - alreadySeen));
+
+      for (const [mac, name] of [...inRangeFromSeen, ...newDiscoveries]) {
+        const rssi = -45 - Math.floor(Math.random() * 25);
+        this.recentSightings.set(mac, {
+          animalId: mac, animalName: name, mac, rssi, lastSeen: new Date(), inRange: true,
+        });
+        this.addToSeenToday(mac, name);
+      }
+    } catch {
+      this.simulateLocalBLE();
+    }
+  }
+
+  /**
+   * Calculate distance in meters between two lat/lon points.
+   */
+  private distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const dy = (lat2 - lat1) * 111320.0;
+    const dx = (lon2 - lon1) * 111320.0 * Math.cos((lat1 * Math.PI) / 180);
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  /**
+   * Simulate RSSI from distance (BLE path loss model).
+   */
+  private rssiFromDistance(dist: number): number {
+    const txPower = -59; // BLE TX power at 1m
+    const pathLoss = 2.5; // Path loss exponent (outdoor)
+    if (dist < 0.5) dist = 0.5;
+    const rssi = txPower - 10 * pathLoss * Math.log10(dist);
+    // Add some noise
+    const noise = (Math.random() - 0.5) * 6;
+    return Math.max(-100, Math.min(-30, Math.round(rssi + noise)));
   }
 
   /**

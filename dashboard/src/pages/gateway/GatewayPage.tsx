@@ -98,6 +98,7 @@ export default function GatewayPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingGateway, setEditingGateway] = useState<Gateway | null>(null);
   const [editForm, setEditForm] = useState({ name: '', herdsman_name: '', herdsman_phone: '' });
+  const [simulatorRunning, setSimulatorRunning] = useState(false);
 
   const currentFarm = useAuthStore((state) => state.currentFarm);
 
@@ -130,7 +131,44 @@ export default function GatewayPage() {
     fetchGateways();
   }, [fetchGateways]);
 
-  // Fetch herd count for current farm
+  // Poll simulator status and auto-refresh data when running
+  useEffect(() => {
+    let cancelled = false;
+
+    async function pollSimulatorStatus() {
+      try {
+        const resp = await fetch('/dev/simulator/status');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (!cancelled) {
+          setSimulatorRunning(data.running);
+        }
+      } catch {
+        // Dev endpoint not available (production) — ignore
+      }
+    }
+
+    pollSimulatorStatus();
+    const statusInterval = setInterval(pollSimulatorStatus, 5000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(statusInterval);
+    };
+  }, []);
+
+  // Auto-refresh gateway + herd data when simulator is running
+  useEffect(() => {
+    if (!simulatorRunning) return;
+
+    const refreshInterval = setInterval(() => {
+      fetchGateways();
+    }, 15000);
+
+    return () => clearInterval(refreshInterval);
+  }, [simulatorRunning, fetchGateways]);
+
+  // Fetch herd count for current farm (and refresh periodically when sim running)
   useEffect(() => {
     async function loadHerdCount() {
       const farmId = currentFarm || 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
@@ -142,7 +180,12 @@ export default function GatewayPage() {
       }
     }
     loadHerdCount();
-  }, [currentFarm]);
+
+    if (simulatorRunning) {
+      const herdInterval = setInterval(loadHerdCount, 15000);
+      return () => clearInterval(herdInterval);
+    }
+  }, [currentFarm, simulatorRunning]);
 
   const fetchGatewayStatus = async (serial: string) => {
     try {
@@ -227,24 +270,24 @@ export default function GatewayPage() {
             <div>
               <p className="text-sm font-semibold text-gray-900 dark:text-white">Simulator</p>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                {onlineCount > 0 ? 'Data flowing — simulator active' : 'No recent data — simulator stopped'}
+                {simulatorRunning ? 'Data flowing — simulator active' : 'No recent data — simulator stopped'}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`w-2.5 h-2.5 rounded-full ${onlineCount > 0 ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+            <span className={`w-2.5 h-2.5 rounded-full ${simulatorRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
             <button
               onClick={async () => {
                 try {
-                  const endpoint = onlineCount > 0 ? '/dev/simulator/stop' : '/dev/simulator/start';
+                  const endpoint = simulatorRunning ? '/dev/simulator/stop' : '/dev/simulator/start';
                   const resp = await fetch(endpoint, { method: 'POST' });
                   const data = await resp.json();
                   if (data.status === 'started') {
-                    alert('Simulators started (Loch Vaal + Sibanyoni, loop mode)');
+                    setSimulatorRunning(true);
                   } else if (data.status === 'stopped') {
-                    alert('Simulators stopped');
+                    setSimulatorRunning(false);
                   } else if (data.status === 'already_running') {
-                    alert('Simulators already running');
+                    setSimulatorRunning(true);
                   }
                 } catch {
                   // Fallback: copy command if dev endpoint not available
@@ -253,9 +296,9 @@ export default function GatewayPage() {
                 }
               }}
               className="px-3 py-1.5 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-              title={onlineCount > 0 ? 'Stop simulators' : 'Start simulators in loop mode'}
+              title={simulatorRunning ? 'Stop simulators' : 'Start simulators in loop mode'}
             >
-              {onlineCount > 0 ? '⏹ Stop' : '▶ Start Loop'}
+              {simulatorRunning ? '⏹ Stop' : '▶ Start Loop'}
             </button>
           </div>
         </div>
