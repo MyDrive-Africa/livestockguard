@@ -31,12 +31,14 @@ All coordinates were captured by clicking directly on visible structures in high
 | X10 | Compound | Compound | -25.3601307 | 25.3598963 | Far south compound |
 | X11 | Field | Field | -25.3600508 | 25.3593009 | Cultivated/fenced field |
 | X12 | Compound | Compound | -25.3605840 | 25.3597998 | Southernmost compound identified |
+| X13 | Compound | House | -25.3585892 | 25.3503101 | Western compound (far west of main cluster) |
+| X14 | House | House | -25.3583081 | 25.3493445 | Far western house (westernmost structure) |
 
 ---
 
 ## Cluster Analysis
 
-The structures group into **4 distinct clusters**:
+The structures group into **5 distinct clusters**:
 
 ### Cluster A: North-East (X1, X2, X3, X4, X7)
 - **Location:** North of farm centre, east side
@@ -66,26 +68,51 @@ The structures group into **4 distinct clusters**:
 - **Estimated combined footprint:** ~0.6 ha
 - **Buffer zone recommended:** 30m around cluster
 
+### Cluster E: Far West (X13, X14) — NEW
+- **Location:** Far west, approximately 1km west of pin
+- **Coordinates range:** Lat -25.3583 to -25.3586, Lon 25.3493 to 25.3503
+- **Description:** Two structures on western side, previously outside analysis area
+- **Estimated combined footprint:** ~0.3 ha
+- **Buffer zone recommended:** 30m around cluster
+- **Impact:** These fall INSIDE the original Option A-Shifted boundary — requiring a new boundary design
+
 ---
 
 ## Total Exclusion Summary
 
 | Metric | Value |
 |--------|-------|
-| Total structures identified | 12 |
-| Clusters | 4 |
-| Estimated total exclusion area (with buffers) | ~3.5 ha |
-| Remaining usable land (from 60ha boundary) | ~56.5 ha |
+| Total structures identified | 14 |
+| Clusters | 5 |
+| Estimated total exclusion area (with buffers) | ~4.0 ha |
+| Clear gap between clusters (usable corridor) | 775m wide (lon 25.3506 to 25.3583) |
 
 ---
 
-## Implications for Boundary Design
+## Revised Boundary Options (avoiding all 14 structures)
 
-Based on these verified coordinates, the structures are concentrated in the **east-centre** of the proposed Option A boundary. This confirms the recommendation to:
+### Option AS-v2: Rectangle in Clear Gap (60 ha)
+- **Shape:** Rectangle 775m × 780m
+- **Strategy:** Fits in the clear corridor between western (X13/14) and eastern (X1-12) clusters
+- **All 14 structures confirmed OUTSIDE**
+- **Coordinates:**
+  | Corner | Latitude | Longitude |
+  |--------|----------|-----------|
+  | NW | -25.3545566 | 25.3506000 |
+  | NE | -25.3545566 | 25.3583000 |
+  | SE | -25.3615634 | 25.3583000 |
+  | SW | -25.3615634 | 25.3506000 |
 
-1. **Shift the boundary westward** — moving the eastern edge to avoid Cluster A entirely
-2. **Or** formally exclude all 4 clusters with buffer zones and route farm roads around them
-3. The **western half** of Option A remains completely clear of structures
+### Option AS-v3: L-shaped (65 ha)
+- **Shape:** Main corridor + south extension below all structures
+- **Strategy:** Uses the gap for the main body, extends south where ALL land is clear
+- **All 14 structures confirmed OUTSIDE**
+- **Main body:** 775m × 540m = 41.8 ha (between clusters)
+- **South extension:** 925m × 250m = 23.1 ha (below lat -25.3606)
+- **Total:** 64.9 ha
+
+### Key Finding
+The structures span from **lon 25.3493 (X14)** to **lon 25.3609 (X1)** — a total east-west spread of ~1,160m. However, there is a **completely clear 775m corridor** between the western pair (X13/X14) and the eastern cluster (X1-X12) with NO structures whatsoever. This corridor is the ideal location for the farm boundary.
 
 ---
 
@@ -105,6 +132,8 @@ X9,Compound,Compound,-25.3592073,25.3594270
 X10,Compound,Compound,-25.3601307,25.3598963
 X11,field,field,-25.3600508,25.3593009
 X12,Compound,Compound,-25.3605840,25.3597998
+X13,compound,house,-25.3585892,25.3503101
+X14,house,house,-25.3583081,25.3493445
 ```
 
 ---
