@@ -95,8 +95,17 @@ export default function MapPage() {
   const [editingFenceId, setEditingFenceId] = useState<string | null>(null);
   const [editingFenceName, setEditingFenceName] = useState<string>('');
 
-  // Keep ref in sync with state
+  // Mark Structure mode
+  const [markingMode, setMarkingMode] = useState(false);
+  const markingModeRef = useRef(false);
+  const [markedStructures, setMarkedStructures] = useState<Array<{ id: number; lat: number; lon: number; label: string; type: string }>>([]);
+  const markedMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const [showMarkedPanel, setShowMarkedPanel] = useState(false);
+  const markIdCounter = useRef(1);
+
+  // Keep refs in sync
   useEffect(() => { drawingModeRef.current = drawingMode; }, [drawingMode]);
+  useEffect(() => { markingModeRef.current = markingMode; }, [markingMode]);
 
   // Check URL for ?editFence=id (from Geofences page "Redraw" button)
   const [searchParams, setSearchParams] = useSearchParams();
@@ -252,6 +261,22 @@ export default function MapPage() {
     map.on('click', (e) => {
       if (drawingModeRef.current) {
         setDrawingPoints((prev) => [...prev, [e.lngLat.lng, e.lngLat.lat]]);
+      } else if (markingModeRef.current) {
+        const lat = e.lngLat.lat;
+        const lon = e.lngLat.lng;
+        const label = prompt('Label this structure (e.g. House, Field, Kraal, Road, Compound):') || 'Structure';
+        const type = prompt('Type: house / field / road / compound / other', 'house') || 'house';
+        if (label) {
+          const id = markIdCounter.current++;
+          setMarkedStructures((prev) => [...prev, { id, lat, lon, label, type }]);
+          // Add visual marker
+          const el = document.createElement('div');
+          el.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
+          const typeEmoji: Record<string, string> = { house: '🏠', field: '🌾', road: '🛤️', compound: '🏘️', other: '📍' };
+          el.innerHTML = `<span style="font-size:20px;">${typeEmoji[type] || '📍'}</span><span style="font-size:9px;font-weight:bold;background:#dc2626;color:#fff;padding:1px 4px;border-radius:3px;margin-top:-2px;white-space:nowrap;">X${id}: ${label}</span>`;
+          const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([lon, lat]).addTo(map);
+          markedMarkersRef.current.push(marker);
+        }
       }
     });
 
@@ -294,18 +319,17 @@ export default function MapPage() {
     // Distinct colors per zone type (based on emoji/name prefix)
     let color = type === 'exclusion' ? '#ef4444' : '#22c55e';
     let labelBg = color;
-    let labelColor = '#fff';
-    if (name.includes('Option A') || name.includes('Option B') || name.includes('Option C') || name.includes('⬜')) { color = '#3b82f6'; labelBg = '#60a5fa'; labelColor = '#000'; }
-    else if (name.includes('🔥') || name.includes('Firebreak')) { color = '#f97316'; labelBg = '#fb923c'; labelColor = '#000'; }
-    else if (name.includes('🐄') || name.includes('Kraal')) { color = '#a855f7'; labelBg = '#c084fc'; labelColor = '#000'; }
-    else if (name.includes('🏗️') || name.includes('Handling')) { color = '#6366f1'; labelBg = '#a5b4fc'; labelColor = '#000'; }
-    else if (name.includes('🦶') || name.includes('Foot Bath')) { color = '#14b8a6'; labelBg = '#5eead4'; labelColor = '#000'; }
-    else if (name.includes('🌱') || name.includes('Lucerne')) { color = '#84cc16'; labelBg = '#bef264'; labelColor = '#000'; }
-    else if (name.includes('🌿') || name.includes('Grazing')) { color = '#22c55e'; labelBg = '#86efac'; labelColor = '#000'; }
-    else if (name.includes('🏠') || name.includes('Herdsman')) { color = '#f59e0b'; labelBg = '#fcd34d'; labelColor = '#000'; }
-    else if (name.includes('🚜') || name.includes('Machinery') || name.includes('Storage')) { color = '#64748b'; labelBg = '#cbd5e1'; labelColor = '#000'; }
-    else if (name.includes('🏡') || name.includes('Homestead')) { color = '#ec4899'; labelBg = '#f9a8d4'; labelColor = '#000'; }
-    else if (type === 'exclusion') { color = '#ef4444'; labelBg = '#fca5a5'; labelColor = '#000'; }
+    if (name.includes('Option A') || name.includes('Option B') || name.includes('Option C') || name.includes('⬜')) { color = '#3b82f6'; labelBg = '#60a5fa'; }
+    else if (name.includes('🔥') || name.includes('Firebreak')) { color = '#f97316'; labelBg = '#fb923c'; }
+    else if (name.includes('🐄') || name.includes('Kraal')) { color = '#a855f7'; labelBg = '#c084fc'; }
+    else if (name.includes('🏗️') || name.includes('Handling')) { color = '#6366f1'; labelBg = '#a5b4fc'; }
+    else if (name.includes('🦶') || name.includes('Foot Bath')) { color = '#14b8a6'; labelBg = '#5eead4'; }
+    else if (name.includes('🌱') || name.includes('Lucerne')) { color = '#84cc16'; labelBg = '#bef264'; }
+    else if (name.includes('🌿') || name.includes('Grazing')) { color = '#22c55e'; labelBg = '#86efac'; }
+    else if (name.includes('🏠') || name.includes('Herdsman')) { color = '#f59e0b'; labelBg = '#fcd34d'; }
+    else if (name.includes('🚜') || name.includes('Machinery') || name.includes('Storage')) { color = '#64748b'; labelBg = '#cbd5e1'; }
+    else if (name.includes('🏡') || name.includes('Homestead')) { color = '#ec4899'; labelBg = '#f9a8d4'; }
+    else if (type === 'exclusion') { color = '#ef4444'; labelBg = '#fca5a5'; }
 
     map.addSource(`fence-${id}`, {
       type: 'geojson',
@@ -954,7 +978,7 @@ export default function MapPage() {
             </>
           )}
           {!drawingMode ? (
-            <button onClick={() => { setDrawingMode(true); setDrawingPoints([]); }} className="px-2 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 whitespace-nowrap">+ Fence</button>
+            <button onClick={() => { setDrawingMode(true); setMarkingMode(false); setDrawingPoints([]); }} className="px-2 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 whitespace-nowrap">+ Fence</button>
           ) : (
             <div className="flex items-center gap-2">
               <span className="text-xs text-amber-600">
@@ -975,12 +999,22 @@ export default function MapPage() {
               <button onClick={() => { setDrawingMode(false); setDrawingPoints([]); setEditingFenceId(null); }} className="px-2 py-1 text-xs bg-red-600 text-white rounded">✕</button>
             </div>
           )}
+          {/* Mark Structure tool */}
+          {!markingMode ? (
+            <button onClick={() => { setMarkingMode(true); setDrawingMode(false); setShowMarkedPanel(true); }} className="px-2 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 whitespace-nowrap">📍 Mark</button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-red-400 animate-pulse">Click structures on map</span>
+              <button onClick={() => setShowMarkedPanel(!showMarkedPanel)} className="px-2 py-1 text-xs bg-gray-600 text-white rounded">{markedStructures.length} marked</button>
+              <button onClick={() => { setMarkingMode(false); }} className="px-2 py-1 text-xs bg-red-600 text-white rounded">Done</button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Map */}
       <div className="flex-1 min-h-0 relative" style={{ minHeight: 0 }}>
-        <div ref={mapContainerRef} className="absolute inset-0" style={{ cursor: drawingMode ? 'crosshair' : 'grab', width: '100%', height: '100%' }} />
+        <div ref={mapContainerRef} className="absolute inset-0" style={{ cursor: (drawingMode || markingMode) ? 'crosshair' : 'grab', width: '100%', height: '100%' }} />
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-100/80 dark:bg-gray-900/80 z-10">
             <div className="text-center">
@@ -1013,6 +1047,49 @@ export default function MapPage() {
             </div>
           </div>
         )}
+
+        {/* Marked Structures Panel */}
+        {showMarkedPanel && markedStructures.length > 0 && (
+          <div className="absolute top-16 right-3 z-30 bg-gray-900/95 backdrop-blur-sm rounded-xl shadow-xl p-3 max-w-xs max-h-80 overflow-auto">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-white text-sm font-bold">📍 Marked Structures ({markedStructures.length})</h3>
+              <button onClick={() => setShowMarkedPanel(false)} className="text-gray-400 text-xs">✕</button>
+            </div>
+            <div className="space-y-1">
+              {markedStructures.map((s) => (
+                <div key={s.id} className="text-xs bg-gray-800 rounded p-1.5 flex items-center gap-2">
+                  <span className="text-red-400 font-bold">X{s.id}</span>
+                  <span className="text-white flex-1">{s.label} ({s.type})</span>
+                  <span className="text-gray-400 text-[10px]">{s.lat.toFixed(6)}, {s.lon.toFixed(6)}</span>
+                  <button onClick={() => {
+                    setMarkedStructures(prev => prev.filter(x => x.id !== s.id));
+                    const m = markedMarkersRef.current[s.id - 1];
+                    if (m) m.remove();
+                  }} className="text-red-500 text-xs">×</button>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                const csv = ['ID,Label,Type,Latitude,Longitude', ...markedStructures.map(s => `X${s.id},${s.label},${s.type},${s.lat.toFixed(7)},${s.lon.toFixed(7)}`)].join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = 'sibanyoni_exclusion_structures.csv'; a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="mt-2 w-full px-2 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+            >📥 Export CSV (for council)</button>
+            <button
+              onClick={() => {
+                const text = markedStructures.map(s => `X${s.id}: ${s.label} (${s.type}) — Lat: ${s.lat.toFixed(7)}, Lon: ${s.lon.toFixed(7)}`).join('\n');
+                navigator.clipboard.writeText(text);
+                addToast({ title: 'Copied', message: 'Coordinates copied to clipboard', severity: 'success', duration: 3000 });
+              }}
+              className="mt-1 w-full px-2 py-1.5 text-xs bg-gray-700 text-white rounded hover:bg-gray-600"
+            >📋 Copy coordinates</button>
+          </div>
+        )}
+
         <div className="absolute top-3 left-3 z-20 flex flex-col gap-2">
           {/* Tile Source Switcher */}
           <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-lg p-1.5 flex flex-col gap-1">
