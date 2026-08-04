@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Project Context on Session Start",
+      "trigger": "SessionStart",
+      "description": "Injects project context at the start of every session so Kiro immediately knows what this project is about.",
+      "action": {
+        "type": "agent",
+        "prompt": "You are working on LivestockGuard — a full-stack GPS livestock tracking and geofencing platform for South African farmers. Key context:\n\nARCHITECTURE: 4-layer system (Devices → Infrastructure → Cloud Backend → User Interfaces)\nTECH STACK: Python 3.12 (FastAPI), TypeScript (React 18 + Vite), Rust (Tokio), C11 (Zephyr RTOS)\nSERVICES: API Gateway (:8000), MQTT Writer, Alert Engine, Analytics Engine, Ingestion (Rust), Geofence Engine (Rust)\nINFRA: PostgreSQL+TimescaleDB (:5432), Redis (:6379), EMQX MQTT (:1883), Docker Compose\nFRONTEND: Dashboard (React + MapLibre GL, :5173), Mobile (React Native + Expo, :8082)\nFARMS: Boschhoek (Free State, GPS collars), Loch Vaal (Gauteng, BLE gateway), Sibanyoni (North West, 50 cattle BLE)\nCOMMANDS: Use `make help` for all targets. Key: `make start`, `make demo-full`, `make test`, `make dashboard`\nTESTING: pytest for Python services (in-memory SQLite), cargo test for Rust, tsc+vite build for dashboard\nCI: GitHub Actions — all 5 jobs must pass before merge to main.\n\nRead the steering docs in .kiro/steering/ for detailed patterns when working on specific file types."
+      }
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Lint Python on Save",
+      "trigger": "PostFileSave",
+      "description": "Runs a syntax check on Python files when saved to catch errors early.",
+      "matcher": "\\.(py)$",
+      "action": {
+        "type": "command",
+        "command": "cd cloud/services/api_gateway && python3 -m py_compile \"$(echo '{}' | python3 -c 'import sys,json; print(json.load(sys.stdin).get(\"filePath\",\"\"))')\" 2>&1 || true"
+      }
+    }
+  ]
+}

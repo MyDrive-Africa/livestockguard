@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Lint TypeScript on Save",
+      "trigger": "PostFileSave",
+      "description": "Runs TypeScript type checking on save of .ts/.tsx files in the dashboard.",
+      "matcher": "\\.(ts|tsx)$",
+      "action": {
+        "type": "command",
+        "command": "cd dashboard && npx tsc --noEmit --pretty 2>&1 | head -20 || true",
+        "timeout": 30
+      }
+    }
+  ]
+}

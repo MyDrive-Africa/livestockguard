@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Run Tests After Task Completion",
+      "trigger": "PostTaskExec",
+      "description": "Runs API gateway tests after a spec task is completed to verify nothing is broken.",
+      "action": {
+        "type": "command",
+        "command": "cd cloud/services/api_gateway && python3 -m pytest tests/ -v --tb=short -q 2>&1 | tail -20 || true",
+        "timeout": 60
+      }
+    }
+  ]
+}
