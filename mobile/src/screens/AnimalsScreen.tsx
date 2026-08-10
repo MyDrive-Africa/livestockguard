@@ -21,7 +21,7 @@ export default function AnimalsScreen() {
   const fetchAnimals = async () => {
     if (!selectedFarm) return;
     try {
-      const resp = await api.get(`/api/animals?farm_id=${selectedFarm.id}`);
+      const resp = await api.get(`/api/v1/animals?farm_id=${selectedFarm.id}`);
       setAnimals(resp.data);
     } catch (err) {
       console.warn('Failed to fetch animals:', err);

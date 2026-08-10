@@ -22,8 +22,8 @@ export default function AdminDashboard() {
     if (!selectedFarm) return;
     try {
       const [systemResp, alertsResp] = await Promise.all([
-        api.get(`/api/system/status?farm_id=${selectedFarm.id}`),
-        api.get(`/api/alerts?status=active&farm_id=${selectedFarm.id}`),
+        api.get(`/api/v1/system/status?farm_id=${selectedFarm.id}`),
+        api.get(`/api/v1/alerts?status=active&farm_id=${selectedFarm.id}`),
       ]);
       setStats(systemResp.data.counts);
       setAlerts(alertsResp.data.slice(0, 10));

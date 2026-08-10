@@ -69,7 +69,7 @@ class OfflineBuffer {
 
     for (const batch of batches) {
       try {
-        await api.post('/api/gateway/batch', {
+        await api.post('/api/v1/gateway/batch', {
           gateway_serial: batch.gateway_serial,
           latitude: batch.latitude,
           longitude: batch.longitude,

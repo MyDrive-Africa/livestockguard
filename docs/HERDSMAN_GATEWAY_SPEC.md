@@ -35,7 +35,7 @@ This is the cost-effective alternative to individual GPS collars:
 │  - Tracks patrol sessions (start/end shift)                          │
 │  - One cellular connection serves entire herd                        │
 └──────────────────────────────────┬──────────────────────────────────┘
-                                   │ HTTPS POST /api/gateway/batch
+                                   │ HTTPS POST /api/v1/gateway/batch
                                    ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  CLOUD BACKEND                                                       │

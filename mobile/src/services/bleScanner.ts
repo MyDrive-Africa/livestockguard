@@ -87,7 +87,7 @@ class BLEScanner {
 
     // Load registered tags
     try {
-      const resp = await api.get(`/api/gateway/tags?farm_id=${this.farmId}`);
+      const resp = await api.get(`/api/v1/gateway/tags?farm_id=${this.farmId}`);
       const tags = resp.data;
       this.totalRegistered = tags.length;
       tags.forEach((t: any) => {
@@ -97,7 +97,7 @@ class BLEScanner {
     } catch {
       // Fallback: use animals endpoint
       try {
-        const animalsResp = await api.get(`/api/animals?farm_id=${this.farmId}`);
+        const animalsResp = await api.get(`/api/v1/animals?farm_id=${this.farmId}`);
         const animals = animalsResp.data;
         this.totalRegistered = animals.length;
         animals.forEach((a: any) => {
@@ -185,14 +185,27 @@ class BLEScanner {
    * SIMULATOR MODE: Simulates BLE detection using herdsman position + animal positions.
    * Only detects cattle within BLE range of the herdsman, so cumulative "seen today"
    * grows gradually as the herdsman moves through the farm.
+   *
+   * Falls back to herd-count based gradual discovery when:
+   * - No gateway with a known position exists
+   * - The gateway status endpoint returns no recent animals
+   * - Any API call in the position-based path fails
    */
   private startSimulatorMode() {
     const poll = async () => {
       if (!this.farmId || this.totalRegistered === 0) return;
 
+      // Auto-start shift if not already active — ensures "seen today" tracking
+      // begins as soon as the scanner starts polling, without requiring manual tap.
+      if (!this.shiftState) {
+        await this.startShift();
+      }
+
+      let usedPositionPath = false;
+
       try {
         // Step 1: Get gateways for this farm to find herdsman position
-        const gwResp = await api.get(`/api/gateway`, { params: { farm_id: this.farmId } });
+        const gwResp = await api.get(`/api/v1/gateway`, { params: { farm_id: this.farmId } });
         const gateways = gwResp.data as Array<{
           serial_number: string;
           last_latitude?: number;
@@ -217,7 +230,7 @@ class BLEScanner {
         const bleRange = activeGw.max_ble_range_m || BLE_MAX_RANGE_M;
 
         // Step 2: Get recent animal sightings with positions from gateway status
-        const statusResp = await api.get(`/api/gateway/status/${activeGw.serial_number}`);
+        const statusResp = await api.get(`/api/v1/gateway/status/${activeGw.serial_number}`);
         const statusData = statusResp.data;
         const recentAnimals = (statusData.recent_animals || []) as Array<{
           animal_id: string;
@@ -228,8 +241,17 @@ class BLEScanner {
           longitude: number;
         }>;
 
+        // If the status endpoint returned no animals (sightings expired from
+        // the 1-hour window, or simulator hasn't sent data yet), fall back
+        // to herd-count based gradual discovery instead of showing 0.
+        if (recentAnimals.length === 0) {
+          await this.pollFallbackHerdCount();
+          return;
+        }
+
         // Step 3: Calculate distance and only detect cattle within BLE range
         this.recentSightings.clear();
+        usedPositionPath = true;
 
         for (const animal of recentAnimals) {
           if (!animal.latitude || !animal.longitude) continue;
@@ -259,9 +281,16 @@ class BLEScanner {
           }
         }
 
+        // If position-based path found animals but none were within BLE range,
+        // fall through to herd-count fallback so the UI isn't stuck at 0.
+        if (usedPositionPath && this.recentSightings.size === 0) {
+          await this.pollFallbackHerdCount();
+          return;
+        }
+
         // Also update total registered from API if available
         try {
-          const herdResp = await api.get(`/api/gateway/herd-count/${this.farmId}`);
+          const herdResp = await api.get(`/api/v1/gateway/herd-count/${this.farmId}`);
           if (herdResp.data.total_registered) {
             this.totalRegistered = herdResp.data.total_registered;
           }
@@ -288,7 +317,7 @@ class BLEScanner {
    */
   private async pollFallbackHerdCount() {
     try {
-      const resp = await api.get(`/api/gateway/herd-count/${this.farmId}`);
+      const resp = await api.get(`/api/v1/gateway/herd-count/${this.farmId}`);
       const data = resp.data;
 
       if (data.total_registered) {
@@ -297,41 +326,75 @@ class BLEScanner {
 
       this.recentSightings.clear();
 
-      // Simulate gradual discovery: each tick can only detect a fraction
-      // proportional to what a herdsman walking would encounter
-      const isLargeFarm = this.totalRegistered > 20;
-      const maxNewPerTick = isLargeFarm ? 3 : 2;
-      const alreadySeen = this.seenToday.size;
-      const totalToDiscover = data.seen_today || this.totalRegistered;
-
-      // Determine how many are currently "in range" (subset of total)
-      const inRangePct = isLargeFarm ? 0.15 : 0.40;
-      const inRangeCount = Math.min(
-        Math.round(this.totalRegistered * inRangePct),
-        totalToDiscover
+      // Use server's authoritative "seen today" count and "missing" list to
+      // ensure all device instances converge to the same percentage.
+      const serverSeenToday: number = data.seen_today || 0;
+      const serverMissingCount: number = data.missing_count ?? data.missing?.length ?? 0;
+      const missingNames: Set<string> = new Set(
+        (data.missing || []).map((m: { name: string }) => m.name)
       );
 
+      if (serverSeenToday > 0 || serverMissingCount > 0) {
+        // Server has real data — sync our local "seen today" set to match.
+        // Mark every registered animal NOT in the missing list as "seen".
+        for (const [mac, name] of this.registeredMacs.entries()) {
+          if (!missingNames.has(name) && !this.seenToday.has(mac)) {
+            this.addToSeenToday(mac, name);
+          }
+        }
+        // Also remove any that the server now considers missing (edge case:
+        // server dropped them from "seen" due to time threshold change)
+        for (const [mac, record] of this.seenToday.entries()) {
+          if (missingNames.has(record.name)) {
+            this.seenToday.delete(mac);
+          }
+        }
+      } else {
+        // No server sighting data yet — use gradual local discovery as fallback.
+        // Each tick discovers a few more animals to simulate herdsman walking.
+        const isLargeFarm = this.totalRegistered > 20;
+        const maxNewPerTick = isLargeFarm ? 3 : 2;
+        const alreadySeen = this.seenToday.size;
+
+        const allMacs = Array.from(this.registeredMacs.entries());
+        const unseenMacs = allMacs.filter(([mac]) => !this.seenToday.has(mac));
+
+        const newDiscoveries = unseenMacs
+          .sort(() => Math.random() - 0.5)
+          .slice(0, Math.min(maxNewPerTick, this.totalRegistered - alreadySeen));
+
+        for (const [mac, name] of newDiscoveries) {
+          this.addToSeenToday(mac, name);
+        }
+      }
+
+      // "In range" count: simulate realistic BLE variability.
+      // Real BLE scanning sees a fluctuating subset — not a fixed number.
+      // Base it on the number seen today (more coverage = more likely near cattle).
+      const seenCount = this.seenToday.size;
+      const isLargeFarm = this.totalRegistered > 20;
+
+      // Base range: 10-25% of seen animals, with random variance each tick
+      const basePct = isLargeFarm ? 0.20 : 0.45;
+      const variance = (Math.random() - 0.5) * 0.10; // ±5% jitter
+      const inRangeCount = Math.max(
+        1,
+        Math.round(seenCount * (basePct + variance))
+      );
+
+      // Pick which animals appear "in range" this tick
       const allMacs = Array.from(this.registeredMacs.entries());
-      // Prioritize cattle already seen (they stay in memory)
       const seenMacs = allMacs.filter(([mac]) => this.seenToday.has(mac));
-      const unseenMacs = allMacs.filter(([mac]) => !this.seenToday.has(mac));
 
-      // In-range: show some already-seen + a few new ones
-      let inRangeSlots = inRangeCount;
-      const inRangeFromSeen = seenMacs.slice(0, Math.min(seenMacs.length, Math.round(inRangeSlots * 0.7)));
-      inRangeSlots -= inRangeFromSeen.length;
+      // Shuffle to vary which specific animals show as in-range each poll
+      const shuffledSeen = seenMacs.sort(() => Math.random() - 0.5);
+      const inRangeAnimals = shuffledSeen.slice(0, Math.min(inRangeCount, shuffledSeen.length));
 
-      // Add new discoveries (limited per tick)
-      const newDiscoveries = unseenMacs
-        .sort(() => Math.random() - 0.5)
-        .slice(0, Math.min(maxNewPerTick, inRangeSlots, totalToDiscover - alreadySeen));
-
-      for (const [mac, name] of [...inRangeFromSeen, ...newDiscoveries]) {
+      for (const [mac, name] of inRangeAnimals) {
         const rssi = -45 - Math.floor(Math.random() * 25);
         this.recentSightings.set(mac, {
           animalId: mac, animalName: name, mac, rssi, lastSeen: new Date(), inRange: true,
         });
-        this.addToSeenToday(mac, name);
       }
     } catch {
       this.simulateLocalBLE();

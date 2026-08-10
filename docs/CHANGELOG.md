@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-08-11 — Mobile BLE Scanner Fix & API Path Migration
+
+### BLE Scanner — Zero Animals Fix (`mobile/src/services/bleScanner.ts`)
+
+**Fixed**: Scanner showed "0 in range now" and "0% Seen Today" despite being active. Three root causes:
+
+1. **No fallback when position-based path yields 0 animals**: The scanner's poll would successfully find a gateway with coordinates (from prior simulator runs), call the `/status` endpoint, get 0 recent animals (sightings expired from the 1-hour DB window), and then do nothing — never falling through to the herd-count simulation fallback.
+2. **Shift not auto-starting**: The `addToSeenToday()` method gates on `shiftState !== null`. Previously required a manual button tap to start a shift before any tracking occurred. Now auto-starts when scanning begins.
+3. **Percentage mismatch across devices**: Each device built its own "seen today" set from independent random local picks. Now syncs from the server's `herd-count` endpoint — uses the `missing` list to determine which animals are seen vs not seen, so all devices converge to the same percentage.
+
+### "In Range" Count Variability
+
+**Fixed**: "In range" count was stuck at exactly 8 for Sibanyoni (50 cattle) due to a fixed `0.15 * totalRegistered` formula. Now uses a variable percentage with random jitter each poll tick to simulate realistic BLE detection fluctuation.
+
+### API Path Migration (Mobile App)
+
+**Migrated** all mobile app API calls from deprecated `/api/...` to versioned `/api/v1/...`:
+
+| File | Endpoints Updated |
+|------|------------------|
+| `mobile/src/services/bleScanner.ts` | `/api/v1/gateway/tags`, `/api/v1/gateway`, `/api/v1/gateway/status/{serial}`, `/api/v1/gateway/herd-count/{farm_id}`, `/api/v1/animals` |
+| `mobile/src/services/offlineBuffer.ts` | `/api/v1/gateway/batch` |
+| `mobile/src/screens/MapScreen.tsx` | `/api/v1/animals`, `/api/v1/geofences`, `/api/v1/gateway`, `/api/v1/animals/{id}/history` |
+| `mobile/src/screens/AdminDashboard.tsx` | `/api/v1/system/status`, `/api/v1/alerts` |
+| `mobile/src/screens/AnimalsScreen.tsx` | `/api/v1/animals` |
+
+### Documentation
+
+- Updated `docs/HERDSMAN_GATEWAY_SPEC.md` architecture diagram to reference `/api/v1/gateway/batch`
+
+---
+
 ## 2026-08-10 — Simulator Lifecycle & Map Marker Stability
 
 ### Gateway Simulator v2 — Daily Lifecycle (`tools/simulator/gateway_simulator.py`)

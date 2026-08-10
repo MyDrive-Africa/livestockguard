@@ -61,9 +61,9 @@ export default function MapScreen() {
     if (!selectedFarm) return;
     try {
       const [animalsResp, geofencesResp, gatewaysResp] = await Promise.all([
-        api.get(`/api/animals?farm_id=${selectedFarm.id}`),
-        api.get(`/api/geofences?farm_id=${selectedFarm.id}`),
-        api.get(`/api/gateway?farm_id=${selectedFarm.id}`),
+        api.get(`/api/v1/animals?farm_id=${selectedFarm.id}`),
+        api.get(`/api/v1/geofences?farm_id=${selectedFarm.id}`),
+        api.get(`/api/v1/gateway?farm_id=${selectedFarm.id}`),
       ]);
       setAnimals(animalsResp.data);
       setGeofences(geofencesResp.data);
@@ -112,7 +112,7 @@ export default function MapScreen() {
 
   const fetchTrail = async (animalId: string) => {
     try {
-      const resp = await api.get(`/api/animals/${animalId}/history?hours=24`);
+      const resp = await api.get(`/api/v1/animals/${animalId}/history?hours=24`);
       setTrail(resp.data.positions || []);
       setSelectedAnimal(animalId);
     } catch {
