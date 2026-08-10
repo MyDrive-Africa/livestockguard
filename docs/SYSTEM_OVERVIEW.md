@@ -398,7 +398,7 @@ The web dashboard is a single-page application providing real-time livestock mon
 
 | Page | Path | Features |
 |------|------|----------|
-| **Map** | `/map` | Live animal markers, movement trails (24h), geofence polygon overlays, tile switching (Street/Satellite/Terrain), click-to-draw geofence, 📍 farm coordinate pin marker (shows exact farm centre, name label, coordinate readout — pin moves when switching farms, stays visible on satellite view for geofence orientation), 🚶 herdsman marker (blue person icon, distinct from cattle markers, shows gateway position updated every 30s, click for patrol info) |
+| **Map** | `/map` | Live animal markers (deterministic scatter for BLE overlaps), movement trails (24h, connects to marker position), geofence polygon overlays, tile switching (Street/Satellite/Terrain/Dark), click-to-draw geofence, 📍 farm coordinate pin, 🚶 herdsman marker (blue person icon), **Find Herdsman** button (flies to herdsman, shows coordinates, labels distant cows with coords + distance) |
 | **Animals** | `/animals` | Sortable/searchable list, filter by species/status/farm, detail view with history trail |
 | **Alerts** | `/alerts` | Real-time alert feed, severity badges, acknowledge/resolve workflow, filter by type |
 | **Analytics** | `/analytics` | Area/line/bar/donut charts, sparklines in summary cards, date range picker, dark-mode tooltips |
@@ -597,18 +597,29 @@ make simulate-many        # 50 animals stress test
 
 ### 2. BLE Gateway Simulator (`tools/simulator/gateway_simulator.py`)
 
-Simulates a herdsman carrying a phone that scans BLE ear tags.
+Simulates a full daily lifecycle for a herdsman with a BLE gateway phone. Guarantees 100% cattle detection at morning and evening.
 
 | Aspect | Detail |
 |--------|--------|
 | Protocol | REST API (POST /api/gateway/batch) |
-| BLE Simulation | Virtual MAC addresses, RSSI calculated from distance |
-| GPS | Simulated rectangular patrol route |
+| BLE Simulation | Virtual MAC addresses, RSSI calculated from distance (100m range) |
+| Daily Lifecycle | 3 phases: morning kraal (100%), daytime patrol (progressive), evening return (100%) |
+| Reproducibility | `--seed` option for deterministic, repeatable runs |
+
+**Daily Phases:**
+- **Morning Kraal (20%)** — all cattle within 15m radius, gateway stationary, 100% detection
+- **Daytime Patrol (60%)** — cattle scatter to 3-6 grazing clusters (150-300m), gateway patrols between them
+- **Evening Return (20%)** — gateway at kraal, cattle herded back at 6 km/h, 100% detection restored
 
 **Commands:**
 ```bash
-make simulate-gateway          # Real-time with API
-make simulate-gateway-offline  # Print only
+make simulate-gateway              # Loch Vaal, 10 animals, real-time with API
+make simulate-gateway-sibanyoni    # Sibanyoni, 50 animals
+make simulate-gateway-offline      # Print only, no API
+
+# Direct CLI with options:
+python3 gateway_simulator.py --farm lochvaal --animals 10 --seed 42
+python3 gateway_simulator.py --farm sibanyoni --animals 50 --duration 300 --offline
 ```
 
 ### 3. Herdsman Daily Routine Simulator (`tools/simulator/gateway_daily_sim.py`)
@@ -646,11 +657,18 @@ make simulate-day              # Normal day, speed 120x (~6 min)
 make simulate-day-offline      # Same without API
 make simulate-day-theft        # Theft at 10:00, speed 360x
 make simulate-day-breach       # Breach scenario, speed 360x
+make simulate-day-sibanyoni    # Sibanyoni farm, 50 cattle, full day
 make simulate-loop             # Both farms in continuous loop (random days, never stops)
 ```
 
+**Reproducibility:** All simulators support `--seed <int>` for deterministic, repeatable runs. Same seed = identical output every time.
+
 **Loop Mode (`--loop` flag):**
 Both simulators support `--loop` which automatically restarts with random variation after each day completes. Each new day picks a random grazing area and random weather. Use `make simulate-loop` to run both farms continuously for extended testing.
+
+### 4. Sibanyoni Daily Routine Simulator (`tools/simulator/sibanyoni_daily_sim.py`)
+
+Dedicated simulator for Sibanyoni Farm (50 cattle, North West). Uses the same schedule pattern as the Loch Vaal daily sim but with Sibanyoni coordinates and 50 BLE-tagged cattle in multiple sub-groups.
 
 **Dashboard Control:**
 The Gateway page on the web dashboard has a Start/Stop button that spawns simulators directly (via a dev-only Vite plugin). Only works during `npm run dev` — not in production builds.
