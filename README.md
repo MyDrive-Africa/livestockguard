@@ -30,8 +30,9 @@ Real-time animal monitoring, virtual fencing, theft detection, and herd health �
 # Clone and run the FULL platform (all 3 farms, all sims, dashboard + mobile):
 git clone https://github.com/MyDrive-Africa/livestockguard.git
 cd livestockguard
-make setup        # installs everything, starts Docker, seeds DB
-make demo-full    # launches EVERYTHING: 65 animals, 3 farms, dashboard, mobile app
+make setup              # installs backend deps, starts Docker, seeds DB
+make setup-frontend     # installs dashboard + mobile deps, checks native prerequisites
+make demo               # launches EVERYTHING: 65 animals, 3 farms, dashboard, mobile app
 ```
 
 Open **http://localhost:5173** (dashboard) or **http://localhost:8082** (mobile app).
@@ -41,7 +42,7 @@ Log in with any of:
 - `lochvaal@livestockguard.co.za` / `demo123` (Loch Vaal, Gauteng)
 - `sibanyoni@livestockguard.co.za` / `demo123` (Sibanyoni, North West)
 
-> **Lighter option:** `make demo` runs only Boschhoek + Loch Vaal without mobile app (faster startup).
+> **Development (no simulators):** `make dev` starts backend + dashboard + mobile without any simulators — use when coding or connected to real hardware.
 
 ---
 
@@ -81,10 +82,13 @@ Log in with any of:
 ## First-Time Setup
 
 ```bash
-make setup
+make setup              # Backend: Docker, Python venv, database, migrations
+make setup-frontend     # Frontend: dashboard npm, mobile npm, native prerequisites
 ```
 
-This single command runs `scripts/setup.sh` which:
+### `make setup` (Backend)
+
+Runs `scripts/setup.sh` which:
 
 1. **Checks prerequisites** — verifies docker, node, npm, python3, pip3, git are installed
 2. **Creates Python venv** — installs simulator dependencies (`paho-mqtt`, `click`) in `tools/simulator/.venv`
@@ -94,48 +98,72 @@ This single command runs `scripts/setup.sh` which:
 6. **Runs migrations** — applies `001_initial_schema.sql` (tables, hypertables, indexes)
 7. **Creates `.env`** — generates a dev `.env` with sensible defaults
 
-After setup completes, you're ready to run everything.
+### `make setup-frontend` (Dashboard + Mobile)
+
+Runs `scripts/setup-frontend.sh` which:
+
+1. **Checks Node.js version** — mobile requires Node 20+, dashboard needs 18+
+2. **Installs dashboard deps** — `npm install` + TypeScript type check
+3. **Installs mobile deps** — `npm install` + verifies `@react-native` package resolution
+4. **iOS prerequisites** — checks Xcode + CocoaPods, runs `pod install` if available
+5. **Android prerequisites** — checks Android SDK + JDK 17, creates `local.properties`
+6. **Creates .env files** — dashboard and mobile env with API URL defaults
+
+Flags: `--web` (skip native checks), `--ios` (iOS only), `--android` (Android only).
+
+Full log: `logs/setup-frontend.log`
+
+After both complete, you're ready to run everything.
 
 ---
 
 ## Running the Platform
 
-### Option A: Full Platform Demo (Recommended for first time)
+### Option A: Full Demo with Simulators (Recommended for first time)
 
 ```bash
-make demo-full          # EVERYTHING: 3 farms, 65 animals, dashboard + mobile, breach scenario
-make demo-full-normal   # Everything, normal day (no incidents)
-make demo-full-theft    # Everything, theft scenario
+make demo               # 3 farms, 65 animals, dashboard + mobile, breach scenario, detailed logging
+make demo-normal        # Same but normal day — no alerts, cattle graze peacefully
+make demo-theft         # Same but theft scenario — LV-001 stolen at ~sim 10:00
+make demo-no-mobile     # Full demo without mobile app (dashboard only on :5173)
+make demo-no-sim        # Backend + dashboard + mobile, no simulators
 ```
 
-`make demo-full` starts **the entire platform** automatically:
+`make demo` starts **the entire platform** automatically with detailed step-by-step logging:
 1. Docker infrastructure (Postgres, Redis, EMQX, API, MQTT Writer, Alert Engine)
-2. Seeds database (3 farms, 65 animals, 13 geofences, 2 gateways, 60 BLE tags)
-3. Applies all 9 migrations
-4. GPS simulator: Boschhoek Farm (5 animals, Free State)
-5. GPS simulator: Sibanyoni Farm (50 animals, North West)
-6. BLE gateway simulator: Loch Vaal (10 animals, full herdsman day at 20x speed)
-7. Web dashboard on http://localhost:5173
-8. Mobile app on http://localhost:8082
+2. Database migrations (all 12 files)
+3. Seeds database (3 farms, 65 animals, 13 geofences, 2 gateways, 60 BLE tags)
+4. Verifies API health
+5. GPS simulator: Boschhoek Farm (5 animals, binary MQTT, Free State)
+6. BLE gateway simulator: Sibanyoni Farm (50 animals, herdsman day, North West)
+7. BLE gateway simulator: Loch Vaal (10 animals, herdsman day, Gauteng)
+8. Web dashboard on http://localhost:5173
+9. Mobile app on http://localhost:8082
+
+Logs: `logs/run-all.log` (master) + per-service logs in `logs/run-all-*.log`
 
 Stop with **Ctrl+C** — kills all background processes cleanly.
 
-### Option A (Lite): Standard Demo
+### Option B: Development Mode (No Simulators)
 
 ```bash
-make demo           # Boschhoek GPS + Loch Vaal BLE + dashboard (breach)
-make demo-normal    # Normal day
-make demo-theft     # Theft scenario
-make demo-mobile    # + mobile app in browser
-make demo-ios       # + iOS simulator build
-make demo-android   # + Android emulator build
+make dev                # Backend + Dashboard (:5173) + Mobile (:8082) — no simulators
+make dev-no-mobile      # Backend + Dashboard only
+make dev-backend        # Backend infrastructure only (no frontends)
 ```
 
-Lighter/faster — runs 2 farms (Boschhoek + Loch Vaal) without Sibanyoni or mobile by default.
+Use `make dev` when:
+- Writing frontend or backend code
+- Connected to real GPS collars / BLE gateways
+- You only need infrastructure running without simulated data
 
----
+You can add simulators manually in another terminal:
+```bash
+make simulate           # GPS (Boschhoek, 5 cows)
+make simulate-gateway   # BLE (Loch Vaal, 10 cows)
+```
 
-### Option B: Manual Multi-Terminal (Full Control)
+### Option C: Manual Multi-Terminal (Full Control)
 
 Best when developing — each process in its own terminal for easy restart/debug.
 
@@ -149,20 +177,12 @@ make mqtt-writer
 
 # Terminal 3: Device simulator (pick one)
 make simulate              # Boschhoek, 5 GPS-collared cows, normal grazing
-make simulate-lochvaal     # Loch Vaal, 10 animals, GPS mode
-make simulate-sibanyoni    # Sibanyoni, 50 animals, GPS mode
+make simulate-gateway      # Loch Vaal, 10 BLE ear tags, real-time
+make simulate-day          # Loch Vaal, full herdsman day at 120x speed
 
 # Terminal 4: Web dashboard
 make dashboard        # React dev server at http://localhost:5173
 ```
-
-### Option C: Full Dev Stack (start + instructions)
-
-```bash
-make dev
-```
-
-Starts Docker, then prints the terminal commands for you to run manually.
 
 ---
 
@@ -253,11 +273,10 @@ Night:     Cattle in kraal
 
 Run `make help` to see all available commands. Full reference:
 
-### Setup & Infrastructure
+### Infrastructure
 
 | Target | Description |
 |--------|-------------|
-| `make setup` | First-time setup — installs everything, starts Docker, runs migrations |
 | `make start` | Start cloud stack (PostgreSQL, Redis, EMQX, API Gateway, MQTT Writer, Alert Engine) |
 | `make stop` | Stop cloud Docker stack |
 | `make restart` | Stop + start |
@@ -310,20 +329,26 @@ Run `make help` to see all available commands. Full reference:
 | `make mobile-android` | Build + launch on Android emulator |
 | `make mqtt-writer` | Start MQTT→DB bridge (standalone, outside Docker) |
 
-### Full Demo
+### Full Stack (Dev & Demo)
 
 | Target | Description |
 |--------|-------------|
-| `make dev` | Start Docker stack + print instructions for other terminals |
-| `make demo` | Live demo: Boschhoek + Loch Vaal + dashboard (breach) |
-| `make demo-normal` | Demo with normal day (no incidents) |
-| `make demo-theft` | Demo with theft scenario |
-| `make demo-mobile` | Demo + mobile app in browser |
-| `make demo-ios` | Demo + iOS simulator build |
-| `make demo-android` | Demo + Android emulator build |
-| `make demo-full` | **EVERYTHING**: 3 farms, all sims, dashboard + mobile (breach) |
-| `make demo-full-normal` | Everything, normal day |
-| `make demo-full-theft` | Everything, theft scenario |
+| `make dev` | Backend + Dashboard + Mobile — no simulators (for coding or real hardware) |
+| `make dev-no-mobile` | Backend + Dashboard only — no simulators, no mobile |
+| `make dev-backend` | Backend infrastructure only — no frontends, no simulators |
+| `make demo` | Full demo: 3 farms simulated + dashboard + mobile, detailed logging (breach) |
+| `make demo-normal` | Full demo — normal day: cattle graze peacefully, no alerts |
+| `make demo-theft` | Full demo — theft scenario: LV-001 stolen at ~sim 10:00 |
+| `make demo-no-mobile` | Full demo without mobile app (dashboard only on :5173) |
+| `make demo-no-sim` | Full demo without simulators (backend + dashboard + mobile only) |
+
+### Setup
+
+| Target | Description |
+|--------|-------------|
+| `make setup` | First-time backend setup — Docker, Python venv, migrations, seeds DB |
+| `make setup-frontend` | Dashboard + mobile setup — npm install, native prerequisites, env files |
+| `make setup-frontend-web` | Dashboard + mobile web only (skip native iOS/Android checks) |
 
 ### Testing & Verification
 
@@ -413,9 +438,14 @@ livestockguard/
 ├── .github/workflows/ci.yml    # GitHub Actions CI pipeline
 │
 ├── scripts/
-│   ├── setup.sh                # First-time environment setup
-│   ├── run-demo.sh             # Full platform demo launcher
+│   ├── setup.sh                # First-time backend setup (Docker, Python, migrations)
+│   ├── setup-frontend.sh       # Dashboard + mobile setup (npm, native prereqs, env files)
+│   ├── run-dev.sh              # Dev mode: backend + frontends, no simulators
+│   ├── run-all.sh              # Full demo: backend + sims + frontends, detailed logging
+│   ├── run-demo.sh             # Legacy demo launcher (2 farms)
+│   ├── run-demo-full.sh        # Legacy full demo launcher (3 farms)
 │   ├── seed_data.sql           # Demo farm data (3 farms, 65 animals, devices, geofences)
+│   ├── seed_sibanyoni.sql      # Sibanyoni farm seed (50 cattle, BLE tags)
 │   ├── register_ble_tags.py    # Register BLE ear tags via API
 │   └── verify-features.sh     # API feature verification
 │

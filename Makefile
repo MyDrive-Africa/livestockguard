@@ -1,7 +1,7 @@
 # LivestockGuard — Development Makefile
 # Run `make help` for available commands
 
-.PHONY: help setup start stop restart status logs simulate test clean
+.PHONY: help setup setup-frontend setup-frontend-web start stop restart status logs simulate test clean dev dev-no-mobile dev-backend demo demo-normal demo-theft demo-no-mobile demo-no-sim
 
 # Colours
 GREEN  := \033[32m
@@ -22,6 +22,12 @@ help: ## Show this help
 setup: ## First-time setup (installs everything)
 	@echo "$(CYAN)Setting up LivestockGuard dev environment...$(RESET)"
 	@bash scripts/setup.sh
+
+setup-frontend: ## Setup dashboard + mobile (fresh machine)
+	@bash scripts/setup-frontend.sh
+
+setup-frontend-web: ## Setup dashboard + mobile web only (no native)
+	@bash scripts/setup-frontend.sh --web
 
 # ─── CLOUD STACK ────────────────────────────────────
 
@@ -145,10 +151,6 @@ simulate-breach: ## Run geofence breach scenario
 simulate-many: ## Simulate 50 animals at Loch Vaal (stress test)
 	cd tools/simulator && python3 simulator.py --farm lochvaal --animals 50 --interval 15
 
-simulate-sibanyoni: ## Simulate 50 animals at Sibanyoni (North West)
-	@echo "$(GREEN)Starting device simulator (Sibanyoni Farm, 50 animals)...$(RESET)"
-	cd tools/simulator && python3 simulator.py --farm sibanyoni --animals 50 --interval 15
-
 # ─── MQTT WRITER ────────────────────────────────────
 
 mqtt-writer: ## Start MQTT→DB writer (bridges simulator to database)
@@ -185,45 +187,35 @@ test-dashboard: ## Run dashboard tests
 	cd dashboard && npm test 2>/dev/null || echo "No tests yet"
 
 # ─── FULL STACK ─────────────────────────────────────
+#
+# Two main modes:
+#   make dev   — Backend + frontends, NO simulators (for real hardware or coding)
+#   make demo  — Backend + frontends + simulators + logging (for demos/testing)
+#
 
-dev: ## Start everything for development
-	@echo "$(CYAN)Starting full development stack...$(RESET)"
-	$(MAKE) start
-	@echo ""
-	@echo "$(GREEN)Cloud stack running. Now open MORE terminals:$(RESET)"
-	@echo ""
-	@echo "  Terminal 2: make mqtt-writer   (bridges MQTT → database)"
-	@echo "  Terminal 3: make simulate      (generates GPS data)"
-	@echo "  Terminal 4: make dashboard     (web UI at localhost:5173)"
-	@echo ""
-	@echo "$(CYAN)Then open http://localhost:5173 in your browser$(RESET)"
+dev: ## Backend + Dashboard + Mobile — no simulators (for coding or real hardware)
+	@bash scripts/run-dev.sh
 
-demo: ## Full live demo: stack + sims + dashboard (breach scenario)
-	@bash scripts/run-demo.sh --breach
+dev-no-mobile: ## Backend + Dashboard only — no simulators, no mobile
+	@bash scripts/run-dev.sh --no-mobile
 
-demo-normal: ## Full demo with normal day (no incidents)
-	@bash scripts/run-demo.sh --normal
+dev-backend: ## Backend infrastructure only — no frontends, no simulators
+	@bash scripts/run-dev.sh --backend
 
-demo-theft: ## Full demo with theft scenario
-	@bash scripts/run-demo.sh --theft
+demo: ## Full demo: backend + 3 farms simulated + dashboard + mobile, with detailed logging (breach)
+	@bash scripts/run-all.sh --breach
 
-demo-mobile: ## Full demo + mobile app in browser
-	@bash scripts/run-demo.sh --breach --mobile
+demo-normal: ## Full demo — normal day: cattle graze peacefully, no alerts
+	@bash scripts/run-all.sh --normal
 
-demo-ios: ## Full demo + iOS simulator build
-	@bash scripts/run-demo.sh --breach --mobile --ios
+demo-theft: ## Full demo — theft scenario: LV-001 stolen at ~sim 10:00, theft alerts fire
+	@bash scripts/run-all.sh --theft
 
-demo-android: ## Full demo + Android emulator build
-	@bash scripts/run-demo.sh --breach --mobile --android
+demo-no-mobile: ## Full demo without mobile app (dashboard only on :5173)
+	@bash scripts/run-all.sh --breach --no-mobile
 
-demo-full: ## EVERYTHING: all 3 farms + all sims + dashboard + mobile (breach)
-	@bash scripts/run-demo-full.sh --breach
-
-demo-full-normal: ## EVERYTHING with normal day (no incidents)
-	@bash scripts/run-demo-full.sh --normal
-
-demo-full-theft: ## EVERYTHING with theft scenario
-	@bash scripts/run-demo-full.sh --theft
+demo-no-sim: ## Full demo without simulators (backend + dashboard + mobile only)
+	@bash scripts/run-all.sh --breach --no-sim
 
 mobile-web: ## Start mobile app in browser only (port 8082)
 	@echo "$(GREEN)Starting mobile app at http://localhost:8082$(RESET)"
