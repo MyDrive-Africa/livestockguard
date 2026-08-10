@@ -239,9 +239,13 @@ def send_batch(api_url, gateway_serial, herdsman, sightings, session_id=None):
 @click.option('--exit-time', default=9.33, help='Hour cattle exit yard gate (9.33=09:20)')
 @click.option('--return-time', default=16.5, help='Hour cattle start returning (16.5=16:30)')
 @click.option('--settle-time', default=17.75, help='Hour cattle settled in kraal (17.75=17:45)')
+@click.option('--seed', default=None, type=int, help='Random seed for reproducible runs')
 def main(api_url, gateway_serial, animals, speed, weather, scenario, offline, loop,
-         scan_interval, report_interval, kraal_open, exit_time, return_time, settle_time):
+         scan_interval, report_interval, kraal_open, exit_time, return_time, settle_time, seed):
     """Simulate a realistic herdsman day at Loch Vaal Plot 30."""
+
+    if seed is not None:
+        random.seed(seed)
 
     print(f"LivestockGuard — Realistic Daily Simulator")
     print(f"{'═' * 60}")
@@ -253,6 +257,7 @@ def main(api_url, gateway_serial, animals, speed, weather, scenario, offline, lo
     print(f"Scenario:    {scenario}")
     print(f"Schedule:    Kraal open {kraal_open:.1f}h, Exit {exit_time:.2f}h, Return {return_time:.1f}h, Settle {settle_time:.2f}h")
     print(f"Speed:       {speed}x")
+    print(f"Seed:        {seed if seed is not None else 'random'}")
     print(f"API:         {'OFFLINE' if offline else api_url}")
     print(f"{'═' * 60}\n")
 

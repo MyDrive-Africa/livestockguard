@@ -18,8 +18,14 @@
 - Real-time animal positions with movement trails
 - Geofence polygon overlay with breach highlighting
 - Cluster markers for dense areas, expand on zoom
-- Satellite/terrain/hybrid base layer toggle
-- Click animal → info panel (name, status, battery, last seen)
+- Satellite/terrain/hybrid/dark base layer toggle
+- Click animal → 24h trail overlay showing path to current position with start/end time labels
+- **Deterministic scatter**: BLE animals sharing the same gateway position are spread using a stable ID-based hash — markers never move on refresh or hover
+- **Stable markers**: Hover/click effects use inner DOM wrapper to avoid MapLibre transform conflicts — no popup DOM thrashing
+- **Find Herdsman button**: Flies to herdsman's position, displays coordinates, and labels all distant cow markers (>100m) with their coordinates and distance from herdsman
+- Trail connects to cow's actual marker position (accounting for scatter offset)
+- Herdsman markers (blue 🚶) show gateway device operator position
+- Multi-farm selector with auto-fly-to on switch
 
 ### Animals (`/animals`)
 - Sortable/filterable table (species, breed, status, group)

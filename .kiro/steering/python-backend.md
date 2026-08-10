@@ -130,3 +130,5 @@ Simulators in `tools/simulator/` use:
 - `click` for CLI
 - `struct.pack` for binary protocol encoding
 - Farm presets: boschhoek, lochvaal, sibanyoni (with coordinates and device ID bases)
+- `--seed` option on all simulators for reproducible deterministic runs
+- `gateway_simulator.py` uses a 3-phase daily lifecycle (morning kraal → patrol → evening return)

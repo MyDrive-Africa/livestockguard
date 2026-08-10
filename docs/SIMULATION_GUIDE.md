@@ -213,3 +213,85 @@ make demo-full             # All farms, breach scenario
 make demo-full-normal      # All farms, normal day
 make demo-full-theft       # All farms, theft scenario
 ```
+
+---
+
+## Gateway Simulator v2 — Daily Lifecycle (`gateway_simulator.py`)
+
+The `gateway_simulator.py` was rewritten with a 3-phase daily lifecycle that **guarantees 100% cattle detection** at morning and evening, with realistic partial detection during daytime grazing.
+
+### Daily Phases
+
+| Phase | Duration | Behaviour | Detection |
+|-------|----------|-----------|-----------|
+| **Morning Kraal** | 20% of sim | All cattle within 15m kraal radius, gateway stationary | **100%** every scan |
+| **Daytime Patrol** | 60% of sim | Cattle scatter to 3-6 grazing clusters (150-300m away), gateway patrols between them | Progressive: starts at 100%, drops as cattle spread, gateway picks up clusters sequentially |
+| **Evening Return** | 20% of sim | Gateway returns to kraal, cattle herded back at 6 km/h | Ramps from 0% back to **100%** as cattle converge |
+
+### Usage
+
+```bash
+cd tools/simulator
+
+# Basic run (Loch Vaal, 10 cattle, 10 min)
+python3 gateway_simulator.py --farm lochvaal --animals 10 --duration 600
+
+# Sibanyoni full herd (50 cattle, 5 min sim)
+python3 gateway_simulator.py --farm sibanyoni --animals 50 --duration 300
+
+# Reproducible run (same output every time)
+python3 gateway_simulator.py --farm lochvaal --animals 10 --seed 42
+
+# Offline mode (no API calls)
+python3 gateway_simulator.py --farm sibanyoni --animals 50 --offline --seed 99
+```
+
+### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--farm` | lochvaal | Farm preset: `lochvaal`, `sibanyoni`, `boschhoek` |
+| `--animals` | 10 | Number of BLE-tagged animals |
+| `--duration` | 600 | Simulation duration in seconds |
+| `--scan-interval` | 5 | BLE scan interval (seconds) |
+| `--report-interval` | 30 | API batch report interval (seconds) |
+| `--seed` | random | Integer seed for reproducible runs |
+| `--offline` | false | Skip API calls (print-only mode) |
+| `--gateway-serial` | auto | Override gateway serial number |
+| `--herdsman` | Teboho Mpeki | Herdsman name |
+
+### Reproducibility (`--seed`)
+
+All three simulators now support `--seed` for deterministic output:
+
+```bash
+# Gateway simulator (BLE lifecycle)
+python3 gateway_simulator.py --farm lochvaal --seed 42
+
+# Gateway daily simulator (full day routine)
+python3 gateway_daily_sim.py --seed 42
+
+# GPS collar simulator (MQTT binary)
+python3 simulator.py --farm boschhoek --seed 42
+```
+
+Two runs with the same seed produce identical:
+- Animal positions and scatter patterns
+- MAC addresses (when using random MACs)
+- Movement trajectories and BLE detections
+- RSSI values and detection counts
+
+Omit `--seed` for random variation between runs (default behaviour).
+
+---
+
+## Map Marker Stability (Dashboard + Mobile)
+
+Animal markers on the map use **deterministic ID-based scatter** to spread overlapping BLE animals (which share the same gateway-reported position). This ensures:
+
+- Markers never jump/move on refresh or hover
+- Same animal always appears at the same scattered position
+- Hovering, clicking, or trail activation does not reposition the cow
+- The scatter is stable across 30-second auto-refresh cycles
+
+The scatter algorithm hashes the animal UUID to derive angle and radius, placing each cow in a unique, repeatable position within ~20-55m of the gateway point.

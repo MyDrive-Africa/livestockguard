@@ -156,6 +156,7 @@ export default function MapPage() {
   }, []);
 
   // Fly to selected farm when it changes, or when map finishes loading
+  const prevFarmIdRef = useRef<string>('');
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !selectedFarmId || loading) return;
@@ -179,11 +180,16 @@ export default function MapPage() {
         .setLngLat([farm.longitude, farm.latitude])
         .addTo(map);
     }
-    // Load geofences & animals for the selected farm
-    clearAllGeofences(map);
-    clearAllMarkers();
-    loadGeofencesForFarm(map, selectedFarmId);
-    fetchPositionsForFarm(map, selectedFarmId);
+    // Only clear and reload markers when farm actually changes (not on every farms/loading re-render)
+    const farmChanged = prevFarmIdRef.current !== selectedFarmId;
+    const firstLoad = prevFarmIdRef.current === '';
+    if (farmChanged || firstLoad) {
+      prevFarmIdRef.current = selectedFarmId;
+      clearAllGeofences(map);
+      clearAllMarkers();
+      loadGeofencesForFarm(map, selectedFarmId);
+      fetchPositionsForFarm(map, selectedFarmId);
+    }
   }, [selectedFarmId, farms, loading]);
 
   function clearAllGeofences(map: maplibregl.Map) {
@@ -457,6 +463,15 @@ export default function MapPage() {
       const resp = await apiClient.get(`/api/animals/${animalId}/history`, { params });
       const positions = resp.data.positions;
       const points: [number, number][] = positions.map((p: any) => [p.lon, p.lat]);
+
+      // Ensure trail ends at the cow's current marker position (which may be scattered)
+      const animalMarker = markersRef.current.get(animalId);
+      if (animalMarker && points.length > 0) {
+        const markerPos = animalMarker.getLngLat();
+        // Replace the last (newest) point with the marker's actual display position
+        points[0] = [markerPos.lng, markerPos.lat];
+      }
+
       setTrailData(points);
       renderTrail(map, points);
 
@@ -464,35 +479,35 @@ export default function MapPage() {
       if (positions.length > 0) {
         const first = positions[positions.length - 1]; // oldest
         const last = positions[0]; // newest
+
+        // Use marker position for end point (matches visual)
+        const endLng = animalMarker ? animalMarker.getLngLat().lng : last.lon;
+        const endLat = animalMarker ? animalMarker.getLngLat().lat : last.lat;
+
         const startTime = new Date(first.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const endTime = new Date(last.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         // Remove old time markers
         document.querySelectorAll('.trail-time-marker').forEach(el => el.remove());
 
-        // Start marker
+        // Start marker (oldest position)
         const startEl = document.createElement('div');
         startEl.className = 'trail-time-marker';
         startEl.style.cssText = 'font-size:10px;background:#7c3aed;color:#fff;padding:1px 4px;border-radius:3px;white-space:nowrap;';
         startEl.textContent = `Start ${startTime}`;
         new maplibregl.Marker({ element: startEl, anchor: 'bottom' }).setLngLat([first.lon, first.lat]).addTo(map);
 
-        // End marker
+        // End marker (at cow's current visual position)
         const endEl = document.createElement('div');
         endEl.className = 'trail-time-marker';
         endEl.style.cssText = 'font-size:10px;background:#7c3aed;color:#fff;padding:1px 4px;border-radius:3px;white-space:nowrap;';
         endEl.textContent = `Now ${endTime}`;
-        new maplibregl.Marker({ element: endEl, anchor: 'bottom' }).setLngLat([last.lon, last.lat]).addTo(map);
+        new maplibregl.Marker({ element: endEl, anchor: 'bottom' }).setLngLat([endLng, endLat]).addTo(map);
       }
     } catch {
-      // Demo trail
-      const demo: [number, number][] = [];
-      for (let i = 0; i < 50; i++) {
-        const t = i / 50;
-        demo.push([26.210 + Math.sin(t * 6) * 0.003, -29.120 + Math.cos(t * 4) * 0.002 - t * 0.005]);
-      }
-      setTrailData(demo);
-      renderTrail(map, demo);
+      // No trail data available — don't render a fallback trail at wrong coordinates
+      setTrailData([]);
+      addToast({ title: 'No Trail', message: 'No movement history available for this animal', severity: 'info', duration: 3000 });
     }
   }
 
@@ -637,31 +652,36 @@ export default function MapPage() {
         positionMap.set(key, (positionMap.get(key) || 0) + 1);
       });
 
-      // For animals sharing a position, scatter naturally (not in a uniform circle)
-      const placed = new Map<string, number>(); // tracks how many placed at each key
+      // Deterministic hash from animal ID for stable scatter positioning.
+      // Same animal always gets the same offset regardless of API response order.
+      function stableHash(id: string): number {
+        let h = 0;
+        for (let i = 0; i < id.length; i++) {
+          h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+        }
+        return Math.abs(h);
+      }
+
+      // For animals sharing a position, scatter using ID-based deterministic offset
       animals.forEach((a: any) => {
         const key = `${a.last_latitude.toFixed(5)},${a.last_longitude.toFixed(5)}`;
         const total = positionMap.get(key) || 1;
-        const idx = placed.get(key) || 0;
-        placed.set(key, idx + 1);
 
         let lng = a.last_longitude;
         let lat = a.last_latitude;
 
-        // Natural scatter for overlapping positions (seeded by animal index for stability)
+        // Deterministic scatter for overlapping positions (seeded by animal ID)
         if (total > 1) {
-          // Use a deterministic but non-uniform distribution:
-          // Golden angle spiral + random radial jitter for organic look
-          const goldenAngle = 2.399963; // radians (137.508 degrees)
-          const angle = idx * goldenAngle + (idx * 0.7 % 1) * 0.4;
-          // Vary radius: inner cows closer, outer cows further — not a perfect ring
-          const normIdx = (idx + 1) / (total + 1);
-          const baseRadius = 0.00015 + normIdx * 0.00035; // ~17-55m spread
-          // Add per-animal jitter so positions don't align on a spiral either
-          const jitterR = baseRadius * (0.7 + ((idx * 13 + 7) % 11) / 11 * 0.6);
-          const jitterA = angle + ((idx * 7 + 3) % 9) / 9 * 0.5;
+          const hash = stableHash(a.id);
+          // Use hash-derived angle for even angular distribution
+          const angle = (hash % 1000) / 1000 * Math.PI * 2;
+          // Radius varies by hash — spread between ~20-55m
+          const radius = 0.00015 + ((hash % 997) / 997) * 0.00035;
+          // Small deterministic jitter from a second hash derivative
+          const jitterA = angle + ((hash >> 8) % 100) / 100 * 0.3;
+          const jitterR = radius * (0.75 + ((hash >> 16) % 100) / 100 * 0.5);
           lng += Math.cos(jitterA) * jitterR;
-          lat += Math.sin(jitterA) * jitterR * 0.8; // Slightly elongated (N-S vs E-W)
+          lat += Math.sin(jitterA) * jitterR * 0.8;
         }
 
         addOrUpdateMarker(map, a.id, a.name, lng, lat, a.battery_level);
@@ -680,38 +700,73 @@ export default function MapPage() {
 
     const isLow = battery != null && battery < 20;
     const pinColor = isLow ? '#ea580c' : '#dc2626';
+
+    // Outer element: static container, no transforms — MapLibre controls positioning
     const el = document.createElement('div');
-    el.style.cssText = `display:flex;flex-direction:column;align-items:center;cursor:pointer;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));transition:transform 0.2s;`;
-    el.innerHTML = `
+    el.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:pointer;';
+    el.title = name;
+
+    // Inner wrapper: handles hover scale without affecting MapLibre's position transform
+    const inner = document.createElement('div');
+    inner.style.cssText = `display:flex;flex-direction:column;align-items:center;transition:transform 0.15s ease;transform-origin:bottom center;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));`;
+    inner.innerHTML = `
       <div style="width:30px;height:30px;background:${pinColor};border:2px solid ${resolved === 'dark' ? '#374151' : 'white'};border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;">
         <span style="transform:rotate(45deg);font-size:14px;">🐄</span>
       </div>
       <div style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:6px solid ${pinColor};margin-top:-2px;"></div>
     `;
-    el.title = name;
-    el.addEventListener('mouseenter', () => { el.style.transform = 'scale(1.15)'; });
-    el.addEventListener('mouseleave', () => { el.style.transform = 'scale(1)'; });
+    el.appendChild(inner);
+
+    // Hover effect on inner element only — won't displace the marker
+    el.addEventListener('mouseenter', () => { inner.style.transform = 'scale(1.15)'; });
+    el.addEventListener('mouseleave', () => { inner.style.transform = 'scale(1)'; });
     el.addEventListener('click', (e) => { e.stopPropagation(); showTrail(id); });
 
-    const popup = new maplibregl.Popup({ offset: 25 }).setHTML(`
-      <div style="padding:8px;min-width:140px;">
-        <strong>${name}</strong><br/>
-        <span style="color:#666;font-size:12px;">
-          📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}<br/>
-          🔋 ${battery ?? '?'}% ${isLow ? '⚠️' : ''}<br/>
-          <em>Click marker for 24h trail</em>
-        </span>
-      </div>
-    `);
-
-    const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([lng, lat]).setPopup(popup).addTo(map);
+    // No popup — click shows trail directly, tooltip on hover via title attribute
+    const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+      .setLngLat([lng, lat])
+      .addTo(map);
     markersRef.current.set(id, marker);
   }
 
-  // Realtime updates
+  // Realtime updates — apply same deterministic scatter as initial fetch
   useEffect(() => {
     if (!mapRef.current) return;
-    positions.forEach((pos, id) => addOrUpdateMarker(mapRef.current!, id, pos.animalName, pos.position.longitude, pos.position.latitude, pos.batteryLevel));
+
+    // Collect raw positions to detect overlaps
+    const posEntries = Array.from(positions.entries());
+    const positionCounts = new Map<string, number>();
+    posEntries.forEach(([, pos]) => {
+      const key = `${pos.position.latitude.toFixed(5)},${pos.position.longitude.toFixed(5)}`;
+      positionCounts.set(key, (positionCounts.get(key) || 0) + 1);
+    });
+
+    function stableHash(id: string): number {
+      let h = 0;
+      for (let i = 0; i < id.length; i++) {
+        h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+      }
+      return Math.abs(h);
+    }
+
+    posEntries.forEach(([id, pos]) => {
+      let lng = pos.position.longitude;
+      let lat = pos.position.latitude;
+      const key = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+      const total = positionCounts.get(key) || 1;
+
+      if (total > 1) {
+        const hash = stableHash(id);
+        const angle = (hash % 1000) / 1000 * Math.PI * 2;
+        const radius = 0.00015 + ((hash % 997) / 997) * 0.00035;
+        const jitterA = angle + ((hash >> 8) % 100) / 100 * 0.3;
+        const jitterR = radius * (0.75 + ((hash >> 16) % 100) / 100 * 0.5);
+        lng += Math.cos(jitterA) * jitterR;
+        lat += Math.sin(jitterA) * jitterR * 0.8;
+      }
+
+      addOrUpdateMarker(mapRef.current!, id, pos.animalName, lng, lat, pos.batteryLevel);
+    });
   }, [positions]);
 
   // Auto-refresh (fallback — primary updates come via WebSocket)
@@ -735,42 +790,33 @@ export default function MapPage() {
     serial: string,
     lng: number,
     lat: number,
-    battery?: number | null,
-    lastSeen?: string | null,
+    _battery?: number | null,
+    _lastSeen?: string | null,
   ) {
     const existing = herdsmanMarkersRef.current.get(id);
     if (existing) { existing.setLngLat([lng, lat]); return; }
 
+    // Outer element: static, no transforms — MapLibre controls positioning
     const el = document.createElement('div');
-    el.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:pointer;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));transition:transform 0.2s;';
-    el.innerHTML = `
+    el.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:pointer;';
+    el.title = `${name} (${serial})`;
+
+    // Inner wrapper: handles hover scale without affecting MapLibre's position
+    const inner = document.createElement('div');
+    inner.style.cssText = 'display:flex;flex-direction:column;align-items:center;transition:transform 0.15s ease;transform-origin:bottom center;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));';
+    inner.innerHTML = `
       <div style="width:32px;height:32px;background:#2563eb;border:2px solid ${resolved === 'dark' ? '#374151' : 'white'};border-radius:50%;display:flex;align-items:center;justify-content:center;">
         <span style="font-size:16px;">🚶</span>
       </div>
       <div style="font-size:9px;font-weight:bold;color:#fff;background:#1d4ed8;padding:1px 5px;border-radius:3px;margin-top:2px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.3);">${name}</div>
     `;
-    el.title = `${name} (${serial})`;
-    el.addEventListener('mouseenter', () => { el.style.transform = 'scale(1.15)'; });
-    el.addEventListener('mouseleave', () => { el.style.transform = 'scale(1)'; });
+    el.appendChild(inner);
 
-    const timeDiff = lastSeen ? Math.floor((Date.now() - new Date(lastSeen).getTime()) / 60000) : null;
-    const timeStr = timeDiff === null ? 'Never' : timeDiff < 1 ? 'Just now' : timeDiff < 60 ? `${timeDiff}m ago` : `${Math.floor(timeDiff / 60)}h ago`;
-
-    const popup = new maplibregl.Popup({ offset: 25 }).setHTML(`
-      <div style="padding:8px;min-width:160px;">
-        <strong>🚶 ${name}</strong><br/>
-        <span style="color:#666;font-size:12px;">
-          📡 ${serial}<br/>
-          📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}<br/>
-          🔋 ${battery ?? '?'}%<br/>
-          🕐 ${timeStr}
-        </span>
-      </div>
-    `);
+    el.addEventListener('mouseenter', () => { inner.style.transform = 'scale(1.15)'; });
+    el.addEventListener('mouseleave', () => { inner.style.transform = 'scale(1)'; });
 
     const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
       .setLngLat([lng, lat])
-      .setPopup(popup)
       .addTo(map);
     herdsmanMarkersRef.current.set(id, marker);
   }
@@ -883,6 +929,57 @@ export default function MapPage() {
   function toggleLayer(l: LayerToggle) {
     setLayers((p) => ({ ...p, [l]: !p[l] }));
     if (l === 'trails' && layers.trails) clearTrail();
+  }
+
+  // Fly to herdsman position and show coordinate labels on distant cow markers
+  function flyToHerdsman() {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Find first herdsman marker
+    const firstHerdsman = herdsmanMarkersRef.current.entries().next();
+    if (!firstHerdsman.value) {
+      addToast({ title: 'No Herdsman', message: 'No active herdsman on this farm', severity: 'info', duration: 3000 });
+      return;
+    }
+
+    const [, herdsmanMarker] = firstHerdsman.value;
+    const herdsmanPos = herdsmanMarker.getLngLat();
+
+    // Fly to herdsman
+    map.flyTo({ center: [herdsmanPos.lng, herdsmanPos.lat], zoom: 17, duration: 1200 });
+
+    // Remove any existing coordinate labels
+    document.querySelectorAll('.cow-coord-label').forEach(el => el.remove());
+
+    // Show coordinate labels on cow markers that are far from the herdsman (>100m)
+    markersRef.current.forEach((marker) => {
+      const pos = marker.getLngLat();
+      const distM = Math.sqrt(
+        Math.pow((pos.lat - herdsmanPos.lat) * 111320, 2) +
+        Math.pow((pos.lng - herdsmanPos.lng) * 111320 * Math.cos(pos.lat * Math.PI / 180), 2)
+      );
+      if (distM > 100) {
+        const labelEl = document.createElement('div');
+        labelEl.className = 'cow-coord-label';
+        labelEl.style.cssText = 'font-size:9px;background:rgba(220,38,38,0.9);color:#fff;padding:2px 5px;border-radius:3px;white-space:nowrap;pointer-events:none;';
+        labelEl.textContent = `${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)} (${Math.round(distM)}m)`;
+        new maplibregl.Marker({ element: labelEl, anchor: 'top' })
+          .setLngLat([pos.lng, pos.lat])
+          .addTo(map);
+      }
+    });
+
+    // Show herdsman coords
+    const herdsmanLabel = document.createElement('div');
+    herdsmanLabel.className = 'cow-coord-label';
+    herdsmanLabel.style.cssText = 'font-size:10px;background:rgba(37,99,235,0.95);color:#fff;padding:2px 6px;border-radius:3px;white-space:nowrap;font-weight:bold;pointer-events:none;';
+    herdsmanLabel.textContent = `Herdsman: ${herdsmanPos.lat.toFixed(5)}, ${herdsmanPos.lng.toFixed(5)}`;
+    new maplibregl.Marker({ element: herdsmanLabel, anchor: 'top', offset: [0, 20] })
+      .setLngLat([herdsmanPos.lng, herdsmanPos.lat])
+      .addTo(map);
+
+    addToast({ title: 'Herdsman Located', message: `Position: ${herdsmanPos.lat.toFixed(5)}, ${herdsmanPos.lng.toFixed(5)}`, severity: 'info', duration: 5000 });
   }
 
   // ─── Render ────────────────────────────────────────
@@ -1154,6 +1251,17 @@ export default function MapPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
               </svg>
               <span className="map-control-tooltip">Trails</span>
+            </button>
+            <button
+              onClick={flyToHerdsman}
+              className="map-control-btn relative p-2 rounded-md transition-colors text-gray-400 dark:text-gray-500 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:text-blue-700 dark:hover:text-blue-400"
+              aria-label="Fly to herdsman"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span className="map-control-tooltip">Find Herdsman</span>
             </button>
           </div>
         </div>

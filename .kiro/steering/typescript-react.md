@@ -79,9 +79,10 @@ export function useAnimals(farmId: string) {
 
 - Use `maplibregl.Map` (not Leaflet)
 - Tile sources: OpenStreetMap (street), Satellite, Terrain
-- Animal markers as custom DOM elements or GeoJSON source + symbol layer
+- Animal markers as custom DOM elements (inner wrapper pattern — never apply transforms on outer element to avoid MapLibre positioning conflicts)
 - Geofence polygons as fill + line layers
 - Movement trails as line layers with date-based filtering
+- Deterministic ID-based scatter for overlapping BLE markers (stable hash, no random)
 
 ## Styling (TailwindCSS)
 

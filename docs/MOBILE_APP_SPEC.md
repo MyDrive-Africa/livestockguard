@@ -366,6 +366,9 @@ If a herdsman works at two farms (e.g. Mon-Wed at Lochvaal, Thu-Sat at North Wes
 
 ### Farm Owner Features (within assigned farm)
 - Map (react-native-maps) with cattle positions
+  - Deterministic scatter for overlapping BLE animals (stable ID-based hash, same as dashboard)
+  - `tracksViewChanges={false}` for performance on large herds
+  - Tap cow marker → 24h trail overlay
 - Animal list with search/filter
 - Geofence management (create/edit/delete)
 - Alert feed with push notifications

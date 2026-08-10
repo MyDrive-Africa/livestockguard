@@ -272,7 +272,8 @@ FARM_PRESETS = {
               help='Simulation scenario')
 @click.option('--duration', default=300, help='Duration in seconds')
 @click.option('--interval', default=15, help='Report interval in seconds')
-def main(broker, port, animals, farm_lat, farm_lon, farm, device_base, scenario, duration, interval):
+@click.option('--seed', default=None, type=int, help='Random seed for reproducible runs')
+def main(broker, port, animals, farm_lat, farm_lon, farm, device_base, scenario, duration, interval, seed):
     """LivestockGuard Device Simulator
 
     Supports multiple farms. Use --farm for presets or --farm-lat/--farm-lon for custom coords.
@@ -282,6 +283,9 @@ def main(broker, port, animals, farm_lat, farm_lon, farm, device_base, scenario,
       python simulator.py --farm lochvaal --animals 10
       python simulator.py --farm-lat -26.719088 --farm-lon 27.709759 --animals 50
     """
+    if seed is not None:
+        random.seed(seed)
+
     # Resolve farm location
     if farm and farm in FARM_PRESETS:
         preset = FARM_PRESETS[farm]

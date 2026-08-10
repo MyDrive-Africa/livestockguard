@@ -251,22 +251,44 @@ export default function MapScreen() {
         )}
 
         {/* Cattle markers — orange pin for both iOS and Android */}
-        {withPosition.map((animal) => (
-          <Marker
-            key={animal.id}
-            coordinate={{
-              latitude: animal.last_latitude!,
-              longitude: animal.last_longitude!,
-            }}
-            onPress={() => fetchTrail(animal.id)}
-            title={animal.name}
-            description={`${animal.breed || ''} ${animal.gender === 'male' ? '♂' : animal.gender === 'female' ? '♀' : ''}\n📍 ${animal.last_latitude!.toFixed(5)}, ${animal.last_longitude!.toFixed(5)}${animal.last_speed != null ? `\nSpeed: ${animal.last_speed.toFixed(1)} km/h` : ''}`}
-          >
-            <View style={styles.markerPin}>
-              <Text style={styles.markerEmoji}>🐄</Text>
-            </View>
-          </Marker>
-        ))}
+        {withPosition.map((animal) => {
+          // Deterministic scatter for overlapping positions (BLE animals at same gateway coords)
+          let lat = animal.last_latitude!;
+          let lng = animal.last_longitude!;
+          const samePos = withPosition.filter(a =>
+            a.last_latitude!.toFixed(5) === lat.toFixed(5) &&
+            a.last_longitude!.toFixed(5) === lng.toFixed(5)
+          );
+          if (samePos.length > 1) {
+            // Stable hash from animal ID
+            let h = 0;
+            for (let i = 0; i < animal.id.length; i++) {
+              h = ((h << 5) - h + animal.id.charCodeAt(i)) | 0;
+            }
+            h = Math.abs(h);
+            const angle = (h % 1000) / 1000 * Math.PI * 2;
+            const radius = 0.00015 + ((h % 997) / 997) * 0.00035;
+            const jitterA = angle + ((h >> 8) % 100) / 100 * 0.3;
+            const jitterR = radius * (0.75 + ((h >> 16) % 100) / 100 * 0.5);
+            lng += Math.cos(jitterA) * jitterR;
+            lat += Math.sin(jitterA) * jitterR * 0.8;
+          }
+
+          return (
+            <Marker
+              key={animal.id}
+              coordinate={{ latitude: lat, longitude: lng }}
+              onPress={() => fetchTrail(animal.id)}
+              tracksViewChanges={false}
+              title={animal.name}
+              description={`${animal.breed || ''} ${animal.gender === 'male' ? '♂' : animal.gender === 'female' ? '♀' : ''}\n📍 ${animal.last_latitude!.toFixed(5)}, ${animal.last_longitude!.toFixed(5)}${animal.last_speed != null ? `\nSpeed: ${animal.last_speed.toFixed(1)} km/h` : ''}`}
+            >
+              <View style={styles.markerPin}>
+                <Text style={styles.markerEmoji}>🐄</Text>
+              </View>
+            </Marker>
+          );
+        })}
 
         {/* Herdsman markers — blue person icon, distinct from cattle */}
         {gateways.filter(g => g.last_latitude && g.last_longitude).map((gw) => (
