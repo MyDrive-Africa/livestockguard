@@ -8,6 +8,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/api/client';
 import { useAuthStore } from '@/stores/authStore';
+import { useEffect, useState } from 'react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -112,10 +113,59 @@ function getTimeRange(range: DateRange): { start: string; end: string } {
   };
 }
 
+// ─── Farm ID Resolution ──────────────────────────────────────────────────────
+
+/**
+ * Returns the active farm ID — either from the auth store or auto-fetched
+ * from the API (first available farm). This ensures analytics work even when
+ * no farm has been explicitly selected in the dashboard.
+ */
+function useActiveFarmId(): string | null {
+  const storeFarmId = useAuthStore((s) => s.currentFarm);
+  const switchFarm = useAuthStore((s) => s.switchFarm);
+  const [resolvedFarmId, setResolvedFarmId] = useState<string | null>(storeFarmId);
+
+  useEffect(() => {
+    if (storeFarmId) {
+      setResolvedFarmId(storeFarmId);
+      return;
+    }
+
+    // No farm selected — fetch farms and auto-select the first one
+    let cancelled = false;
+    async function autoSelect() {
+      try {
+        const resp = await apiClient.get('/api/farms');
+        if (!cancelled && resp.data?.length > 0) {
+          const firstFarmId = resp.data[0].id;
+          setResolvedFarmId(firstFarmId);
+          switchFarm(firstFarmId);
+        }
+      } catch {
+        // Try assignments endpoint as fallback
+        try {
+          const resp = await apiClient.get('/api/v1/assignments/me/farms');
+          if (!cancelled && resp.data?.length > 0) {
+            const firstFarmId = resp.data[0].farm_id;
+            setResolvedFarmId(firstFarmId);
+            switchFarm(firstFarmId);
+          }
+        } catch {
+          // No farms available
+        }
+      }
+    }
+    autoSelect();
+    return () => { cancelled = true; };
+  }, [storeFarmId, switchFarm]);
+
+  return resolvedFarmId;
+}
+
 // ─── Hooks ───────────────────────────────────────────────────────────────────
 
 export function useHeatmap(dateRange: DateRange, resolution = 50) {
-  const farmId = useAuthStore((s) => s.currentFarm);
+  const farmId = useActiveFarmId();
   const { start, end } = getTimeRange(dateRange);
 
   return useQuery<HeatmapResponse>({
@@ -132,7 +182,7 @@ export function useHeatmap(dateRange: DateRange, resolution = 50) {
 }
 
 export function useActivity(dateRange: DateRange, interval = '1h', animalId?: string) {
-  const farmId = useAuthStore((s) => s.currentFarm);
+  const farmId = useActiveFarmId();
   const { start, end } = getTimeRange(dateRange);
 
   return useQuery<ActivityResponse>({
@@ -155,7 +205,7 @@ export function useActivity(dateRange: DateRange, interval = '1h', animalId?: st
 }
 
 export function useDistance(dateRange: DateRange, interval = '1d', animalId?: string) {
-  const farmId = useAuthStore((s) => s.currentFarm);
+  const farmId = useActiveFarmId();
   const { start, end } = getTimeRange(dateRange);
 
   return useQuery<DistanceResponse>({
@@ -178,7 +228,7 @@ export function useDistance(dateRange: DateRange, interval = '1d', animalId?: st
 }
 
 export function useCompliance(dateRange: DateRange, geofenceId?: string) {
-  const farmId = useAuthStore((s) => s.currentFarm);
+  const farmId = useActiveFarmId();
   const { start, end } = getTimeRange(dateRange);
 
   return useQuery<ComplianceResponse>({
@@ -192,6 +242,65 @@ export function useCompliance(dateRange: DateRange, geofenceId?: string) {
       if (geofenceId) params.geofence_id = geofenceId;
 
       const resp = await apiClient.get('/api/v1/analytics/compliance', { params });
+      return resp.data;
+    },
+    enabled: !!farmId,
+    staleTime: 60_000,
+  });
+}
+
+
+// ─── Insights (Anomalies, Suggestions, Reports) ─────────────────────────────
+
+export interface Anomaly {
+  id: string;
+  farm_id: string;
+  animal_id: string | null;
+  animal_name: string | null;
+  anomaly_type: string;
+  severity: string;
+  status: string;
+  description: string;
+  evidence: Record<string, unknown>;
+  detected_at: string;
+  resolved_at: string | null;
+}
+
+export interface Suggestion {
+  id: string;
+  farm_id: string;
+  anomaly_id: string | null;
+  category: string;
+  priority: string;
+  title: string;
+  description: string;
+  recommended_action: string;
+  evidence: Record<string, unknown> | null;
+  status: string;
+  created_at: string;
+  expires_at: string | null;
+}
+
+export interface InsightsDashboardResponse {
+  anomalies_active: number;
+  anomalies_high: number;
+  suggestions_pending: number;
+  suggestions_high: number;
+  latest_report_date: string | null;
+  latest_report_summary: string | null;
+  anomalies: Anomaly[];
+  suggestions: Suggestion[];
+}
+
+export function useInsightsDashboard() {
+  const farmId = useActiveFarmId();
+
+  return useQuery<InsightsDashboardResponse>({
+    queryKey: ['insights', 'dashboard', farmId],
+    queryFn: async () => {
+      const resp = await apiClient.get('/api/v1/insights/dashboard', {
+        params: { farm_id: farmId },
+      });
       return resp.data;
     },
     enabled: !!farmId,

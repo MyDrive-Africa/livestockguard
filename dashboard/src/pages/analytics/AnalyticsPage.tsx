@@ -11,6 +11,7 @@ import {
   useDistance,
   useActivity,
   useCompliance,
+  useInsightsDashboard,
   type DateRange,
   type DistanceBucket,
 } from '@/hooks/useAnalytics';
@@ -47,6 +48,7 @@ export default function AnalyticsPage() {
   const { data: distanceData, isLoading: distanceLoading } = useDistance(dateRange, distanceInterval);
   const { data: activityData, isLoading: activityLoading } = useActivity(dateRange, activityInterval);
   const { data: complianceData, isLoading: complianceLoading } = useCompliance(dateRange);
+  const { data: insightsData } = useInsightsDashboard();
 
   const isLoading = distanceLoading || activityLoading || complianceLoading;
 
@@ -165,6 +167,89 @@ export default function AnalyticsPage() {
           <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
           Loading analytics data...
         </div>
+      )}
+
+      {/* Intelligence Panel — Anomalies & Suggestions */}
+      {insightsData && (insightsData.anomalies_active > 0 || insightsData.suggestions_pending > 0 || insightsData.latest_report_summary) && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 theme-transition"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Farm Intelligence</h2>
+            <div className="flex items-center gap-3">
+              {insightsData.anomalies_high > 0 && (
+                <span className="px-2 py-1 text-xs font-bold text-red-400 bg-red-900/30 rounded-full">
+                  {insightsData.anomalies_high} high severity
+                </span>
+              )}
+              {insightsData.latest_report_date && (
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  Report: {new Date(insightsData.latest_report_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Report Summary */}
+          {insightsData.latest_report_summary && (
+            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <p className="text-sm text-blue-800 dark:text-blue-200">{insightsData.latest_report_summary}</p>
+            </div>
+          )}
+
+          {/* Anomalies + Suggestions Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Anomalies */}
+            <div>
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Active Anomalies ({insightsData.anomalies_active})
+              </h3>
+              {insightsData.anomalies.length === 0 ? (
+                <p className="text-sm text-green-600 dark:text-green-400">No active anomalies</p>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {insightsData.anomalies.slice(0, 5).map((a) => (
+                    <div key={a.id} className="flex items-start gap-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50">
+                      <span className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${a.severity === 'high' ? 'bg-red-500' : a.severity === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
+                      <div className="min-w-0">
+                        <p className="text-sm text-gray-900 dark:text-white truncate">
+                          {a.animal_name && <span className="font-medium">{a.animal_name} — </span>}
+                          {a.anomaly_type.replace(/_/g, ' ')}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{a.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Suggestions */}
+            <div>
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Pending Suggestions ({insightsData.suggestions_pending})
+              </h3>
+              {insightsData.suggestions.length === 0 ? (
+                <p className="text-sm text-green-600 dark:text-green-400">No pending suggestions</p>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {insightsData.suggestions.slice(0, 5).map((s) => (
+                    <div key={s.id} className="flex items-start gap-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50">
+                      <span className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${s.priority === 'high' ? 'bg-red-500' : s.priority === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{s.title}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{s.recommended_action}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </motion.div>
       )}
 
       {/* Summary Cards with Sparklines */}

@@ -54,6 +54,24 @@ interface InsightsDashboardData {
   suggestions: Suggestion[];
 }
 
+interface ActivitySummary {
+  grazing_pct: number;
+  resting_pct: number;
+  walking_pct: number;
+  running_pct: number;
+}
+
+interface DistanceBucket {
+  time_bucket: string;
+  distance_km: number;
+  animals_active: number;
+}
+
+interface DistanceData {
+  total_distance_km: number;
+  data: DistanceBucket[];
+}
+
 interface InsightsScreenProps {
   role: string;
 }
@@ -63,6 +81,8 @@ interface InsightsScreenProps {
 export default function InsightsScreen({ role }: InsightsScreenProps) {
   const { selectedFarm } = useFarm();
   const [data, setData] = useState<InsightsDashboardData | null>(null);
+  const [activitySummary, setActivitySummary] = useState<ActivitySummary | null>(null);
+  const [distanceData, setDistanceData] = useState<DistanceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,8 +93,21 @@ export default function InsightsScreen({ role }: InsightsScreenProps) {
     if (!selectedFarm) return;
     try {
       setError(null);
-      const resp = await api.get(`/api/v1/insights/dashboard?farm_id=${selectedFarm.id}`);
-      setData(resp.data);
+      const [insightsResp, activityResp, distanceResp] = await Promise.all([
+        api.get(`/api/v1/insights/dashboard?farm_id=${selectedFarm.id}`),
+        api.get(`/api/v1/analytics/activity?farm_id=${selectedFarm.id}&interval=1d`).catch(() => null),
+        api.get(`/api/v1/analytics/distance?farm_id=${selectedFarm.id}&interval=1d`).catch(() => null),
+      ]);
+      setData(insightsResp.data);
+      if (activityResp?.data?.summary) {
+        setActivitySummary(activityResp.data.summary);
+      }
+      if (distanceResp?.data) {
+        setDistanceData({
+          total_distance_km: distanceResp.data.total_distance_km,
+          data: distanceResp.data.data,
+        });
+      }
     } catch (err: any) {
       console.warn('Failed to fetch insights:', err);
       setError('Unable to load insights. Pull to retry.');
@@ -194,6 +227,74 @@ export default function InsightsScreen({ role }: InsightsScreenProps) {
             <Text style={styles.reportDate}>{formatDate(data.latest_report_date)}</Text>
           </View>
           <Text style={styles.reportSummary}>{data.latest_report_summary}</Text>
+        </View>
+      )}
+
+      {/* Activity Breakdown Chart */}
+      {activitySummary && (activitySummary.grazing_pct > 0 || activitySummary.resting_pct > 0) && (
+        <View style={styles.chartCard}>
+          <Text style={styles.chartTitle}>Activity Breakdown</Text>
+          {/* Horizontal stacked bar as pie alternative */}
+          <View style={styles.stackedBar}>
+            {activitySummary.grazing_pct > 0 && (
+              <View style={[styles.barSegment, { flex: activitySummary.grazing_pct, backgroundColor: '#22c55e' }]} />
+            )}
+            {activitySummary.resting_pct > 0 && (
+              <View style={[styles.barSegment, { flex: activitySummary.resting_pct, backgroundColor: '#3b82f6' }]} />
+            )}
+            {activitySummary.walking_pct > 0 && (
+              <View style={[styles.barSegment, { flex: activitySummary.walking_pct, backgroundColor: '#eab308' }]} />
+            )}
+            {activitySummary.running_pct > 0 && (
+              <View style={[styles.barSegment, { flex: activitySummary.running_pct, backgroundColor: '#ef4444' }]} />
+            )}
+          </View>
+          {/* Legend */}
+          <View style={styles.legendRow}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: '#22c55e' }]} />
+              <Text style={styles.legendText}>Grazing {activitySummary.grazing_pct.toFixed(0)}%</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: '#3b82f6' }]} />
+              <Text style={styles.legendText}>Resting {activitySummary.resting_pct.toFixed(0)}%</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: '#eab308' }]} />
+              <Text style={styles.legendText}>Walking {activitySummary.walking_pct.toFixed(0)}%</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: '#ef4444' }]} />
+              <Text style={styles.legendText}>Running {activitySummary.running_pct.toFixed(0)}%</Text>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Distance Chart */}
+      {distanceData && distanceData.data.length > 0 && (
+        <View style={styles.chartCard}>
+          <View style={styles.chartHeader}>
+            <Text style={styles.chartTitle}>Movement Distance</Text>
+            <Text style={styles.chartSubtitle}>{distanceData.total_distance_km.toFixed(1)} km total</Text>
+          </View>
+          {/* Vertical bar chart */}
+          <View style={styles.barChart}>
+            {distanceData.data.slice(-7).map((bucket, i) => {
+              const maxKm = Math.max(...distanceData.data.slice(-7).map((b) => b.distance_km), 1);
+              const heightPct = (bucket.distance_km / maxKm) * 100;
+              const dayLabel = new Date(bucket.time_bucket).toLocaleDateString('en-ZA', { weekday: 'short' });
+              return (
+                <View key={i} style={styles.barColumn}>
+                  <Text style={styles.barValue}>{bucket.distance_km.toFixed(1)}</Text>
+                  <View style={styles.barTrack}>
+                    <View style={[styles.barFill, { height: `${heightPct}%` }]} />
+                  </View>
+                  <Text style={styles.barLabel}>{dayLabel}</Text>
+                </View>
+              );
+            })}
+          </View>
         </View>
       )}
 
@@ -649,5 +750,96 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontSize: 12,
     fontWeight: '600',
+  },
+
+  // Chart styles
+  chartCard: {
+    backgroundColor: '#1f2937',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  chartHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  chartTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 12,
+  },
+  chartSubtitle: {
+    fontSize: 12,
+    color: '#9ca3af',
+  },
+
+  // Stacked bar (activity breakdown)
+  stackedBar: {
+    flexDirection: 'row',
+    height: 24,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  barSegment: {
+    height: '100%',
+  },
+  legendRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 11,
+    color: '#9ca3af',
+  },
+
+  // Bar chart (distance)
+  barChart: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    height: 140,
+    paddingTop: 20,
+  },
+  barColumn: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  barValue: {
+    fontSize: 9,
+    color: '#9ca3af',
+    fontWeight: '500',
+  },
+  barTrack: {
+    width: '60%',
+    height: 90,
+    backgroundColor: '#374151',
+    borderRadius: 4,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  barFill: {
+    width: '100%',
+    backgroundColor: '#22c55e',
+    borderRadius: 4,
+  },
+  barLabel: {
+    fontSize: 9,
+    color: '#6b7280',
   },
 });
