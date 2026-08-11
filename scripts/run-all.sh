@@ -66,6 +66,7 @@ MASTER_LOG="$ROOT_DIR/logs/run-all.log"
 STEP_NUM=0
 TOTAL_STEPS=10
 START_TIME=$(date +%s)
+PIDS=()
 
 # Logging functions
 log_master() {
@@ -369,8 +370,8 @@ log_detail "Command: python3 simulator.py --farm boschhoek --animals 5 --interva
 
 python3 simulator.py --farm boschhoek --animals 5 --interval 10 --duration 7200 > "$SIM1_LOG" 2>&1 &
 PIDS+=($!)
-log_info "GPS simulator started (PID: ${PIDS[-1]})"
-log_master "Boschhoek GPS sim started PID=${PIDS[-1]}"
+log_info "GPS simulator started (PID: ${PIDS[$((${#PIDS[@]}-1))]})"
+log_master "Boschhoek GPS sim started PID=${PIDS[$((${#PIDS[@]}-1))]}"
 cd "$ROOT_DIR"
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -393,8 +394,8 @@ log_detail "Command: python3 sibanyoni_daily_sim.py --speed 20"
 
 python3 sibanyoni_daily_sim.py --speed 20 > "$SIM2_LOG" 2>&1 &
 PIDS+=($!)
-log_info "BLE gateway simulator started (PID: ${PIDS[-1]})"
-log_master "Sibanyoni BLE gateway sim started PID=${PIDS[-1]}"
+log_info "BLE gateway simulator started (PID: ${PIDS[$((${#PIDS[@]}-1))]})"
+log_master "Sibanyoni BLE gateway sim started PID=${PIDS[$((${#PIDS[@]}-1))]}"
 cd "$ROOT_DIR"
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -417,8 +418,8 @@ log_detail "Command: python3 gateway_daily_sim.py --speed 20 --scan-interval 8 -
 
 python3 gateway_daily_sim.py --speed 20 --scan-interval 8 --report-interval 20 --scenario "$SCENARIO" > "$SIM3_LOG" 2>&1 &
 PIDS+=($!)
-log_info "BLE gateway simulator started (PID: ${PIDS[-1]})"
-log_master "Loch Vaal BLE sim started PID=${PIDS[-1]} scenario=$SCENARIO"
+log_info "BLE gateway simulator started (PID: ${PIDS[$((${#PIDS[@]}-1))]})"
+log_master "Loch Vaal BLE sim started PID=${PIDS[$((${#PIDS[@]}-1))]} scenario=$SCENARIO"
 
 if [ "$SCENARIO" = "breach" ]; then
   log_detail "⚠️  LV-001 will BREACH geofence at ~sim 11:00 (~12 min real time)"
@@ -459,7 +460,7 @@ log_detail "Starting Vite dev server on port 5173..."
 log_detail "Command: npx vite --port 5173 --host"
 npx vite --port 5173 --host >> "$DASH_LOG" 2>&1 &
 PIDS+=($!)
-log_master "Dashboard started PID=${PIDS[-1]}"
+log_master "Dashboard started PID=${PIDS[$((${#PIDS[@]}-1))]}"
 
 cd "$ROOT_DIR"
 
@@ -510,7 +511,7 @@ log_detail "Starting Expo web server on port 8082..."
 log_detail "Command: CI=1 npx expo start --web --port 8082"
 CI=1 npx expo start --web --port 8082 >> "$MOBILE_LOG" 2>&1 &
 PIDS+=($!)
-log_master "Mobile app started PID=${PIDS[-1]}"
+log_master "Mobile app started PID=${PIDS[$((${#PIDS[@]}-1))]}"
 
 cd "$ROOT_DIR"
 
