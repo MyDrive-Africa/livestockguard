@@ -71,7 +71,7 @@ const DEMO_ANIMALS = [
 ];
 
 type TileSource = keyof typeof TILE_SOURCES;
-type LayerToggle = 'animals' | 'geofences' | 'trails';
+type LayerToggle = 'animals' | 'geofences' | 'trails' | 'markers';
 
 export default function MapPage() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -84,7 +84,7 @@ export default function MapPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [tileSource, setTileSource] = useState<TileSource>('satellite');
   const [layers, setLayers] = useState<Record<LayerToggle, boolean>>({
-    animals: true, geofences: true, trails: false,
+    animals: true, geofences: true, trails: false, markers: true,
   });
   const [selectedAnimal, setSelectedAnimal] = useState<string | null>(null);
   const [trailData, setTrailData] = useState<[number, number][]>([]);
@@ -102,6 +102,9 @@ export default function MapPage() {
   const markedMarkersRef = useRef<maplibregl.Marker[]>([]);
   const [showMarkedPanel, setShowMarkedPanel] = useState(false);
   const markIdCounter = useRef(1);
+
+  // Geofence filter: show only active fences by default
+  const [showActiveOnly, setShowActiveOnly] = useState(true);
 
   // Keep refs in sync
   useEffect(() => { drawingModeRef.current = drawingMode; }, [drawingMode]);
@@ -389,7 +392,9 @@ export default function MapPage() {
   async function loadGeofencesForFarm(map: maplibregl.Map, farmId: string) {
     try {
       const fid = farmId || currentFarm || '22222222-2222-2222-2222-222222222222';
-      const resp = await apiClient.get('/api/geofences', { params: { farm_id: fid } });
+      const params: Record<string, string> = { farm_id: fid };
+      if (showActiveOnly) params.active = 'true';
+      const resp = await apiClient.get('/api/geofences', { params });
       const fences = resp.data;
       const ids: string[] = [];
       if (fences.length > 0) {
@@ -440,12 +445,31 @@ export default function MapPage() {
     });
   }, [layers.geofences, loading, geofenceIds]);
 
+  // ─── Reload geofences when filter changes ──────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || loading || !selectedFarmId) return;
+    clearAllGeofences(map);
+    loadGeofencesForFarm(map, selectedFarmId);
+  }, [showActiveOnly]);
+
   // ─── Animal Marker Visibility ──────────────────────
   useEffect(() => {
     markersRef.current.forEach((marker) => {
       marker.getElement().style.display = layers.animals ? 'flex' : 'none';
     });
   }, [layers.animals]);
+
+  // ─── Marked Structures Visibility ──────────────────
+  useEffect(() => {
+    markedMarkersRef.current.forEach((marker) => {
+      marker.getElement().style.display = layers.markers ? 'flex' : 'none';
+    });
+    // Also toggle farm centre pin
+    if (farmCentreMarkerRef.current) {
+      farmCentreMarkerRef.current.getElement().style.display = layers.markers ? 'flex' : 'none';
+    }
+  }, [layers.markers]);
 
   // ─── Movement Trail (Click → daily path) ────────────
   async function showTrail(animalId: string, forDate?: string) {
@@ -1239,6 +1263,19 @@ export default function MapPage() {
               <span className="map-control-tooltip">Geofences</span>
             </button>
             <button
+              onClick={() => setShowActiveOnly(!showActiveOnly)}
+              className={`map-control-btn relative p-2 rounded-md transition-colors text-[10px] font-bold leading-none ${
+                showActiveOnly
+                  ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400'
+                  : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'
+              }`}
+              aria-label="Filter geofences: active only or all"
+              title={showActiveOnly ? 'Showing active fences only — click to show all' : 'Showing ALL fences — click to filter active only'}
+            >
+              {showActiveOnly ? 'A' : '✱'}
+              <span className="map-control-tooltip">{showActiveOnly ? 'Active Only' : 'All Fences'}</span>
+            </button>
+            <button
               onClick={() => toggleLayer('trails')}
               className={`map-control-btn relative p-2 rounded-md transition-colors ${
                 layers.trails
@@ -1251,6 +1288,20 @@ export default function MapPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
               </svg>
               <span className="map-control-tooltip">Trails</span>
+            </button>
+            <button
+              onClick={() => toggleLayer('markers')}
+              className={`map-control-btn relative p-2 rounded-md transition-colors ${
+                layers.markers
+                  ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400'
+                  : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+              aria-label="Toggle marked structures"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+              <span className="map-control-tooltip">Structures</span>
             </button>
             <button
               onClick={flyToHerdsman}

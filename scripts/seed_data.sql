@@ -303,7 +303,7 @@ INSERT INTO farms (id, organisation_id, name, timezone, province, district, lati
     ('dddddddd-1111-2222-3333-555555555555', 'dddddddd-1111-2222-3333-444444444444',
      'Sibanyoni Farm', 'Africa/Johannesburg',
      'North West', 'Ngaka Modiri Molema',
-     -25.3580560, 25.3612750, 50.0,
+     -25.3580560, 25.3612750, 60.0,
      'Sibanyoni Family')
 ON CONFLICT DO NOTHING;
 
@@ -449,30 +449,93 @@ ON CONFLICT DO NOTHING;
 
 -- Sibanyoni geofences
 -- Centre: -25.3580560, 25.3612750
--- 50ha ≈ 707m x 707m. At lat -25.36: 1° lat ≈ 110574m, 1° lon ≈ 100023m
--- Half-side lat: 0.0032, Half-side lon: 0.00354
+-- New boundary (Option AS-v2): Rectangle in clear corridor between western (X13/14)
+-- and eastern (X1-12) structure clusters. All 14 identified structures are OUTSIDE.
+-- At lat -25.36: 1° lat ≈ 110574m, 1° lon ≈ 100023m
+-- Boundary: 775m (E-W) x 780m (N-S) = ~60.5 ha
+-- Firebreaks: 15m inset strips on all 4 edges (standard SA fire prevention)
 
--- Main property boundary (starter ~50ha rectangle — redraw on satellite)
+-- Original property boundary (50ha starter rectangle — kept for reference)
 INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on_breach) VALUES
     ('dddddddd-1111-2222-3333-990000000001', 'dddddddd-1111-2222-3333-555555555555',
-     'Sibanyoni Farm Boundary (50ha)',
+     '⬜ Original Boundary (50ha — superseded)',
      ST_GeogFromText('POLYGON((25.35774 -25.35486, 25.36481 -25.35486, 25.36481 -25.36125, 25.35774 -25.36125, 25.35774 -25.35486))'),
-     'inclusion', true, true)
+     'inclusion', false, false)
 ON CONFLICT DO NOTHING;
 
--- Kraal (night enclosure, ~60m x 50m near centre)
+-- Original Kraal (night enclosure, ~60m x 50m near original centre — kept for reference)
 INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on_breach) VALUES
     ('dddddddd-1111-2222-3333-990000000002', 'dddddddd-1111-2222-3333-555555555555',
-     'Kraal (Night Enclosure)',
+     '⬜ Original Kraal (superseded)',
      ST_GeogFromText('POLYGON((25.36097 -25.35783, 25.36157 -25.35783, 25.36157 -25.35828, 25.36097 -25.35828, 25.36097 -25.35783))'),
+     'inclusion', false, false)
+ON CONFLICT DO NOTHING;
+
+-- Original Dam exclusion zone (kept for reference)
+INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on_breach) VALUES
+    ('dddddddd-1111-2222-3333-990000000003', 'dddddddd-1111-2222-3333-555555555555',
+     '⬜ Original Dam Exclusion (superseded)',
+     ST_GeogFromText('POLYGON((25.35900 -25.35900, 25.35980 -25.35900, 25.35980 -25.35960, 25.35900 -25.35960, 25.35900 -25.35900))'),
+     'exclusion', false, false)
+ON CONFLICT DO NOTHING;
+
+-- ═══════════════════════════════════════════════════════════════════
+-- NEW BOUNDARY (Option AS-v2) — 60ha with firebreaks, all structures excluded
+-- ═══════════════════════════════════════════════════════════════════
+
+-- Main property boundary (60ha, all structures excluded — Option AS-v2)
+INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on_breach) VALUES
+    ('dddddddd-1111-2222-3333-990000000020', 'dddddddd-1111-2222-3333-555555555555',
+     'Sibanyoni Farm Boundary (60ha)',
+     ST_GeogFromText('POLYGON((25.3506000 -25.3545566, 25.3583000 -25.3545566, 25.3583000 -25.3615634, 25.3506000 -25.3615634, 25.3506000 -25.3545566))'),
      'inclusion', true, true)
 ON CONFLICT DO NOTHING;
 
--- Dam exclusion zone
+-- 🔥 North Firebreak (15m strip along north edge)
 INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on_breach) VALUES
-    ('dddddddd-1111-2222-3333-990000000003', 'dddddddd-1111-2222-3333-555555555555',
+    ('dddddddd-1111-2222-3333-990000000010', 'dddddddd-1111-2222-3333-555555555555',
+     '🔥 North Firebreak (15m)',
+     ST_GeogFromText('POLYGON((25.3506000 -25.3545566, 25.3583000 -25.3545566, 25.3583000 -25.3546923, 25.3506000 -25.3546923, 25.3506000 -25.3545566))'),
+     'exclusion', true, true)
+ON CONFLICT DO NOTHING;
+
+-- 🔥 South Firebreak (15m strip along south edge)
+INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on_breach) VALUES
+    ('dddddddd-1111-2222-3333-990000000011', 'dddddddd-1111-2222-3333-555555555555',
+     '🔥 South Firebreak (15m)',
+     ST_GeogFromText('POLYGON((25.3506000 -25.3614277, 25.3583000 -25.3614277, 25.3583000 -25.3615634, 25.3506000 -25.3615634, 25.3506000 -25.3614277))'),
+     'exclusion', true, true)
+ON CONFLICT DO NOTHING;
+
+-- 🔥 West Firebreak (15m strip along west edge)
+INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on_breach) VALUES
+    ('dddddddd-1111-2222-3333-990000000012', 'dddddddd-1111-2222-3333-555555555555',
+     '🔥 West Firebreak (15m)',
+     ST_GeogFromText('POLYGON((25.3506000 -25.3545566, 25.3507500 -25.3545566, 25.3507500 -25.3615634, 25.3506000 -25.3615634, 25.3506000 -25.3545566))'),
+     'exclusion', true, true)
+ON CONFLICT DO NOTHING;
+
+-- 🔥 East Firebreak (15m strip along east edge)
+INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on_breach) VALUES
+    ('dddddddd-1111-2222-3333-990000000013', 'dddddddd-1111-2222-3333-555555555555',
+     '🔥 East Firebreak (15m)',
+     ST_GeogFromText('POLYGON((25.3581500 -25.3545566, 25.3583000 -25.3545566, 25.3583000 -25.3615634, 25.3581500 -25.3615634, 25.3581500 -25.3545566))'),
+     'exclusion', true, true)
+ON CONFLICT DO NOTHING;
+
+-- 🐄 Kraal (night enclosure, ~60m x 50m, inside new boundary near centre)
+INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on_breach) VALUES
+    ('dddddddd-1111-2222-3333-990000000021', 'dddddddd-1111-2222-3333-555555555555',
+     '🐄 Kraal (Night Enclosure)',
+     ST_GeogFromText('POLYGON((25.3541000 -25.3577000, 25.3547000 -25.3577000, 25.3547000 -25.3581500, 25.3541000 -25.3581500, 25.3541000 -25.3577000))'),
+     'inclusion', true, true)
+ON CONFLICT DO NOTHING;
+
+-- Dam exclusion zone (inside new boundary)
+INSERT INTO geofences (id, farm_id, name, geometry, fence_type, active, alert_on_breach) VALUES
+    ('dddddddd-1111-2222-3333-990000000022', 'dddddddd-1111-2222-3333-555555555555',
      'Dam (Exclusion Zone)',
-     ST_GeogFromText('POLYGON((25.35900 -25.35900, 25.35980 -25.35900, 25.35980 -25.35960, 25.35900 -25.35960, 25.35900 -25.35900))'),
+     ST_GeogFromText('POLYGON((25.3530000 -25.3595000, 25.3538000 -25.3595000, 25.3538000 -25.3601000, 25.3530000 -25.3601000, 25.3530000 -25.3595000))'),
      'exclusion', true, true)
 ON CONFLICT DO NOTHING;
 

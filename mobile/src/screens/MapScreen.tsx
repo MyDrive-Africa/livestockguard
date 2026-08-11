@@ -56,13 +56,14 @@ export default function MapScreen() {
   const [hiddenFences, setHiddenFences] = useState<Set<string>>(new Set());
   const [selectedFence, setSelectedFence] = useState<string | null>(null);
   const [showLayerPanel, setShowLayerPanel] = useState(false);
+  const [showActiveOnly, setShowActiveOnly] = useState(true);
 
   const fetchData = async () => {
     if (!selectedFarm) return;
     try {
       const [animalsResp, geofencesResp, gatewaysResp] = await Promise.all([
         api.get(`/api/v1/animals?farm_id=${selectedFarm.id}`),
-        api.get(`/api/v1/geofences?farm_id=${selectedFarm.id}`),
+        api.get(`/api/v1/geofences?farm_id=${selectedFarm.id}${showActiveOnly ? '&active=true' : ''}`),
         api.get(`/api/v1/gateway?farm_id=${selectedFarm.id}`),
       ]);
       setAnimals(animalsResp.data);
@@ -120,7 +121,7 @@ export default function MapScreen() {
     }
   };
 
-  useEffect(() => { fetchData(); }, [selectedFarm]);
+  useEffect(() => { fetchData(); }, [selectedFarm, showActiveOnly]);
   useEffect(() => {
     if (!selectedFarm) return;
     const interval = setInterval(fetchData, 30000);
@@ -340,6 +341,11 @@ export default function MapScreen() {
         <View style={styles.layerPanel}>
           <View style={styles.layerPanelHeader}>
             <Text style={styles.layerPanelTitle}>Geofences</Text>
+            <TouchableOpacity onPress={() => setShowActiveOnly(!showActiveOnly)}>
+              <Text style={[styles.layerToggleAll, { color: showActiveOnly ? '#10b981' : '#f59e0b' }]}>
+                {showActiveOnly ? '● Active' : '✱ All'}
+              </Text>
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => setShowGeofences(!showGeofences)}>
               <Text style={styles.layerToggleAll}>{showGeofences ? 'Hide All' : 'Show All'}</Text>
             </TouchableOpacity>
