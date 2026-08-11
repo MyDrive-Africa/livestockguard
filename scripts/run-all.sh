@@ -299,10 +299,13 @@ docker compose exec -T postgres psql -U livestockguard -d livestockguard \
   < ../scripts/seed_data.sql >> "$SEED_LOG" 2>&1 || true
 
 log_detail "Loading seed_sibanyoni.sql (Sibanyoni Farm, 50 cattle)..."
-if [ -f "../scripts/seed_sibanyoni.sql" ]; then
-  docker compose exec -T postgres psql -U livestockguard -d livestockguard \
-    < ../scripts/seed_sibanyoni.sql >> "$SEED_LOG" 2>&1 || true
-fi
+# NOTE: seed_sibanyoni.sql is now superseded by seed_data.sql which includes
+# the full Sibanyoni farm (50 cattle, BLE tags, geofences). Skipping to avoid
+# duplicate farm entries.
+# if [ -f "../scripts/seed_sibanyoni.sql" ]; then
+#   docker compose exec -T postgres psql -U livestockguard -d livestockguard \
+#     < ../scripts/seed_sibanyoni.sql >> "$SEED_LOG" 2>&1 || true
+# fi
 
 cd "$ROOT_DIR"
 

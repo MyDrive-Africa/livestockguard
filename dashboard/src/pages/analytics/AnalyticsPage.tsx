@@ -6,6 +6,8 @@ import {
 } from 'recharts';
 import { PageTransition, AnimatedCard } from '@/components/motion';
 import { useThemeStore } from '@/stores/themeStore';
+import { useAuthStore } from '@/stores/authStore';
+import { apiClient } from '@/api/client';
 import { downloadCSV, printReport } from '@/utils/export';
 import {
   useDistance,
@@ -15,6 +17,12 @@ import {
   type DateRange,
   type DistanceBucket,
 } from '@/hooks/useAnalytics';
+import { useEffect } from 'react';
+
+interface Farm {
+  id: string;
+  name: string;
+}
 
 // ─── Helpers ─────────────────────────────────────────
 
@@ -37,8 +45,29 @@ const ACTIVITY_COLORS = {
 
 export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState<DateRange>('7d');
+  const [farms, setFarms] = useState<Farm[]>([]);
+  const currentFarm = useAuthStore((s) => s.currentFarm);
+  const switchFarm = useAuthStore((s) => s.switchFarm);
   const resolved = useThemeStore((state) => state.resolved);
   const isDark = resolved === 'dark';
+
+  // Load available farms
+  useEffect(() => {
+    async function loadFarms() {
+      try {
+        const resp = await apiClient.get('/api/farms');
+        setFarms(resp.data);
+      } catch {
+        try {
+          const resp = await apiClient.get('/api/v1/assignments/me/farms');
+          setFarms(resp.data.map((f: any) => ({ id: f.farm_id, name: f.farm_name })));
+        } catch {
+          // no farms
+        }
+      }
+    }
+    loadFarms();
+  }, []);
 
   // Determine interval based on date range
   const distanceInterval = dateRange === '24h' ? '1h' : '1d';
@@ -120,7 +149,25 @@ export default function AnalyticsPage() {
     <PageTransition className="p-6 space-y-6 bg-gray-50 dark:bg-gray-900 min-h-full theme-transition overflow-y-auto h-full">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analytics</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analytics</h1>
+          {/* Farm Picker */}
+          {farms.length > 1 && (
+            <select
+              value={currentFarm || ''}
+              onChange={(e) => switchFarm(e.target.value)}
+              className="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+              aria-label="Select farm"
+            >
+              {farms.map((farm) => (
+                <option key={farm.id} value={farm.id}>{farm.name}</option>
+              ))}
+            </select>
+          )}
+          {farms.length === 1 && (
+            <span className="text-sm text-gray-500 dark:text-gray-400">{farms[0]?.name}</span>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           {/* Export buttons */}
           <div className="flex items-center gap-1 no-print">
