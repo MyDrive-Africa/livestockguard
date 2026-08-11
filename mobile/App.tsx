@@ -5,11 +5,12 @@ import HerdsmanScreen from './src/screens/HerdsmanScreen';
 import AdminDashboard from './src/screens/AdminDashboard';
 import AnimalsScreen from './src/screens/AnimalsScreen';
 import MapScreen from './src/screens/MapScreen';
+import InsightsScreen from './src/screens/InsightsScreen';
 import FarmPicker from './src/components/FarmPicker';
 import { FarmProvider } from './src/context/FarmContext';
 import { getToken, getUserRole, setLogoutCallback, api } from './src/services/api';
 
-type Tab = 'dashboard' | 'map' | 'cattle' | 'herdsman';
+type Tab = 'dashboard' | 'map' | 'cattle' | 'insights' | 'herdsman';
 type ConnectionStatus = 'connected' | 'connecting' | 'disconnected';
 
 function useConnectionStatus(authenticated: boolean): ConnectionStatus {
@@ -93,12 +94,15 @@ export default function App() {
     );
   }
 
+  const isHerdsman = role === 'herdsman';
+
   // Render active screen
   const renderScreen = () => {
     switch (activeTab) {
       case 'dashboard': return <AdminDashboard />;
       case 'map': return <MapScreen />;
       case 'cattle': return <AnimalsScreen />;
+      case 'insights': return <InsightsScreen role={role} />;
       case 'herdsman': return <HerdsmanScreen />;
     }
   };
@@ -124,6 +128,9 @@ export default function App() {
           <TabButton icon="📊" label="Dashboard" active={activeTab === 'dashboard'} onPress={() => setActiveTab('dashboard')} />
           <TabButton icon="🗺️" label="Map" active={activeTab === 'map'} onPress={() => setActiveTab('map')} />
           <TabButton icon="🐄" label="Cattle" active={activeTab === 'cattle'} onPress={() => setActiveTab('cattle')} />
+          {!isHerdsman && (
+            <TabButton icon="💡" label="Insights" active={activeTab === 'insights'} onPress={() => setActiveTab('insights')} />
+          )}
           <TabButton icon="📶" label="Scanner" active={activeTab === 'herdsman'} onPress={() => setActiveTab('herdsman')} />
         </View>
       </View>

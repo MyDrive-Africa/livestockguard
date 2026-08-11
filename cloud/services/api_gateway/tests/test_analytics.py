@@ -73,4 +73,5 @@ class TestAnalyticsCompliance:
         assert resp.status_code == 200
         data = resp.json()
         assert data["farm_id"] == FARM_ID
-        assert "compliance_rate" in data
+        assert "overall_compliance" in data
+        assert "details" in data

@@ -1,56 +1,36 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { PageTransition, AnimatedCard } from '@/components/motion';
 import { useThemeStore } from '@/stores/themeStore';
 import { downloadCSV, printReport } from '@/utils/export';
+import {
+  useDistance,
+  useActivity,
+  useCompliance,
+  type DateRange,
+  type DistanceBucket,
+} from '@/hooks/useAnalytics';
 
-// ─── Demo Data ───────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────
 
-const movementData = [
-  { day: 'Mon', distance: 38.2, animals: 26 },
-  { day: 'Tue', distance: 42.5, animals: 27 },
-  { day: 'Wed', distance: 35.8, animals: 24 },
-  { day: 'Thu', distance: 51.3, animals: 28 },
-  { day: 'Fri', distance: 47.1, animals: 27 },
-  { day: 'Sat', distance: 44.6, animals: 25 },
-  { day: 'Sun', distance: 47.2, animals: 24 },
-];
+function formatBucketLabel(isoStr: string, interval: string): string {
+  const d = new Date(isoStr);
+  if (interval === '1d') {
+    return d.toLocaleDateString('en-ZA', { weekday: 'short' });
+  }
+  return d.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
+}
 
-const activityData = [
-  { name: 'Grazing', value: 45, color: '#22c55e' },
-  { name: 'Resting', value: 30, color: '#3b82f6' },
-  { name: 'Walking', value: 20, color: '#eab308' },
-  { name: 'Running', value: 5, color: '#ef4444' },
-];
-
-const breachData = [
-  { fence: 'Main Paddock', breaches: 3, resolved: 3 },
-  { fence: 'Water Source', breaches: 0, resolved: 0 },
-  { fence: 'Road Boundary', breaches: 8, resolved: 6 },
-  { fence: 'Neighbor', breaches: 1, resolved: 1 },
-];
-
-const batteryTrend = [
-  { hour: '6am', avg: 82 },
-  { hour: '9am', avg: 79 },
-  { hour: '12pm', avg: 76 },
-  { hour: '3pm', avg: 73 },
-  { hour: '6pm', avg: 71 },
-  { hour: '9pm', avg: 78 },
-];
-
-const summaryCards = [
-  { label: 'Total Distance Today', value: 47.2, suffix: ' km', change: '+12%', sparkline: movementData.map(d => d.distance) },
-  { label: 'Active Animals', value: 24, suffix: ' / 28', change: '', sparkline: movementData.map(d => d.animals) },
-  { label: 'Avg. Battery Level', value: 76, suffix: '%', change: '-3%', sparkline: batteryTrend.map(d => d.avg) },
-  { label: 'Geofence Compliance', value: 96.4, suffix: '%', change: '+1.2%', sparkline: [94, 95, 96, 97, 96, 97, 96.4] },
-];
-
-type DateRange = '24h' | '7d' | '30d';
+const ACTIVITY_COLORS = {
+  grazing: '#22c55e',
+  resting: '#3b82f6',
+  walking: '#eab308',
+  running: '#ef4444',
+};
 
 // ─── Component ───────────────────────────────────────
 
@@ -58,6 +38,74 @@ export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState<DateRange>('7d');
   const resolved = useThemeStore((state) => state.resolved);
   const isDark = resolved === 'dark';
+
+  // Determine interval based on date range
+  const distanceInterval = dateRange === '24h' ? '1h' : '1d';
+  const activityInterval = dateRange === '24h' ? '1h' : dateRange === '7d' ? '6h' : '1d';
+
+  // Fetch real data from API
+  const { data: distanceData, isLoading: distanceLoading } = useDistance(dateRange, distanceInterval);
+  const { data: activityData, isLoading: activityLoading } = useActivity(dateRange, activityInterval);
+  const { data: complianceData, isLoading: complianceLoading } = useCompliance(dateRange);
+
+  const isLoading = distanceLoading || activityLoading || complianceLoading;
+
+  // Derived chart data
+  const movementChartData = distanceData?.data.map((b: DistanceBucket) => ({
+    label: formatBucketLabel(b.time_bucket, distanceInterval),
+    distance: b.distance_km,
+    animals: b.animals_active,
+  })) ?? [];
+
+  const activityPieData = activityData?.summary
+    ? [
+        { name: 'Grazing', value: activityData.summary.grazing_pct, color: ACTIVITY_COLORS.grazing },
+        { name: 'Resting', value: activityData.summary.resting_pct, color: ACTIVITY_COLORS.resting },
+        { name: 'Walking', value: activityData.summary.walking_pct, color: ACTIVITY_COLORS.walking },
+        { name: 'Running', value: activityData.summary.running_pct, color: ACTIVITY_COLORS.running },
+      ]
+    : [];
+
+  const complianceDetails = complianceData?.details ?? [];
+
+  // Summary cards from real data
+  const totalDistanceKm = distanceData?.total_distance_km ?? 0;
+  const latestAnimals = movementChartData.length > 0
+    ? movementChartData[movementChartData.length - 1].animals
+    : 0;
+  const totalAnimals = distanceData?.top_animals?.length ?? 0;
+  const overallCompliance = complianceData?.overall_compliance ?? 0;
+
+  const summaryCards = [
+    {
+      label: `Total Distance (${dateRange})`,
+      value: totalDistanceKm.toFixed(1),
+      suffix: ' km',
+      sparkline: movementChartData.map((d: { distance: number }) => d.distance),
+      positive: true,
+    },
+    {
+      label: 'Active Animals',
+      value: latestAnimals,
+      suffix: totalAnimals > 0 ? ` / ${totalAnimals}` : '',
+      sparkline: movementChartData.map((d: { animals: number }) => d.animals),
+      positive: true,
+    },
+    {
+      label: 'Grazing %',
+      value: activityData?.summary?.grazing_pct?.toFixed(1) ?? '0',
+      suffix: '%',
+      sparkline: activityData?.data?.map((b) => b.grazing) ?? [],
+      positive: true,
+    },
+    {
+      label: 'Geofence Compliance',
+      value: overallCompliance.toFixed(1),
+      suffix: '%',
+      sparkline: complianceDetails.map((d) => d.compliance_rate),
+      positive: overallCompliance >= 95,
+    },
+  ];
 
   const chartColors = {
     grid: isDark ? '#374151' : '#e5e7eb',
@@ -76,8 +124,8 @@ export default function AnalyticsPage() {
           <div className="flex items-center gap-1 no-print">
             <button
               onClick={() => downloadCSV(
-                movementData,
-                [{ key: 'day', label: 'Day' }, { key: 'distance', label: 'Distance (km)' }, { key: 'animals', label: 'Active Animals' }],
+                movementChartData,
+                [{ key: 'label', label: 'Period' }, { key: 'distance', label: 'Distance (km)' }, { key: 'animals', label: 'Active Animals' }],
                 'livestockguard_movement'
               )}
               className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors"
@@ -111,6 +159,14 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
+      {/* Loading indicator */}
+      {isLoading && (
+        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+          <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+          Loading analytics data...
+        </div>
+      )}
+
       {/* Summary Cards with Sparklines */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {summaryCards.map((card, i) => (
@@ -124,34 +180,30 @@ export default function AnalyticsPage() {
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
                 {card.value}{card.suffix}
               </p>
-              {/* Mini sparkline */}
-              <div className="w-16 h-8">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={card.sparkline.map((v, idx) => ({ v, idx }))}>
-                    <Area
-                      type="monotone"
-                      dataKey="v"
-                      stroke={card.change.startsWith('-') ? '#ef4444' : '#22c55e'}
-                      fill={card.change.startsWith('-') ? '#fecaca' : '#dcfce7'}
-                      fillOpacity={isDark ? 0.2 : 0.4}
-                      strokeWidth={1.5}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
+              {card.sparkline.length > 1 && (
+                <div className="w-16 h-8">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={card.sparkline.map((v: number, idx: number) => ({ v, idx }))}>
+                      <Area
+                        type="monotone"
+                        dataKey="v"
+                        stroke={card.positive ? '#22c55e' : '#ef4444'}
+                        fill={card.positive ? '#dcfce7' : '#fecaca'}
+                        fillOpacity={isDark ? 0.2 : 0.4}
+                        strokeWidth={1.5}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </div>
-            {card.change && (
-              <p className={`text-sm mt-1 ${card.change.startsWith('+') ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                {card.change} vs yesterday
-              </p>
-            )}
           </AnimatedCard>
         ))}
       </div>
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Movement Distance Line Chart */}
+        {/* Movement Distance Chart */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -159,35 +211,41 @@ export default function AnalyticsPage() {
           className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 theme-transition"
         >
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Movement Distance</h2>
-          <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={movementData}>
-              <defs>
-                <linearGradient id="distanceGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-              <XAxis dataKey="day" tick={{ fill: chartColors.text, fontSize: 12 }} />
-              <YAxis tick={{ fill: chartColors.text, fontSize: 12 }} unit=" km" />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: chartColors.tooltip,
-                  border: `1px solid ${chartColors.tooltipBorder}`,
-                  borderRadius: 8,
-                  color: isDark ? '#f3f4f6' : '#111827',
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey="distance"
-                stroke="#22c55e"
-                fill="url(#distanceGradient)"
-                strokeWidth={2}
-                animationDuration={1200}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          {movementChartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={movementChartData}>
+                <defs>
+                  <linearGradient id="distanceGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+                <XAxis dataKey="label" tick={{ fill: chartColors.text, fontSize: 12 }} />
+                <YAxis tick={{ fill: chartColors.text, fontSize: 12 }} unit=" km" />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: chartColors.tooltip,
+                    border: `1px solid ${chartColors.tooltipBorder}`,
+                    borderRadius: 8,
+                    color: isDark ? '#f3f4f6' : '#111827',
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="distance"
+                  stroke="#22c55e"
+                  fill="url(#distanceGradient)"
+                  strokeWidth={2}
+                  animationDuration={1200}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-60 flex items-center justify-center text-gray-400 dark:text-gray-500">
+              {distanceLoading ? 'Loading...' : 'No movement data available'}
+            </div>
+          )}
         </motion.div>
 
         {/* Activity Donut Chart */}
@@ -198,24 +256,74 @@ export default function AnalyticsPage() {
           className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 theme-transition"
         >
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Activity Breakdown</h2>
-          <div className="flex items-center gap-6">
-            <ResponsiveContainer width="55%" height={200}>
-              <PieChart>
-                <Pie
-                  data={activityData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={3}
-                  dataKey="value"
-                  animationDuration={1000}
-                  animationBegin={400}
-                >
-                  {activityData.map((entry) => (
-                    <Cell key={entry.name} fill={entry.color} />
-                  ))}
-                </Pie>
+          {activityPieData.length > 0 && activityPieData.some((d) => d.value > 0) ? (
+            <div className="flex items-center gap-6">
+              <ResponsiveContainer width="55%" height={200}>
+                <PieChart>
+                  <Pie
+                    data={activityPieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={3}
+                    dataKey="value"
+                    animationDuration={1000}
+                    animationBegin={400}
+                  >
+                    {activityPieData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: chartColors.tooltip,
+                      border: `1px solid ${chartColors.tooltipBorder}`,
+                      borderRadius: 8,
+                      color: isDark ? '#f3f4f6' : '#111827',
+                    }}
+                    formatter={(value: number) => [`${value}%`, '']}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="flex-1 space-y-2">
+                {activityPieData.map((item) => (
+                  <div key={item.name} className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                    <span className="text-sm text-gray-600 dark:text-gray-400 flex-1">{item.name}</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">{item.value}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="h-52 flex items-center justify-center text-gray-400 dark:text-gray-500">
+              {activityLoading ? 'Loading...' : 'No activity data available'}
+            </div>
+          )}
+        </motion.div>
+      </div>
+
+      {/* Second Row of Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Geofence Compliance Bar Chart */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.5 }}
+          className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 theme-transition"
+        >
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Geofence Compliance</h2>
+          {complianceDetails.length > 0 ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={complianceDetails.map((d) => ({
+                fence: d.geofence_name.length > 15 ? d.geofence_name.slice(0, 15) + '...' : d.geofence_name,
+                compliance: d.compliance_rate,
+                outside: Math.round((100 - d.compliance_rate) * 10) / 10,
+              }))}>
+                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+                <XAxis dataKey="fence" tick={{ fill: chartColors.text, fontSize: 11 }} />
+                <YAxis tick={{ fill: chartColors.text, fontSize: 12 }} domain={[0, 100]} unit="%" />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: chartColors.tooltip,
@@ -223,85 +331,55 @@ export default function AnalyticsPage() {
                     borderRadius: 8,
                     color: isDark ? '#f3f4f6' : '#111827',
                   }}
-                  formatter={(value: number) => [`${value}%`, '']}
                 />
-              </PieChart>
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="compliance" name="Inside %" fill="#22c55e" radius={[4, 4, 0, 0]} animationDuration={1000} />
+                <Bar dataKey="outside" name="Outside %" fill="#ef4444" radius={[4, 4, 0, 0]} animationDuration={1000} animationBegin={300} />
+              </BarChart>
             </ResponsiveContainer>
-            <div className="flex-1 space-y-2">
-              {activityData.map((item) => (
-                <div key={item.name} className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                  <span className="text-sm text-gray-600 dark:text-gray-400 flex-1">{item.name}</span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">{item.value}%</span>
-                </div>
-              ))}
+          ) : (
+            <div className="h-52 flex items-center justify-center text-gray-400 dark:text-gray-500">
+              {complianceLoading ? 'Loading...' : 'No geofence data available'}
             </div>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Second Row of Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Geofence Breach Bar Chart */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.5 }}
-          className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 theme-transition"
-        >
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Geofence Breaches (7 Days)</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={breachData}>
-              <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-              <XAxis dataKey="fence" tick={{ fill: chartColors.text, fontSize: 11 }} />
-              <YAxis tick={{ fill: chartColors.text, fontSize: 12 }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: chartColors.tooltip,
-                  border: `1px solid ${chartColors.tooltipBorder}`,
-                  borderRadius: 8,
-                  color: isDark ? '#f3f4f6' : '#111827',
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="breaches" fill="#ef4444" radius={[4, 4, 0, 0]} animationDuration={1000} />
-              <Bar dataKey="resolved" fill="#22c55e" radius={[4, 4, 0, 0]} animationDuration={1000} animationBegin={300} />
-            </BarChart>
-          </ResponsiveContainer>
+          )}
         </motion.div>
 
-        {/* Battery Trend Line Chart */}
+        {/* Top Animals by Distance */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.6 }}
           className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 theme-transition"
         >
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Avg. Battery Level (Today)</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={batteryTrend}>
-              <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-              <XAxis dataKey="hour" tick={{ fill: chartColors.text, fontSize: 12 }} />
-              <YAxis tick={{ fill: chartColors.text, fontSize: 12 }} domain={[60, 100]} unit="%" />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: chartColors.tooltip,
-                  border: `1px solid ${chartColors.tooltipBorder}`,
-                  borderRadius: 8,
-                  color: isDark ? '#f3f4f6' : '#111827',
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="avg"
-                stroke="#f59e0b"
-                strokeWidth={2}
-                dot={{ fill: '#f59e0b', r: 4 }}
-                activeDot={{ r: 6, fill: '#f59e0b', stroke: isDark ? '#1f2937' : '#fff', strokeWidth: 2 }}
-                animationDuration={1500}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Top Animals by Distance</h2>
+          {(distanceData?.top_animals?.length ?? 0) > 0 ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart
+                data={distanceData!.top_animals.slice(0, 8).map((a) => ({
+                  name: a.animal_name || a.animal_id.slice(0, 8),
+                  distance: a.distance_km,
+                }))}
+                layout="vertical"
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+                <XAxis type="number" tick={{ fill: chartColors.text, fontSize: 12 }} unit=" km" />
+                <YAxis type="category" dataKey="name" tick={{ fill: chartColors.text, fontSize: 11 }} width={80} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: chartColors.tooltip,
+                    border: `1px solid ${chartColors.tooltipBorder}`,
+                    borderRadius: 8,
+                    color: isDark ? '#f3f4f6' : '#111827',
+                  }}
+                />
+                <Bar dataKey="distance" fill="#3b82f6" radius={[0, 4, 4, 0]} animationDuration={1200} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-52 flex items-center justify-center text-gray-400 dark:text-gray-500">
+              {distanceLoading ? 'Loading...' : 'No distance data available'}
+            </div>
+          )}
         </motion.div>
       </div>
 
@@ -314,69 +392,54 @@ export default function AnalyticsPage() {
       >
         <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Geofence Compliance Detail</h2>
-          <span className="text-xs text-gray-500 dark:text-gray-400">Last 7 days</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400">{dateRange} period</span>
         </div>
-        <table className="w-full">
-          <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-            <tr>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Geofence</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Compliance</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Trend</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Breaches</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Avg. Return</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-            {[
-              { fence: 'Main Paddock', compliance: 98.2, breaches: 3, avgReturn: '4 min', trend: [96, 97, 98, 97, 98, 99, 98.2] },
-              { fence: 'Water Source Zone', compliance: 100, breaches: 0, avgReturn: 'N/A', trend: [100, 100, 100, 100, 100, 100, 100] },
-              { fence: 'Road Boundary', compliance: 94.5, breaches: 8, avgReturn: '12 min', trend: [92, 93, 91, 94, 93, 95, 94.5] },
-              { fence: 'Neighbors Property', compliance: 99.1, breaches: 1, avgReturn: '2 min', trend: [99, 99, 100, 99, 99, 100, 99.1] },
-            ].map((row, i) => (
-              <motion.tr
-                key={row.fence}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.8 + i * 0.08, duration: 0.3 }}
-                className="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
-              >
-                <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{row.fence}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-16 bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                      <motion.div
-                        className={`h-full rounded-full ${row.compliance >= 98 ? 'bg-green-500' : row.compliance >= 95 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${row.compliance}%` }}
-                        transition={{ duration: 0.8, delay: 0.9 + i * 0.1 }}
-                      />
-                    </div>
-                    <span className={`text-sm font-medium ${row.compliance >= 98 ? 'text-green-600 dark:text-green-400' : row.compliance >= 95 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>
-                      {row.compliance}%
-                    </span>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="w-20 h-6">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={row.trend.map((v, idx) => ({ v, idx }))}>
-                        <Line
-                          type="monotone"
-                          dataKey="v"
-                          stroke={row.compliance >= 98 ? '#22c55e' : row.compliance >= 95 ? '#eab308' : '#ef4444'}
-                          strokeWidth={1.5}
-                          dot={false}
+        {complianceDetails.length > 0 ? (
+          <table className="w-full">
+            <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+              <tr>
+                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Geofence</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Compliance</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Points Inside</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Total Points</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+              {complianceDetails.map((row, i) => (
+                <motion.tr
+                  key={row.geofence_id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.8 + i * 0.08, duration: 0.3 }}
+                  className="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
+                >
+                  <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{row.geofence_name}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-16 bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                        <motion.div
+                          className={`h-full rounded-full ${row.compliance_rate >= 98 ? 'bg-green-500' : row.compliance_rate >= 95 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${row.compliance_rate}%` }}
+                          transition={{ duration: 0.8, delay: 0.9 + i * 0.1 }}
                         />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{row.breaches}</td>
-                <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{row.avgReturn}</td>
-              </motion.tr>
-            ))}
-          </tbody>
-        </table>
+                      </div>
+                      <span className={`text-sm font-medium ${row.compliance_rate >= 98 ? 'text-green-600 dark:text-green-400' : row.compliance_rate >= 95 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {row.compliance_rate}%
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{row.inside_points.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{row.total_points.toLocaleString()}</td>
+                </motion.tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="p-8 text-center text-gray-400 dark:text-gray-500">
+            {complianceLoading ? 'Loading compliance data...' : 'No geofence compliance data available'}
+          </div>
+        )}
       </motion.div>
     </PageTransition>
   );
