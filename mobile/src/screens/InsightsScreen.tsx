@@ -72,17 +72,37 @@ interface DistanceData {
   data: DistanceBucket[];
 }
 
+interface ComplianceDetail {
+  geofence_id: string;
+  geofence_name: string;
+  fence_type: string;
+  total_points: number;
+  inside_points: number;
+  compliance_rate: number;
+}
+
+interface ComplianceData {
+  overall_compliance: number;
+  details: ComplianceDetail[];
+}
+
 interface InsightsScreenProps {
   role: string;
 }
+
+type ViewMode = 'charts' | 'insights';
+type ComplianceCategory = 'boundary' | 'exclusion' | 'grazing' | 'infrastructure' | 'all';
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function InsightsScreen({ role }: InsightsScreenProps) {
   const { selectedFarm } = useFarm();
+  const [viewMode, setViewMode] = useState<ViewMode>('charts');
+  const [complianceCategory, setComplianceCategory] = useState<ComplianceCategory>('boundary');
   const [data, setData] = useState<InsightsDashboardData | null>(null);
   const [activitySummary, setActivitySummary] = useState<ActivitySummary | null>(null);
   const [distanceData, setDistanceData] = useState<DistanceData | null>(null);
+  const [complianceData, setComplianceData] = useState<ComplianceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,10 +113,11 @@ export default function InsightsScreen({ role }: InsightsScreenProps) {
     if (!selectedFarm) return;
     try {
       setError(null);
-      const [insightsResp, activityResp, distanceResp] = await Promise.all([
+      const [insightsResp, activityResp, distanceResp, complianceResp] = await Promise.all([
         api.get(`/api/v1/insights/dashboard?farm_id=${selectedFarm.id}`),
         api.get(`/api/v1/analytics/activity?farm_id=${selectedFarm.id}&interval=1d`).catch(() => null),
         api.get(`/api/v1/analytics/distance?farm_id=${selectedFarm.id}&interval=1d`).catch(() => null),
+        api.get(`/api/v1/analytics/compliance?farm_id=${selectedFarm.id}&category=${complianceCategory}`).catch(() => null),
       ]);
       setData(insightsResp.data);
       if (activityResp?.data?.summary) {
@@ -108,13 +129,19 @@ export default function InsightsScreen({ role }: InsightsScreenProps) {
           data: distanceResp.data.data,
         });
       }
+      if (complianceResp?.data) {
+        setComplianceData({
+          overall_compliance: complianceResp.data.overall_compliance,
+          details: complianceResp.data.details,
+        });
+      }
     } catch (err: any) {
       console.warn('Failed to fetch insights:', err);
       setError('Unable to load insights. Pull to retry.');
     } finally {
       setLoading(false);
     }
-  }, [selectedFarm]);
+  }, [selectedFarm, complianceCategory]);
 
   useEffect(() => {
     setLoading(true);
@@ -198,7 +225,32 @@ export default function InsightsScreen({ role }: InsightsScreenProps) {
       <Text style={styles.title}>Farm Intelligence</Text>
       <Text style={styles.farmName}>{selectedFarm?.name || 'No farm selected'}</Text>
 
-      {/* Summary Cards */}
+      {/* View Mode Toggle */}
+      <View style={styles.toggleContainer}>
+        <TouchableOpacity
+          style={[styles.toggleButton, viewMode === 'charts' && styles.toggleButtonActive]}
+          onPress={() => setViewMode('charts')}
+          accessibilityLabel="Show charts view"
+          accessibilityState={{ selected: viewMode === 'charts' }}
+        >
+          <Text style={[styles.toggleButtonText, viewMode === 'charts' && styles.toggleButtonTextActive]}>
+            📊 Charts
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toggleButton, viewMode === 'insights' && styles.toggleButtonActive]}
+          onPress={() => setViewMode('insights')}
+          accessibilityLabel="Show insights view"
+          accessibilityState={{ selected: viewMode === 'insights' }}
+        >
+          <Text style={[styles.toggleButtonText, viewMode === 'insights' && styles.toggleButtonTextActive]}>
+            ⚠️ Insights
+            {data && data.anomalies_active > 0 ? ` (${data.anomalies_active})` : ''}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Summary Cards (always visible) */}
       <View style={styles.summaryRow}>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryIcon}>⚠️</Text>
@@ -207,6 +259,11 @@ export default function InsightsScreen({ role }: InsightsScreenProps) {
           {(data?.anomalies_high ?? 0) > 0 && (
             <Text style={styles.summaryHighlight}>{data?.anomalies_high} high</Text>
           )}
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryIcon}>📏</Text>
+          <Text style={styles.summaryValue}>{distanceData?.total_distance_km?.toFixed(1) ?? '0'}</Text>
+          <Text style={styles.summaryLabel}>km Today</Text>
         </View>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryIcon}>💡</Text>
@@ -218,197 +275,306 @@ export default function InsightsScreen({ role }: InsightsScreenProps) {
         </View>
       </View>
 
-      {/* Latest Report */}
-      {data?.latest_report_date && (
-        <View style={styles.reportCard}>
-          <View style={styles.reportHeader}>
-            <Text style={styles.reportIcon}>📄</Text>
-            <Text style={styles.reportTitle}>Latest Report</Text>
-            <Text style={styles.reportDate}>{formatDate(data.latest_report_date)}</Text>
-          </View>
-          <Text style={styles.reportSummary}>{data.latest_report_summary}</Text>
-        </View>
-      )}
-
-      {/* Activity Breakdown Chart */}
-      {activitySummary && (activitySummary.grazing_pct > 0 || activitySummary.resting_pct > 0) && (
-        <View style={styles.chartCard}>
-          <Text style={styles.chartTitle}>Activity Breakdown</Text>
-          {/* Horizontal stacked bar as pie alternative */}
-          <View style={styles.stackedBar}>
-            {activitySummary.grazing_pct > 0 && (
-              <View style={[styles.barSegment, { flex: activitySummary.grazing_pct, backgroundColor: '#22c55e' }]} />
-            )}
-            {activitySummary.resting_pct > 0 && (
-              <View style={[styles.barSegment, { flex: activitySummary.resting_pct, backgroundColor: '#3b82f6' }]} />
-            )}
-            {activitySummary.walking_pct > 0 && (
-              <View style={[styles.barSegment, { flex: activitySummary.walking_pct, backgroundColor: '#eab308' }]} />
-            )}
-            {activitySummary.running_pct > 0 && (
-              <View style={[styles.barSegment, { flex: activitySummary.running_pct, backgroundColor: '#ef4444' }]} />
-            )}
-          </View>
-          {/* Legend */}
-          <View style={styles.legendRow}>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#22c55e' }]} />
-              <Text style={styles.legendText}>Grazing {activitySummary.grazing_pct.toFixed(0)}%</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#3b82f6' }]} />
-              <Text style={styles.legendText}>Resting {activitySummary.resting_pct.toFixed(0)}%</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#eab308' }]} />
-              <Text style={styles.legendText}>Walking {activitySummary.walking_pct.toFixed(0)}%</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#ef4444' }]} />
-              <Text style={styles.legendText}>Running {activitySummary.running_pct.toFixed(0)}%</Text>
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Distance Chart */}
-      {distanceData && distanceData.data.length > 0 && (
-        <View style={styles.chartCard}>
-          <View style={styles.chartHeader}>
-            <Text style={styles.chartTitle}>Movement Distance</Text>
-            <Text style={styles.chartSubtitle}>{distanceData.total_distance_km.toFixed(1)} km total</Text>
-          </View>
-          {/* Vertical bar chart */}
-          <View style={styles.barChart}>
-            {distanceData.data.slice(-7).map((bucket, i) => {
-              const maxKm = Math.max(...distanceData.data.slice(-7).map((b) => b.distance_km), 1);
-              const heightPct = (bucket.distance_km / maxKm) * 100;
-              const dayLabel = new Date(bucket.time_bucket).toLocaleDateString('en-ZA', { weekday: 'short' });
-              return (
-                <View key={i} style={styles.barColumn}>
-                  <Text style={styles.barValue}>{bucket.distance_km.toFixed(1)}</Text>
-                  <View style={styles.barTrack}>
-                    <View style={[styles.barFill, { height: `${heightPct}%` }]} />
-                  </View>
-                  <Text style={styles.barLabel}>{dayLabel}</Text>
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* CHARTS VIEW                                                            */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {viewMode === 'charts' && (
+        <>
+          {/* Activity Breakdown Chart */}
+          <View style={styles.chartCard}>
+            <Text style={styles.chartTitle}>Activity Breakdown</Text>
+            {activitySummary && (activitySummary.grazing_pct > 0 || activitySummary.resting_pct > 0) ? (
+              <>
+                {/* Horizontal stacked bar */}
+                <View style={styles.stackedBar}>
+                  {activitySummary.grazing_pct > 0 && (
+                    <View style={[styles.barSegment, { flex: activitySummary.grazing_pct, backgroundColor: '#22c55e' }]} />
+                  )}
+                  {activitySummary.resting_pct > 0 && (
+                    <View style={[styles.barSegment, { flex: activitySummary.resting_pct, backgroundColor: '#3b82f6' }]} />
+                  )}
+                  {activitySummary.walking_pct > 0 && (
+                    <View style={[styles.barSegment, { flex: activitySummary.walking_pct, backgroundColor: '#eab308' }]} />
+                  )}
+                  {activitySummary.running_pct > 0 && (
+                    <View style={[styles.barSegment, { flex: activitySummary.running_pct, backgroundColor: '#ef4444' }]} />
+                  )}
                 </View>
-              );
-            })}
+                {/* Legend */}
+                <View style={styles.legendRow}>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: '#22c55e' }]} />
+                    <Text style={styles.legendText}>Grazing {activitySummary.grazing_pct.toFixed(0)}%</Text>
+                  </View>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: '#3b82f6' }]} />
+                    <Text style={styles.legendText}>Resting {activitySummary.resting_pct.toFixed(0)}%</Text>
+                  </View>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: '#eab308' }]} />
+                    <Text style={styles.legendText}>Walking {activitySummary.walking_pct.toFixed(0)}%</Text>
+                  </View>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: '#ef4444' }]} />
+                    <Text style={styles.legendText}>Running {activitySummary.running_pct.toFixed(0)}%</Text>
+                  </View>
+                </View>
+              </>
+            ) : (
+              <View style={styles.noDataContainer}>
+                <Text style={styles.noDataText}>No activity data available</Text>
+                <Text style={styles.noDataHint}>Data appears when simulators are running</Text>
+              </View>
+            )}
           </View>
-        </View>
+
+          {/* Distance Chart */}
+          <View style={styles.chartCard}>
+            <View style={styles.chartHeader}>
+              <Text style={styles.chartTitle}>Movement Distance</Text>
+              {distanceData && (
+                <Text style={styles.chartSubtitle}>{distanceData.total_distance_km.toFixed(1)} km total</Text>
+              )}
+            </View>
+            {distanceData && distanceData.data.length > 0 ? (
+              <View style={styles.barChart}>
+                {distanceData.data.slice(-7).map((bucket, i) => {
+                  const maxKm = Math.max(...distanceData.data.slice(-7).map((b) => b.distance_km), 1);
+                  const heightPct = (bucket.distance_km / maxKm) * 100;
+                  const dayLabel = new Date(bucket.time_bucket).toLocaleDateString('en-ZA', { weekday: 'short' });
+                  return (
+                    <View key={i} style={styles.barColumn}>
+                      <Text style={styles.barValue}>{bucket.distance_km.toFixed(1)}</Text>
+                      <View style={styles.barTrack}>
+                        <View style={[styles.barFill, { height: `${heightPct}%` }]} />
+                      </View>
+                      <Text style={styles.barLabel}>{dayLabel}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : (
+              <View style={styles.noDataContainer}>
+                <Text style={styles.noDataText}>No movement data available</Text>
+                <Text style={styles.noDataHint}>Data appears when GPS collars report positions</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Latest Report (if available) */}
+          {data?.latest_report_date && (
+            <View style={styles.reportCard}>
+              <View style={styles.reportHeader}>
+                <Text style={styles.reportIcon}>📄</Text>
+                <Text style={styles.reportTitle}>Latest Report</Text>
+                <Text style={styles.reportDate}>{formatDate(data.latest_report_date)}</Text>
+              </View>
+              <Text style={styles.reportSummary}>{data.latest_report_summary}</Text>
+            </View>
+          )}
+
+          {/* Geofence Compliance */}
+          <View style={styles.chartCard}>
+            <View style={styles.chartHeader}>
+              <Text style={styles.chartTitle}>Geofence Compliance</Text>
+              {complianceData && (
+                <Text style={styles.chartSubtitle}>{complianceData.overall_compliance.toFixed(0)}% overall</Text>
+              )}
+            </View>
+
+            {/* Category picker */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
+              {([
+                { key: 'boundary', label: '🏷️ Boundaries' },
+                { key: 'grazing', label: '🌿 Grazing' },
+                { key: 'exclusion', label: '❌ Exclusions' },
+                { key: 'infrastructure', label: '🏗️ Infra' },
+                { key: 'all', label: '📋 All' },
+              ] as { key: ComplianceCategory; label: string }[]).map((cat) => (
+                <TouchableOpacity
+                  key={cat.key}
+                  style={[styles.categoryChip, complianceCategory === cat.key && styles.categoryChipActive]}
+                  onPress={() => setComplianceCategory(cat.key)}
+                >
+                  <Text style={[styles.categoryChipText, complianceCategory === cat.key && styles.categoryChipTextActive]}>
+                    {cat.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {complianceData && complianceData.details.length > 0 ? (
+              <View style={styles.complianceList}>
+                {complianceData.details.slice(0, 6).map((detail) => (
+                  <View key={detail.geofence_id} style={styles.complianceRow}>
+                    <View style={styles.complianceNameRow}>
+                      <Text style={styles.complianceName} numberOfLines={1}>
+                        {detail.geofence_name}
+                      </Text>
+                      <Text style={[
+                        styles.complianceRate,
+                        { color: detail.fence_type === 'exclusion'
+                          ? (detail.compliance_rate <= 5 ? '#22c55e' : '#ef4444')
+                          : (detail.compliance_rate >= 80 ? '#22c55e' : detail.compliance_rate >= 50 ? '#eab308' : '#ef4444')
+                        }
+                      ]}>
+                        {detail.compliance_rate.toFixed(0)}%
+                      </Text>
+                    </View>
+                    <View style={styles.complianceBarTrack}>
+                      <View style={[
+                        styles.complianceBarFill,
+                        {
+                          width: `${Math.min(detail.compliance_rate, 100)}%`,
+                          backgroundColor: detail.fence_type === 'exclusion'
+                            ? (detail.compliance_rate <= 5 ? '#22c55e' : '#ef4444')
+                            : (detail.compliance_rate >= 80 ? '#22c55e' : detail.compliance_rate >= 50 ? '#eab308' : '#ef4444'),
+                        }
+                      ]} />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.noDataContainer}>
+                <Text style={styles.noDataText}>No geofence data for this category</Text>
+                <Text style={styles.noDataHint}>Try a different category above</Text>
+              </View>
+            )}
+          </View>
+        </>
       )}
 
-      {/* Anomalies */}
-      <Text style={styles.sectionTitle}>
-        Active Anomalies {data && data.anomalies.length > 0 ? `(${data.anomalies.length})` : ''}
-      </Text>
-
-      {(!data || data.anomalies.length === 0) ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No active anomalies</Text>
-        </View>
-      ) : (
-        data.anomalies.map((anomaly) => (
-          <View
-            key={anomaly.id}
-            style={[styles.itemCard, { borderLeftColor: severityColor(anomaly.severity) }]}
-          >
-            <View style={styles.cardHeader}>
-              <Text style={styles.itemType}>
-                {severityEmoji(anomaly.severity)} {formatAnomalyType(anomaly.anomaly_type)}
-              </Text>
-              <View style={[styles.badge, { backgroundColor: severityBgColor(anomaly.severity) }]}>
-                <Text style={[styles.badgeText, { color: severityColor(anomaly.severity) }]}>
-                  {anomaly.severity}
-                </Text>
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* INSIGHTS VIEW                                                          */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {viewMode === 'insights' && (
+        <>
+          {/* Latest Report */}
+          {data?.latest_report_date && (
+            <View style={styles.reportCard}>
+              <View style={styles.reportHeader}>
+                <Text style={styles.reportIcon}>📄</Text>
+                <Text style={styles.reportTitle}>Latest Report</Text>
+                <Text style={styles.reportDate}>{formatDate(data.latest_report_date)}</Text>
               </View>
+              <Text style={styles.reportSummary}>{data.latest_report_summary}</Text>
             </View>
+          )}
 
-            {anomaly.animal_name && (
-              <Text style={styles.animalName}>🐄 {anomaly.animal_name}</Text>
-            )}
+          {/* Anomalies */}
+          <Text style={styles.sectionTitle}>
+            Active Anomalies {data && data.anomalies.length > 0 ? `(${data.anomalies.length})` : ''}
+          </Text>
 
-            <Text style={styles.itemDescription}>{anomaly.description}</Text>
-            <Text style={styles.timestamp}>Detected: {formatDateTime(anomaly.detected_at)}</Text>
-
-            {canAction && (
-              <View style={styles.actionRow}>
-                <TouchableOpacity
-                  style={styles.btnPrimary}
-                  onPress={() => handleAcknowledge(anomaly.id)}
-                  accessibilityLabel={`Acknowledge anomaly for ${anomaly.animal_name || 'farm'}`}
-                >
-                  <Text style={styles.btnPrimaryText}>Acknowledge</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.btnOutline}
-                  onPress={() => handleDismissAnomaly(anomaly.id)}
-                  accessibilityLabel={`Dismiss anomaly for ${anomaly.animal_name || 'farm'}`}
-                >
-                  <Text style={styles.btnOutlineText}>Dismiss</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        ))
-      )}
-
-      {/* Suggestions */}
-      <Text style={styles.sectionTitle}>
-        Suggestions {data && data.suggestions.length > 0 ? `(${data.suggestions.length})` : ''}
-      </Text>
-
-      {(!data || data.suggestions.length === 0) ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No pending suggestions</Text>
-        </View>
-      ) : (
-        data.suggestions.map((suggestion) => (
-          <View
-            key={suggestion.id}
-            style={[styles.itemCard, { borderLeftColor: priorityColor(suggestion.priority) }]}
-          >
-            <View style={styles.cardHeader}>
-              <View style={[styles.badge, { backgroundColor: categoryBgColor(suggestion.category) }]}>
-                <Text style={styles.categoryText}>
-                  {categoryEmoji(suggestion.category)} {suggestion.category}
-                </Text>
-              </View>
-              <View style={[styles.badge, { backgroundColor: priorityBgColor(suggestion.priority) }]}>
-                <Text style={[styles.badgeText, { color: priorityColor(suggestion.priority) }]}>
-                  {suggestion.priority}
-                </Text>
-              </View>
+          {(!data || data.anomalies.length === 0) ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>No active anomalies</Text>
             </View>
+          ) : (
+            data.anomalies.map((anomaly) => (
+              <View
+                key={anomaly.id}
+                style={[styles.itemCard, { borderLeftColor: severityColor(anomaly.severity) }]}
+              >
+                <View style={styles.cardHeader}>
+                  <Text style={styles.itemType}>
+                    {severityEmoji(anomaly.severity)} {formatAnomalyType(anomaly.anomaly_type)}
+                  </Text>
+                  <View style={[styles.badge, { backgroundColor: severityBgColor(anomaly.severity) }]}>
+                    <Text style={[styles.badgeText, { color: severityColor(anomaly.severity) }]}>
+                      {anomaly.severity}
+                    </Text>
+                  </View>
+                </View>
 
-            <Text style={styles.suggestionTitle}>{suggestion.title}</Text>
-            <Text style={styles.itemDescription}>{suggestion.description}</Text>
+                {anomaly.animal_name && (
+                  <Text style={styles.animalName}>🐄 {anomaly.animal_name}</Text>
+                )}
 
-            <View style={styles.recommendedBox}>
-              <Text style={styles.recommendedLabel}>Recommended:</Text>
-              <Text style={styles.recommendedText}>{suggestion.recommended_action}</Text>
-            </View>
+                <Text style={styles.itemDescription}>{anomaly.description}</Text>
+                <Text style={styles.timestamp}>Detected: {formatDateTime(anomaly.detected_at)}</Text>
 
-            {canAction && (
-              <View style={styles.actionRow}>
-                <TouchableOpacity
-                  style={styles.btnAccept}
-                  onPress={() => handleAcceptSuggestion(suggestion.id)}
-                  accessibilityLabel={`Accept suggestion: ${suggestion.title}`}
-                >
-                  <Text style={styles.btnPrimaryText}>Accept</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.btnOutline}
-                  onPress={() => handleDismissSuggestion(suggestion.id)}
-                  accessibilityLabel={`Dismiss suggestion: ${suggestion.title}`}
-                >
-                  <Text style={styles.btnOutlineText}>Dismiss</Text>
-                </TouchableOpacity>
+                {canAction && (
+                  <View style={styles.actionRow}>
+                    <TouchableOpacity
+                      style={styles.btnPrimary}
+                      onPress={() => handleAcknowledge(anomaly.id)}
+                      accessibilityLabel={`Acknowledge anomaly for ${anomaly.animal_name || 'farm'}`}
+                    >
+                      <Text style={styles.btnPrimaryText}>Acknowledge</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.btnOutline}
+                      onPress={() => handleDismissAnomaly(anomaly.id)}
+                      accessibilityLabel={`Dismiss anomaly for ${anomaly.animal_name || 'farm'}`}
+                    >
+                      <Text style={styles.btnOutlineText}>Dismiss</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
-            )}
-          </View>
-        ))
+            ))
+          )}
+
+          {/* Suggestions */}
+          <Text style={styles.sectionTitle}>
+            Suggestions {data && data.suggestions.length > 0 ? `(${data.suggestions.length})` : ''}
+          </Text>
+
+          {(!data || data.suggestions.length === 0) ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>No pending suggestions</Text>
+            </View>
+          ) : (
+            data.suggestions.map((suggestion) => (
+              <View
+                key={suggestion.id}
+                style={[styles.itemCard, { borderLeftColor: priorityColor(suggestion.priority) }]}
+              >
+                <View style={styles.cardHeader}>
+                  <View style={[styles.badge, { backgroundColor: categoryBgColor(suggestion.category) }]}>
+                    <Text style={styles.categoryText}>
+                      {categoryEmoji(suggestion.category)} {suggestion.category}
+                    </Text>
+                  </View>
+                  <View style={[styles.badge, { backgroundColor: priorityBgColor(suggestion.priority) }]}>
+                    <Text style={[styles.badgeText, { color: priorityColor(suggestion.priority) }]}>
+                      {suggestion.priority}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.suggestionTitle}>{suggestion.title}</Text>
+                <Text style={styles.itemDescription}>{suggestion.description}</Text>
+
+                <View style={styles.recommendedBox}>
+                  <Text style={styles.recommendedLabel}>Recommended:</Text>
+                  <Text style={styles.recommendedText}>{suggestion.recommended_action}</Text>
+                </View>
+
+                {canAction && (
+                  <View style={styles.actionRow}>
+                    <TouchableOpacity
+                      style={styles.btnAccept}
+                      onPress={() => handleAcceptSuggestion(suggestion.id)}
+                      accessibilityLabel={`Accept suggestion: ${suggestion.title}`}
+                    >
+                      <Text style={styles.btnPrimaryText}>Accept</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.btnOutline}
+                      onPress={() => handleDismissSuggestion(suggestion.id)}
+                      accessibilityLabel={`Dismiss suggestion: ${suggestion.title}`}
+                    >
+                      <Text style={styles.btnOutlineText}>Dismiss</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            ))
+          )}
+        </>
       )}
 
       <View style={{ height: 40 }} />
@@ -541,7 +707,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#9ca3af',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
+  },
+
+  // Toggle
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#1f2937',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  toggleButtonActive: {
+    backgroundColor: '#374151',
+  },
+  toggleButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  toggleButtonTextActive: {
+    color: '#ffffff',
   },
 
   // Summary cards
@@ -554,28 +746,44 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1f2937',
     borderRadius: 12,
-    padding: 16,
+    padding: 12,
     alignItems: 'center',
-    marginHorizontal: 4,
+    marginHorizontal: 3,
   },
   summaryIcon: {
-    fontSize: 24,
+    fontSize: 20,
     marginBottom: 4,
   },
   summaryValue: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#ffffff',
   },
   summaryLabel: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#9ca3af',
     marginTop: 2,
   },
   summaryHighlight: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#ef4444',
     fontWeight: '600',
+    marginTop: 4,
+  },
+
+  // No data state
+  noDataContainer: {
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  noDataText: {
+    color: '#6b7280',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  noDataHint: {
+    color: '#4b5563',
+    fontSize: 11,
     marginTop: 4,
   },
 
@@ -787,10 +995,12 @@ const styles = StyleSheet.create({
   barSegment: {
     height: '100%',
   },
+
+  // Legend
   legendRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 8,
   },
   legendItem: {
     flexDirection: 'row',
@@ -803,30 +1013,29 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   legendText: {
-    fontSize: 11,
     color: '#9ca3af',
+    fontSize: 11,
   },
 
   // Bar chart (distance)
   barChart: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
     height: 140,
-    paddingTop: 20,
+    paddingTop: 16,
   },
   barColumn: {
-    flex: 1,
     alignItems: 'center',
-    gap: 4,
+    flex: 1,
   },
   barValue: {
-    fontSize: 9,
     color: '#9ca3af',
-    fontWeight: '500',
+    fontSize: 9,
+    marginBottom: 4,
   },
   barTrack: {
-    width: '60%',
+    width: 20,
     height: 90,
     backgroundColor: '#374151',
     borderRadius: 4,
@@ -834,12 +1043,70 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   barFill: {
-    width: '100%',
     backgroundColor: '#22c55e',
     borderRadius: 4,
+    width: '100%',
   },
   barLabel: {
-    fontSize: 9,
     color: '#6b7280',
+    fontSize: 9,
+    marginTop: 4,
+  },
+
+  // Category chips
+  categoryScroll: {
+    marginBottom: 12,
+    flexGrow: 0,
+  },
+  categoryChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#374151',
+    marginRight: 8,
+  },
+  categoryChipActive: {
+    backgroundColor: '#22c55e',
+  },
+  categoryChipText: {
+    color: '#9ca3af',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  categoryChipTextActive: {
+    color: '#ffffff',
+  },
+
+  // Compliance list
+  complianceList: {
+    gap: 8,
+  },
+  complianceRow: {
+    gap: 4,
+  },
+  complianceNameRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  complianceName: {
+    color: '#d1d5db',
+    fontSize: 11,
+    flex: 1,
+    marginRight: 8,
+  },
+  complianceRate: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  complianceBarTrack: {
+    height: 6,
+    backgroundColor: '#374151',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  complianceBarFill: {
+    height: '100%',
+    borderRadius: 3,
   },
 });

@@ -74,6 +74,7 @@ export interface DistanceResponse {
 export interface ComplianceDetail {
   geofence_id: string;
   geofence_name: string;
+  fence_type: string;
   total_points: number;
   inside_points: number;
   compliance_rate: number;
@@ -227,12 +228,12 @@ export function useDistance(dateRange: DateRange, interval = '1d', animalId?: st
   });
 }
 
-export function useCompliance(dateRange: DateRange, geofenceId?: string) {
+export function useCompliance(dateRange: DateRange, geofenceId?: string, category?: string) {
   const farmId = useActiveFarmId();
   const { start, end } = getTimeRange(dateRange);
 
   return useQuery<ComplianceResponse>({
-    queryKey: ['analytics', 'compliance', farmId, dateRange, geofenceId],
+    queryKey: ['analytics', 'compliance', farmId, dateRange, geofenceId, category],
     queryFn: async () => {
       const params: Record<string, string> = {
         farm_id: farmId!,
@@ -240,6 +241,7 @@ export function useCompliance(dateRange: DateRange, geofenceId?: string) {
         end,
       };
       if (geofenceId) params.geofence_id = geofenceId;
+      if (category) params.category = category;
 
       const resp = await apiClient.get('/api/v1/analytics/compliance', { params });
       return resp.data;

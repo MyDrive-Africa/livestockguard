@@ -24,6 +24,9 @@ interface Farm {
   name: string;
 }
 
+type ViewMode = 'charts' | 'insights';
+type ComplianceCategory = 'boundary' | 'exclusion' | 'grazing' | 'infrastructure' | 'all';
+
 // ─── Helpers ─────────────────────────────────────────
 
 function formatBucketLabel(isoStr: string, interval: string): string {
@@ -45,6 +48,8 @@ const ACTIVITY_COLORS = {
 
 export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState<DateRange>('7d');
+  const [viewMode, setViewMode] = useState<ViewMode>('charts');
+  const [complianceCategory, setComplianceCategory] = useState<ComplianceCategory>('boundary');
   const [farms, setFarms] = useState<Farm[]>([]);
   const currentFarm = useAuthStore((s) => s.currentFarm);
   const switchFarm = useAuthStore((s) => s.switchFarm);
@@ -76,7 +81,7 @@ export default function AnalyticsPage() {
   // Fetch real data from API
   const { data: distanceData, isLoading: distanceLoading } = useDistance(dateRange, distanceInterval);
   const { data: activityData, isLoading: activityLoading } = useActivity(dateRange, activityInterval);
-  const { data: complianceData, isLoading: complianceLoading } = useCompliance(dateRange);
+  const { data: complianceData, isLoading: complianceLoading } = useCompliance(dateRange, undefined, complianceCategory);
   const { data: insightsData } = useInsightsDashboard();
 
   const isLoading = distanceLoading || activityLoading || complianceLoading;
@@ -169,25 +174,64 @@ export default function AnalyticsPage() {
           )}
         </div>
         <div className="flex items-center gap-3">
-          {/* Export buttons */}
-          <div className="flex items-center gap-1 no-print">
+          {/* View Mode Toggle */}
+          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
             <button
-              onClick={() => downloadCSV(
-                movementChartData,
-                [{ key: 'label', label: 'Period' }, { key: 'distance', label: 'Distance (km)' }, { key: 'animals', label: 'Active Animals' }],
-                'livestockguard_movement'
-              )}
-              className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors"
+              onClick={() => setViewMode('charts')}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-1.5 ${
+                viewMode === 'charts'
+                  ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white font-medium'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+              }`}
+              aria-label="Show charts view"
             >
-              CSV
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              Charts
             </button>
             <button
-              onClick={printReport}
-              className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors"
+              onClick={() => setViewMode('insights')}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors flex items-center gap-1.5 ${
+                viewMode === 'insights'
+                  ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white font-medium'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+              }`}
+              aria-label="Show insights view"
             >
-              PDF
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              Insights
+              {insightsData && insightsData.anomalies_active > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 text-xs font-bold bg-red-500 text-white rounded-full min-w-[18px] text-center">
+                  {insightsData.anomalies_active}
+                </span>
+              )}
             </button>
           </div>
+
+          {/* Export buttons (charts view only) */}
+          {viewMode === 'charts' && (
+            <div className="flex items-center gap-1 no-print">
+              <button
+                onClick={() => downloadCSV(
+                  movementChartData,
+                  [{ key: 'label', label: 'Period' }, { key: 'distance', label: 'Distance (km)' }, { key: 'animals', label: 'Active Animals' }],
+                  'livestockguard_movement'
+                )}
+                className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors"
+              >
+                CSV
+              </button>
+              <button
+                onClick={printReport}
+                className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors"
+              >
+                PDF
+              </button>
+            </div>
+          )}
 
           {/* Date range picker */}
           <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
@@ -216,90 +260,7 @@ export default function AnalyticsPage() {
         </div>
       )}
 
-      {/* Intelligence Panel — Anomalies & Suggestions */}
-      {insightsData && (insightsData.anomalies_active > 0 || insightsData.suggestions_pending > 0 || insightsData.latest_report_summary) && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-          className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 theme-transition"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Farm Intelligence</h2>
-            <div className="flex items-center gap-3">
-              {insightsData.anomalies_high > 0 && (
-                <span className="px-2 py-1 text-xs font-bold text-red-400 bg-red-900/30 rounded-full">
-                  {insightsData.anomalies_high} high severity
-                </span>
-              )}
-              {insightsData.latest_report_date && (
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  Report: {new Date(insightsData.latest_report_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Report Summary */}
-          {insightsData.latest_report_summary && (
-            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-              <p className="text-sm text-blue-800 dark:text-blue-200">{insightsData.latest_report_summary}</p>
-            </div>
-          )}
-
-          {/* Anomalies + Suggestions Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Anomalies */}
-            <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Active Anomalies ({insightsData.anomalies_active})
-              </h3>
-              {insightsData.anomalies.length === 0 ? (
-                <p className="text-sm text-green-600 dark:text-green-400">No active anomalies</p>
-              ) : (
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {insightsData.anomalies.slice(0, 5).map((a) => (
-                    <div key={a.id} className="flex items-start gap-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50">
-                      <span className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${a.severity === 'high' ? 'bg-red-500' : a.severity === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
-                      <div className="min-w-0">
-                        <p className="text-sm text-gray-900 dark:text-white truncate">
-                          {a.animal_name && <span className="font-medium">{a.animal_name} — </span>}
-                          {a.anomaly_type.replace(/_/g, ' ')}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{a.description}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Suggestions */}
-            <div>
-              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Pending Suggestions ({insightsData.suggestions_pending})
-              </h3>
-              {insightsData.suggestions.length === 0 ? (
-                <p className="text-sm text-green-600 dark:text-green-400">No pending suggestions</p>
-              ) : (
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {insightsData.suggestions.slice(0, 5).map((s) => (
-                    <div key={s.id} className="flex items-start gap-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-700/50">
-                      <span className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${s.priority === 'high' ? 'bg-red-500' : s.priority === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{s.title}</p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{s.recommended_action}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Summary Cards with Sparklines */}
+      {/* Summary Cards (always visible) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {summaryCards.map((card, i) => (
           <AnimatedCard
@@ -333,246 +294,456 @@ export default function AnalyticsPage() {
         ))}
       </div>
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Movement Distance Chart */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.3 }}
-          className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 theme-transition"
-        >
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Movement Distance</h2>
-          {movementChartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={240}>
-              <AreaChart data={movementChartData}>
-                <defs>
-                  <linearGradient id="distanceGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-                <XAxis dataKey="label" tick={{ fill: chartColors.text, fontSize: 12 }} />
-                <YAxis tick={{ fill: chartColors.text, fontSize: 12 }} unit=" km" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: chartColors.tooltip,
-                    border: `1px solid ${chartColors.tooltipBorder}`,
-                    borderRadius: 8,
-                    color: isDark ? '#f3f4f6' : '#111827',
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="distance"
-                  stroke="#22c55e"
-                  fill="url(#distanceGradient)"
-                  strokeWidth={2}
-                  animationDuration={1200}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-60 flex items-center justify-center text-gray-400 dark:text-gray-500">
-              {distanceLoading ? 'Loading...' : 'No movement data available'}
-            </div>
-          )}
-        </motion.div>
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* CHARTS VIEW                                                            */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {viewMode === 'charts' && (
+        <>
+          {/* Charts Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Movement Distance Chart */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.3 }}
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 theme-transition"
+            >
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Movement Distance</h2>
+              {movementChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={240}>
+                  <AreaChart data={movementChartData}>
+                    <defs>
+                      <linearGradient id="distanceGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+                    <XAxis dataKey="label" tick={{ fill: chartColors.text, fontSize: 12 }} />
+                    <YAxis tick={{ fill: chartColors.text, fontSize: 12 }} unit=" km" />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: chartColors.tooltip,
+                        border: `1px solid ${chartColors.tooltipBorder}`,
+                        borderRadius: 8,
+                        color: isDark ? '#f3f4f6' : '#111827',
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="distance"
+                      stroke="#22c55e"
+                      fill="url(#distanceGradient)"
+                      strokeWidth={2}
+                      animationDuration={1200}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-60 flex items-center justify-center text-gray-400 dark:text-gray-500">
+                  {distanceLoading ? 'Loading...' : 'No movement data available'}
+                </div>
+              )}
+            </motion.div>
 
-        {/* Activity Donut Chart */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.4 }}
-          className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 theme-transition"
-        >
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Activity Breakdown</h2>
-          {activityPieData.length > 0 && activityPieData.some((d) => d.value > 0) ? (
-            <div className="flex items-center gap-6">
-              <ResponsiveContainer width="55%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={activityPieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    paddingAngle={3}
-                    dataKey="value"
-                    animationDuration={1000}
-                    animationBegin={400}
-                  >
-                    {activityPieData.map((entry) => (
-                      <Cell key={entry.name} fill={entry.color} />
+            {/* Activity Donut Chart */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.4 }}
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 theme-transition"
+            >
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Activity Breakdown</h2>
+              {activityPieData.length > 0 && activityPieData.some((d) => d.value > 0) ? (
+                <div className="flex items-center gap-6">
+                  <ResponsiveContainer width="55%" height={200}>
+                    <PieChart>
+                      <Pie
+                        data={activityPieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={80}
+                        paddingAngle={3}
+                        dataKey="value"
+                        animationDuration={1000}
+                        animationBegin={400}
+                      >
+                        {activityPieData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: chartColors.tooltip,
+                          border: `1px solid ${chartColors.tooltipBorder}`,
+                          borderRadius: 8,
+                          color: isDark ? '#f3f4f6' : '#111827',
+                        }}
+                        formatter={(value: number) => [`${value}%`, '']}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="flex-1 space-y-2">
+                    {activityPieData.map((item) => (
+                      <div key={item.name} className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                        <span className="text-sm text-gray-600 dark:text-gray-400 flex-1">{item.name}</span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">{item.value}%</span>
+                      </div>
                     ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: chartColors.tooltip,
-                      border: `1px solid ${chartColors.tooltipBorder}`,
-                      borderRadius: 8,
-                      color: isDark ? '#f3f4f6' : '#111827',
-                    }}
-                    formatter={(value: number) => [`${value}%`, '']}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex-1 space-y-2">
-                {activityPieData.map((item) => (
-                  <div key={item.name} className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="text-sm text-gray-600 dark:text-gray-400 flex-1">{item.name}</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">{item.value}%</span>
                   </div>
-                ))}
+                </div>
+              ) : (
+                <div className="h-52 flex items-center justify-center text-gray-400 dark:text-gray-500">
+                  {activityLoading ? 'Loading...' : 'No activity data available'}
+                </div>
+              )}
+            </motion.div>
+          </div>
+
+          {/* Second Row of Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Geofence Compliance Bar Chart */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.5 }}
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 theme-transition"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Geofence Compliance</h2>
+                <select
+                  value={complianceCategory}
+                  onChange={(e) => setComplianceCategory(e.target.value as ComplianceCategory)}
+                  className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-green-500"
+                  aria-label="Filter geofence category"
+                >
+                  <option value="boundary">Boundaries</option>
+                  <option value="grazing">Grazing Camps</option>
+                  <option value="exclusion">Exclusion Zones</option>
+                  <option value="infrastructure">Infrastructure</option>
+                  <option value="all">All Geofences</option>
+                </select>
+              </div>
+              {complianceDetails.length > 0 ? (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={complianceDetails.map((d) => ({
+                    fence: d.geofence_name.length > 15 ? d.geofence_name.slice(0, 15) + '...' : d.geofence_name,
+                    compliance: d.compliance_rate,
+                    outside: Math.round((100 - d.compliance_rate) * 10) / 10,
+                  }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+                    <XAxis dataKey="fence" tick={{ fill: chartColors.text, fontSize: 11 }} />
+                    <YAxis tick={{ fill: chartColors.text, fontSize: 12 }} domain={[0, 100]} unit="%" />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: chartColors.tooltip,
+                        border: `1px solid ${chartColors.tooltipBorder}`,
+                        borderRadius: 8,
+                        color: isDark ? '#f3f4f6' : '#111827',
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="compliance" name="Inside %" fill="#22c55e" radius={[4, 4, 0, 0]} animationDuration={1000} />
+                    <Bar dataKey="outside" name="Outside %" fill="#ef4444" radius={[4, 4, 0, 0]} animationDuration={1000} animationBegin={300} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-52 flex items-center justify-center text-gray-400 dark:text-gray-500">
+                  {complianceLoading ? 'Loading...' : 'No geofence data available'}
+                </div>
+              )}
+            </motion.div>
+
+            {/* Top Animals by Distance */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.6 }}
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 theme-transition"
+            >
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Top Animals by Distance</h2>
+              {(distanceData?.top_animals?.length ?? 0) > 0 ? (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart
+                    data={distanceData!.top_animals.slice(0, 8).map((a) => ({
+                      name: a.animal_name || a.animal_id.slice(0, 8),
+                      distance: a.distance_km,
+                    }))}
+                    layout="vertical"
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+                    <XAxis type="number" tick={{ fill: chartColors.text, fontSize: 12 }} unit=" km" />
+                    <YAxis type="category" dataKey="name" tick={{ fill: chartColors.text, fontSize: 11 }} width={80} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: chartColors.tooltip,
+                        border: `1px solid ${chartColors.tooltipBorder}`,
+                        borderRadius: 8,
+                        color: isDark ? '#f3f4f6' : '#111827',
+                      }}
+                    />
+                    <Bar dataKey="distance" fill="#3b82f6" radius={[0, 4, 4, 0]} animationDuration={1200} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-52 flex items-center justify-center text-gray-400 dark:text-gray-500">
+                  {distanceLoading ? 'Loading...' : 'No distance data available'}
+                </div>
+              )}
+            </motion.div>
+          </div>
+
+          {/* Compliance Table */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.7 }}
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden theme-transition"
+          >
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Geofence Compliance Detail</h2>
+              <div className="flex items-center gap-3">
+                <select
+                  value={complianceCategory}
+                  onChange={(e) => setComplianceCategory(e.target.value as ComplianceCategory)}
+                  className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-green-500"
+                  aria-label="Filter geofence category"
+                >
+                  <option value="boundary">Boundaries</option>
+                  <option value="grazing">Grazing Camps</option>
+                  <option value="exclusion">Exclusion Zones</option>
+                  <option value="infrastructure">Infrastructure</option>
+                  <option value="all">All Geofences</option>
+                </select>
+                <span className="text-xs text-gray-500 dark:text-gray-400">{dateRange} period</span>
               </div>
             </div>
-          ) : (
-            <div className="h-52 flex items-center justify-center text-gray-400 dark:text-gray-500">
-              {activityLoading ? 'Loading...' : 'No activity data available'}
-            </div>
-          )}
-        </motion.div>
-      </div>
-
-      {/* Second Row of Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Geofence Compliance Bar Chart */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.5 }}
-          className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 theme-transition"
-        >
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Geofence Compliance</h2>
-          {complianceDetails.length > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={complianceDetails.map((d) => ({
-                fence: d.geofence_name.length > 15 ? d.geofence_name.slice(0, 15) + '...' : d.geofence_name,
-                compliance: d.compliance_rate,
-                outside: Math.round((100 - d.compliance_rate) * 10) / 10,
-              }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-                <XAxis dataKey="fence" tick={{ fill: chartColors.text, fontSize: 11 }} />
-                <YAxis tick={{ fill: chartColors.text, fontSize: 12 }} domain={[0, 100]} unit="%" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: chartColors.tooltip,
-                    border: `1px solid ${chartColors.tooltipBorder}`,
-                    borderRadius: 8,
-                    color: isDark ? '#f3f4f6' : '#111827',
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="compliance" name="Inside %" fill="#22c55e" radius={[4, 4, 0, 0]} animationDuration={1000} />
-                <Bar dataKey="outside" name="Outside %" fill="#ef4444" radius={[4, 4, 0, 0]} animationDuration={1000} animationBegin={300} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-52 flex items-center justify-center text-gray-400 dark:text-gray-500">
-              {complianceLoading ? 'Loading...' : 'No geofence data available'}
-            </div>
-          )}
-        </motion.div>
-
-        {/* Top Animals by Distance */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.6 }}
-          className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 theme-transition"
-        >
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Top Animals by Distance</h2>
-          {(distanceData?.top_animals?.length ?? 0) > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart
-                data={distanceData!.top_animals.slice(0, 8).map((a) => ({
-                  name: a.animal_name || a.animal_id.slice(0, 8),
-                  distance: a.distance_km,
-                }))}
-                layout="vertical"
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-                <XAxis type="number" tick={{ fill: chartColors.text, fontSize: 12 }} unit=" km" />
-                <YAxis type="category" dataKey="name" tick={{ fill: chartColors.text, fontSize: 11 }} width={80} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: chartColors.tooltip,
-                    border: `1px solid ${chartColors.tooltipBorder}`,
-                    borderRadius: 8,
-                    color: isDark ? '#f3f4f6' : '#111827',
-                  }}
-                />
-                <Bar dataKey="distance" fill="#3b82f6" radius={[0, 4, 4, 0]} animationDuration={1200} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-52 flex items-center justify-center text-gray-400 dark:text-gray-500">
-              {distanceLoading ? 'Loading...' : 'No distance data available'}
-            </div>
-          )}
-        </motion.div>
-      </div>
-
-      {/* Compliance Table */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.7 }}
-        className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden theme-transition"
-      >
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Geofence Compliance Detail</h2>
-          <span className="text-xs text-gray-500 dark:text-gray-400">{dateRange} period</span>
-        </div>
-        {complianceDetails.length > 0 ? (
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-              <tr>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Geofence</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Compliance</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Points Inside</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Total Points</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-              {complianceDetails.map((row, i) => (
-                <motion.tr
-                  key={row.geofence_id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.8 + i * 0.08, duration: 0.3 }}
-                  className="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
-                >
-                  <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{row.geofence_name}</td>
+            {complianceDetails.length > 0 ? (
+              <table className="w-full">
+                <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Geofence</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Type</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Compliance</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Points Inside</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400">Total Points</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {complianceDetails.map((row, i) => (
+                    <motion.tr
+                      key={row.geofence_id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.8 + i * 0.08, duration: 0.3 }}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
+                    >
+                      <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">{row.geofence_name}</td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                        <motion.div
-                          className={`h-full rounded-full ${row.compliance_rate >= 98 ? 'bg-green-500' : row.compliance_rate >= 95 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                          initial={{ width: 0 }}
-                          animate={{ width: `${row.compliance_rate}%` }}
-                          transition={{ duration: 0.8, delay: 0.9 + i * 0.1 }}
-                        />
-                      </div>
-                      <span className={`text-sm font-medium ${row.compliance_rate >= 98 ? 'text-green-600 dark:text-green-400' : row.compliance_rate >= 95 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {row.compliance_rate}%
-                      </span>
-                    </div>
+                    <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                      row.fence_type === 'exclusion'
+                        ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                        : 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                    }`}>
+                      {row.fence_type === 'exclusion' ? 'Exclusion' : 'Inclusion'}
+                    </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{row.inside_points.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{row.total_points.toLocaleString()}</td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <div className="p-8 text-center text-gray-400 dark:text-gray-500">
-            {complianceLoading ? 'Loading compliance data...' : 'No geofence compliance data available'}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                            <motion.div
+                              className={`h-full rounded-full ${row.compliance_rate >= 98 ? 'bg-green-500' : row.compliance_rate >= 95 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                              initial={{ width: 0 }}
+                              animate={{ width: `${row.compliance_rate}%` }}
+                              transition={{ duration: 0.8, delay: 0.9 + i * 0.1 }}
+                            />
+                          </div>
+                          <span className={`text-sm font-medium ${row.compliance_rate >= 98 ? 'text-green-600 dark:text-green-400' : row.compliance_rate >= 95 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {row.compliance_rate}%
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{row.inside_points.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{row.total_points.toLocaleString()}</td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="p-8 text-center text-gray-400 dark:text-gray-500">
+                {complianceLoading ? 'Loading compliance data...' : 'No geofence compliance data available'}
+              </div>
+            )}
+          </motion.div>
+        </>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* INSIGHTS VIEW                                                          */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {viewMode === 'insights' && (
+        <>
+          {/* Intelligence Overview */}
+          {insightsData && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.1 }}
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 theme-transition"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Farm Intelligence</h2>
+                <div className="flex items-center gap-3">
+                  {insightsData.anomalies_high > 0 && (
+                    <span className="px-2 py-1 text-xs font-bold text-red-400 bg-red-900/30 rounded-full">
+                      {insightsData.anomalies_high} high severity
+                    </span>
+                  )}
+                  {insightsData.latest_report_date && (
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      Report: {new Date(insightsData.latest_report_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Report Summary */}
+              {insightsData.latest_report_summary && (
+                <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <p className="text-sm text-blue-800 dark:text-blue-200">{insightsData.latest_report_summary}</p>
+                </div>
+              )}
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-red-500">{insightsData.anomalies_active}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Active Anomalies</p>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-orange-500">{insightsData.anomalies_high}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">High Severity</p>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-blue-500">{insightsData.suggestions_pending}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Suggestions</p>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-yellow-500">{insightsData.suggestions_high}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">High Priority</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Anomalies & Suggestions split */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Anomalies List */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.2 }}
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 theme-transition"
+            >
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                Active Anomalies
+                {insightsData && insightsData.anomalies.length > 0 && (
+                  <span className="text-xs text-gray-400 font-normal">({insightsData.anomalies.length})</span>
+                )}
+              </h3>
+              {(!insightsData || insightsData.anomalies.length === 0) ? (
+                <div className="p-6 text-center">
+                  <p className="text-sm text-green-600 dark:text-green-400">No active anomalies detected</p>
+                  <p className="text-xs text-gray-400 mt-1">All systems operating normally</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                  {insightsData.anomalies.map((a) => (
+                    <div key={a.id} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 border-l-3 border-l-4" style={{ borderLeftColor: a.severity === 'high' ? '#ef4444' : a.severity === 'medium' ? '#f59e0b' : '#6b7280' }}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">
+                          {a.anomaly_type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                        </span>
+                        <span className={`px-2 py-0.5 text-xs font-bold rounded-full uppercase ${
+                          a.severity === 'high' ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400' :
+                          a.severity === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-600 dark:text-yellow-400' :
+                          'bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
+                        }`}>
+                          {a.severity}
+                        </span>
+                      </div>
+                      {a.animal_name && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Animal: {a.animal_name}</p>
+                      )}
+                      <p className="text-sm text-gray-600 dark:text-gray-300">{a.description}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                        {new Date(a.detected_at).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+
+            {/* Suggestions List */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.3 }}
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 theme-transition"
+            >
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                Suggestions
+                {insightsData && insightsData.suggestions.length > 0 && (
+                  <span className="text-xs text-gray-400 font-normal">({insightsData.suggestions.length})</span>
+                )}
+              </h3>
+              {(!insightsData || insightsData.suggestions.length === 0) ? (
+                <div className="p-6 text-center">
+                  <p className="text-sm text-green-600 dark:text-green-400">No pending suggestions</p>
+                  <p className="text-xs text-gray-400 mt-1">Farm operations look good</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                  {insightsData.suggestions.map((s) => (
+                    <div key={s.id} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 border-l-4" style={{ borderLeftColor: s.priority === 'high' ? '#ef4444' : s.priority === 'medium' ? '#f59e0b' : '#6b7280' }}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 capitalize">
+                          {s.category}
+                        </span>
+                        <span className={`px-2 py-0.5 text-xs font-bold rounded-full uppercase ${
+                          s.priority === 'high' ? 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400' :
+                          s.priority === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-600 dark:text-yellow-400' :
+                          'bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
+                        }`}>
+                          {s.priority}
+                        </span>
+                      </div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white mt-2">{s.title}</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{s.description}</p>
+                      <div className="mt-2 p-2 bg-green-50 dark:bg-green-900/20 rounded border border-green-200 dark:border-green-800">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase mb-0.5">Recommended</p>
+                        <p className="text-xs text-green-700 dark:text-green-300">{s.recommended_action}</p>
+                      </div>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                        {new Date(s.created_at).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
           </div>
-        )}
-      </motion.div>
+        </>
+      )}
     </PageTransition>
   );
 }

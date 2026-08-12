@@ -1,7 +1,10 @@
 """
 Analytics router — heatmap, activity breakdown, distance, and compliance.
 
-Provides time-series analytics from the positions hypertable and geofences.
+Provides time-series analytics from both the GPS positions hypertable and
+BLE sightings (estimated positions). Supports farms using GPS collars,
+BLE ear tags, or both.
+
 All endpoints require authentication and accept farm_id + time range filters.
 """
 
@@ -45,6 +48,53 @@ def _parse_time_range(start: Optional[str], end: Optional[str]) -> tuple[datetim
     return start_dt, end_dt
 
 
+def _unified_positions_cte(animal_filter: str = "") -> str:
+    """
+    Return a CTE that unions GPS positions and BLE estimated positions.
+    Both GPS collar farms and BLE ear tag farms get analytics.
+    
+    Columns: animal_id, time, latitude, longitude, speed
+    """
+    return f"""
+        unified_positions AS (
+            -- GPS collar positions
+            SELECT
+                p.animal_id,
+                p.time,
+                p.latitude,
+                p.longitude,
+                p.speed
+            FROM positions p
+            JOIN animals a ON a.id = p.animal_id
+            WHERE a.farm_id = :farm_id
+              AND p.time >= :start
+              AND p.time <= :end
+              AND p.latitude IS NOT NULL
+              AND p.longitude IS NOT NULL
+              {animal_filter}
+
+            UNION ALL
+
+            -- BLE estimated positions (from gateway sightings)
+            -- Uses estimated position if available, falls back to gateway position
+            SELECT
+                bs.animal_id,
+                bs.time,
+                COALESCE(bs.estimated_latitude, bs.gateway_latitude) AS latitude,
+                COALESCE(bs.estimated_longitude, bs.gateway_longitude) AS longitude,
+                bs.gateway_speed AS speed
+            FROM ble_sightings bs
+            JOIN animals a ON a.id = bs.animal_id
+            WHERE a.farm_id = :farm_id
+              AND bs.time >= :start
+              AND bs.time <= :end
+              AND (bs.estimated_latitude IS NOT NULL OR bs.gateway_latitude IS NOT NULL)
+              AND bs.animal_id IS NOT NULL
+              {animal_filter.replace('p.animal_id', 'bs.animal_id')}
+        )
+    """
+
+
 # ─── Heatmap ──────────────────────────────────────────────────────────────────
 
 
@@ -75,25 +125,20 @@ async def get_heatmap(
 
     Groups positions into grid cells by rounding lat/lon to a resolution-dependent
     precision. Returns cell centers with position counts.
+    Uses both GPS positions and BLE estimated positions.
     """
     start_dt, end_dt = _parse_time_range(start, end)
 
-    # Resolution maps to decimal precision: 50 -> ~0.001 (~100m cells)
-    # Higher resolution = smaller cells = more decimal places
-    cell_size = 1.0 / resolution  # degrees per cell
+    cell_size = 1.0 / resolution
 
-    query = text("""
+    cte = _unified_positions_cte()
+    query = text(f"""
+        WITH {cte}
         SELECT
             ROUND(CAST(latitude / :cell_size AS NUMERIC), 0) * :cell_size AS cell_lat,
             ROUND(CAST(longitude / :cell_size AS NUMERIC), 0) * :cell_size AS cell_lon,
             COUNT(*) AS count
-        FROM positions p
-        JOIN animals a ON a.id = p.animal_id
-        WHERE a.farm_id = :farm_id
-          AND p.time >= :start
-          AND p.time <= :end
-          AND p.latitude IS NOT NULL
-          AND p.longitude IS NOT NULL
+        FROM unified_positions
         GROUP BY cell_lat, cell_lon
         ORDER BY count DESC
         LIMIT 5000
@@ -158,11 +203,10 @@ async def get_activity(
     Get activity breakdown (grazing, resting, walking, running) over time.
 
     Classifies each position point by speed into activity categories and
-    aggregates into time buckets.
+    aggregates into time buckets. Uses both GPS and BLE data sources.
     """
     start_dt, end_dt = _parse_time_range(start, end)
 
-    # Map interval string to PostgreSQL interval
     interval_map = {"1h": "1 hour", "6h": "6 hours", "1d": "1 day"}
     pg_interval = interval_map.get(interval, "1 hour")
 
@@ -176,21 +220,17 @@ async def get_activity(
         animal_filter = "AND p.animal_id = :animal_id"
         params["animal_id"] = str(animal_id)
 
-    # Classify positions by speed thresholds into activity types per time bucket
+    cte = _unified_positions_cte(animal_filter)
     query = text(f"""
+        WITH {cte}
         SELECT
-            time_bucket('{pg_interval}', p.time) AS bucket,
-            COUNT(*) FILTER (WHERE COALESCE(p.speed, 0) < 0.3) AS resting,
-            COUNT(*) FILTER (WHERE p.speed >= 0.3 AND p.speed < 2.0) AS grazing,
-            COUNT(*) FILTER (WHERE p.speed >= 2.0 AND p.speed < 8.0) AS walking,
-            COUNT(*) FILTER (WHERE p.speed >= 8.0) AS running,
+            time_bucket('{pg_interval}', time) AS bucket,
+            COUNT(*) FILTER (WHERE COALESCE(speed, 0) < 0.3) AS resting,
+            COUNT(*) FILTER (WHERE speed >= 0.3 AND speed < 2.0) AS grazing,
+            COUNT(*) FILTER (WHERE speed >= 2.0 AND speed < 8.0) AS walking,
+            COUNT(*) FILTER (WHERE speed >= 8.0) AS running,
             COUNT(*) AS total
-        FROM positions p
-        JOIN animals a ON a.id = p.animal_id
-        WHERE a.farm_id = :farm_id
-          AND p.time >= :start
-          AND p.time <= :end
-          {animal_filter}
+        FROM unified_positions
         GROUP BY bucket
         ORDER BY bucket ASC
     """)
@@ -270,7 +310,7 @@ async def get_distance(
     Get distance travelled by animals over time.
 
     Computes haversine distance between consecutive positions per animal,
-    then aggregates into time buckets.
+    then aggregates into time buckets. Uses both GPS and BLE data sources.
     """
     start_dt, end_dt = _parse_time_range(start, end)
 
@@ -287,24 +327,18 @@ async def get_distance(
         animal_filter = "AND p.animal_id = :animal_id"
         params["animal_id"] = str(animal_id)
 
-    # Use LAG window function to get previous position, then compute distance
+    cte = _unified_positions_cte(animal_filter)
     query = text(f"""
-        WITH position_pairs AS (
+        WITH {cte},
+        position_pairs AS (
             SELECT
-                p.animal_id,
-                p.time,
-                p.latitude,
-                p.longitude,
-                LAG(p.latitude) OVER (PARTITION BY p.animal_id ORDER BY p.time) AS prev_lat,
-                LAG(p.longitude) OVER (PARTITION BY p.animal_id ORDER BY p.time) AS prev_lon
-            FROM positions p
-            JOIN animals a ON a.id = p.animal_id
-            WHERE a.farm_id = :farm_id
-              AND p.time >= :start
-              AND p.time <= :end
-              AND p.latitude IS NOT NULL
-              AND p.longitude IS NOT NULL
-              {animal_filter}
+                animal_id,
+                time,
+                latitude,
+                longitude,
+                LAG(latitude) OVER (PARTITION BY animal_id ORDER BY time) AS prev_lat,
+                LAG(longitude) OVER (PARTITION BY animal_id ORDER BY time) AS prev_lon
+            FROM unified_positions
         ),
         distances AS (
             SELECT
@@ -348,20 +382,15 @@ async def get_distance(
 
     # Top animals by distance
     top_query = text(f"""
-        WITH position_pairs AS (
+        WITH {cte},
+        position_pairs AS (
             SELECT
-                p.animal_id,
-                p.latitude,
-                p.longitude,
-                LAG(p.latitude) OVER (PARTITION BY p.animal_id ORDER BY p.time) AS prev_lat,
-                LAG(p.longitude) OVER (PARTITION BY p.animal_id ORDER BY p.time) AS prev_lon
-            FROM positions p
-            JOIN animals a ON a.id = p.animal_id
-            WHERE a.farm_id = :farm_id
-              AND p.time >= :start
-              AND p.time <= :end
-              AND p.latitude IS NOT NULL
-              {animal_filter}
+                animal_id,
+                latitude,
+                longitude,
+                LAG(latitude) OVER (PARTITION BY animal_id ORDER BY time) AS prev_lat,
+                LAG(longitude) OVER (PARTITION BY animal_id ORDER BY time) AS prev_lon
+            FROM unified_positions
         ),
         distances AS (
             SELECT
@@ -419,6 +448,7 @@ async def get_distance(
 class ComplianceDetail(BaseModel):
     geofence_id: str
     geofence_name: str
+    fence_type: str
     total_points: int
     inside_points: int
     compliance_rate: float
@@ -436,6 +466,10 @@ class ComplianceResponse(BaseModel):
 async def get_compliance(
     farm_id: UUID,
     geofence_id: Optional[UUID] = None,
+    category: Optional[str] = Query(
+        default=None,
+        description="Filter geofences by category: boundary, exclusion, grazing, infrastructure, all"
+    ),
     start: Optional[str] = None,
     end: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
@@ -444,11 +478,21 @@ async def get_compliance(
     Get geofence compliance statistics (time inside vs outside).
 
     For each geofence, checks what percentage of position points fall within
-    the geofence polygon using PostGIS ST_Contains.
+    the geofence polygon using PostGIS ST_Covers (geography type).
+    Uses both GPS positions and BLE estimated positions.
+
+    Category filter options:
+    - boundary: Main farm boundary/option fences
+    - exclusion: Areas animals should NOT be (houses, dams, roads)
+    - grazing: Designated grazing camps
+    - infrastructure: Kraal, handling, foot bath, machinery, herdsman quarters
+    - all: All geofences (both inclusion and exclusion)
+    - None (default): Only inclusion fences
     """
     start_dt, end_dt = _parse_time_range(start, end)
 
     geofence_filter = ""
+    fence_type_filter = "AND g.fence_type = 'inclusion'"
     params: dict = {
         "farm_id": str(farm_id),
         "start": start_dt,
@@ -458,32 +502,52 @@ async def get_compliance(
         geofence_filter = "AND g.id = :geofence_id"
         params["geofence_id"] = str(geofence_id)
 
+    # Category-based name pattern filtering
+    if category == "boundary":
+        geofence_filter += " AND (g.name ILIKE '%boundary%' OR g.name ILIKE '%border%' OR g.name ILIKE '%option%' OR g.name ILIKE '%area%' OR g.name ILIKE '%plot%')"
+        fence_type_filter = "AND g.fence_type = 'inclusion'"
+    elif category == "exclusion":
+        fence_type_filter = "AND g.fence_type = 'exclusion'"
+    elif category == "grazing":
+        geofence_filter += " AND (g.name ILIKE '%grazing%' OR g.name ILIKE '%camp%' OR g.name ILIKE '%paddock%')"
+        fence_type_filter = ""  # Could be either type
+    elif category == "infrastructure":
+        geofence_filter += " AND (g.name ILIKE '%kraal%' OR g.name ILIKE '%handling%' OR g.name ILIKE '%foot bath%' OR g.name ILIKE '%machinery%' OR g.name ILIKE '%herdsman%' OR g.name ILIKE '%homestead%')"
+        fence_type_filter = ""
+    elif category == "all":
+        fence_type_filter = ""  # No fence type filter — show everything
+
+    cte = _unified_positions_cte()
+    # Sample positions to keep query performant (max ~5000 points per geofence check)
     query = text(f"""
+        WITH {cte},
+        sampled_positions AS (
+            SELECT latitude, longitude
+            FROM unified_positions
+            ORDER BY time DESC
+            LIMIT 5000
+        )
         SELECT
             g.id AS geofence_id,
             g.name AS geofence_name,
-            COUNT(p.*) AS total_points,
-            COUNT(p.*) FILTER (
-                WHERE ST_Contains(
+            g.fence_type,
+            COUNT(sp.*) AS total_points,
+            COUNT(sp.*) FILTER (
+                WHERE ST_Covers(
                     g.geometry,
-                    ST_SetSRID(ST_MakePoint(p.longitude, p.latitude), 4326)
+                    ST_SetSRID(ST_MakePoint(sp.longitude, sp.latitude), 4326)::geography
                 )
             ) AS inside_points
         FROM geofences g
         CROSS JOIN LATERAL (
-            SELECT pos.latitude, pos.longitude
-            FROM positions pos
-            JOIN animals a ON a.id = pos.animal_id
-            WHERE a.farm_id = :farm_id
-              AND pos.time >= :start
-              AND pos.time <= :end
-              AND pos.latitude IS NOT NULL
-              AND pos.longitude IS NOT NULL
-        ) p
+            SELECT latitude, longitude
+            FROM sampled_positions
+        ) sp
         WHERE g.farm_id = :farm_id
           AND g.geometry IS NOT NULL
+          {fence_type_filter}
           {geofence_filter}
-        GROUP BY g.id, g.name
+        GROUP BY g.id, g.name, g.fence_type
     """)
 
     try:
@@ -503,6 +567,7 @@ async def get_compliance(
         details.append(ComplianceDetail(
             geofence_id=str(r.geofence_id),
             geofence_name=r.geofence_name,
+            fence_type=r.fence_type,
             total_points=total,
             inside_points=inside,
             compliance_rate=rate,
@@ -541,7 +606,7 @@ async def classify_animal_activity(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Classify the current activity of an animal based on recent GPS data.
+    Classify the current activity of an animal based on recent GPS/BLE data.
 
     Uses a sliding window of the last N minutes of position data to infer:
     - resting (< 0.3 km/h)
@@ -549,11 +614,24 @@ async def classify_animal_activity(
     - walking (2-8 km/h)
     - running (> 8 km/h)
     """
+    # Try GPS first, then BLE
     query = text("""
         SELECT latitude, longitude, speed, heading
-        FROM positions
-        WHERE animal_id = :animal_id
-          AND time > NOW() - make_interval(mins => :window)
+        FROM (
+            SELECT latitude, longitude, speed, heading, time
+            FROM positions
+            WHERE animal_id = :animal_id
+              AND time > NOW() - make_interval(mins => :window)
+
+            UNION ALL
+
+            SELECT estimated_latitude AS latitude, estimated_longitude AS longitude,
+                   gateway_speed AS speed, NULL::real AS heading, time
+            FROM ble_sightings
+            WHERE animal_id = :animal_id
+              AND time > NOW() - make_interval(mins => :window)
+              AND estimated_latitude IS NOT NULL
+        ) combined
         ORDER BY time ASC
         LIMIT 500
     """)
