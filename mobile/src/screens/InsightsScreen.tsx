@@ -218,37 +218,43 @@ export default function InsightsScreen({ role }: InsightsScreenProps) {
   // ─── Main ───────────────────────────────────────────────────────────────────
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#22c55e" />}
-    >
-      <Text style={styles.title}>Farm Intelligence</Text>
-      <Text style={styles.farmName}>{selectedFarm?.name || 'No farm selected'}</Text>
+    <View style={styles.container}>
+      {/* Sticky Header */}
+      <View style={styles.stickyHeader}>
+        <Text style={styles.title}>Farm Intelligence</Text>
+        <Text style={styles.farmName}>{selectedFarm?.name || 'No farm selected'}</Text>
 
-      {/* View Mode Toggle */}
-      <View style={styles.toggleContainer}>
-        <TouchableOpacity
-          style={[styles.toggleButton, viewMode === 'charts' && styles.toggleButtonActive]}
-          onPress={() => setViewMode('charts')}
-          accessibilityLabel="Show charts view"
-          accessibilityState={{ selected: viewMode === 'charts' }}
-        >
-          <Text style={[styles.toggleButtonText, viewMode === 'charts' && styles.toggleButtonTextActive]}>
-            📊 Charts
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.toggleButton, viewMode === 'insights' && styles.toggleButtonActive]}
-          onPress={() => setViewMode('insights')}
-          accessibilityLabel="Show insights view"
-          accessibilityState={{ selected: viewMode === 'insights' }}
-        >
-          <Text style={[styles.toggleButtonText, viewMode === 'insights' && styles.toggleButtonTextActive]}>
-            ⚠️ Insights
-            {data && data.anomalies_active > 0 ? ` (${data.anomalies_active})` : ''}
-          </Text>
-        </TouchableOpacity>
+        {/* View Mode Toggle */}
+        <View style={styles.toggleContainer}>
+          <TouchableOpacity
+            style={[styles.toggleButton, viewMode === 'charts' && styles.toggleButtonActive]}
+            onPress={() => setViewMode('charts')}
+            accessibilityLabel="Show charts view"
+            accessibilityState={{ selected: viewMode === 'charts' }}
+          >
+            <Text style={[styles.toggleButtonText, viewMode === 'charts' && styles.toggleButtonTextActive]}>
+              📊 Charts
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.toggleButton, viewMode === 'insights' && styles.toggleButtonActive]}
+            onPress={() => setViewMode('insights')}
+            accessibilityLabel="Show insights view"
+            accessibilityState={{ selected: viewMode === 'insights' }}
+          >
+            <Text style={[styles.toggleButtonText, viewMode === 'insights' && styles.toggleButtonTextActive]}>
+              ⚠️ Insights
+              {data && data.anomalies_active > 0 ? ` (${data.anomalies_active})` : ''}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Scrollable Content */}
+      <ScrollView
+        style={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#22c55e" />}
+      >
 
       {/* Summary Cards (always visible) */}
       <View style={styles.summaryRow}>
@@ -579,6 +585,7 @@ export default function InsightsScreen({ role }: InsightsScreenProps) {
 
       <View style={{ height: 40 }} />
     </ScrollView>
+    </View>
   );
 }
 
@@ -677,8 +684,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#111827',
-    padding: 16,
     paddingTop: 60,
+  },
+  stickyHeader: {
+    backgroundColor: '#111827',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1f2937',
+  },
+  scrollContent: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 12,
   },
   centered: {
     flex: 1,
