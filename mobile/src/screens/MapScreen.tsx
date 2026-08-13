@@ -57,6 +57,8 @@ export default function MapScreen() {
   const [selectedFence, setSelectedFence] = useState<string | null>(null);
   const [showLayerPanel, setShowLayerPanel] = useState(false);
   const [showActiveOnly, setShowActiveOnly] = useState(true);
+  const [herdsmanInfoVisible, setHerdsmanInfoVisible] = useState(false);
+  const [focusedHerdsman, setFocusedHerdsman] = useState<GatewayPosition | null>(null);
 
   const fetchData = async () => {
     if (!selectedFarm) return;
@@ -154,6 +156,23 @@ export default function MapScreen() {
 
   const selectFence = (fenceId: string) => {
     setSelectedFence(prev => prev === fenceId ? null : fenceId);
+  };
+
+  /**
+   * Find Herdsman — zoom/animate to the first gateway with a known position
+   * and show an info card with coordinates.
+   */
+  const findHerdsman = () => {
+    const gw = gateways.find(g => g.last_latitude != null && g.last_longitude != null);
+    if (!gw) return;
+    setFocusedHerdsman(gw);
+    setHerdsmanInfoVisible(true);
+    mapRef.current?.animateToRegion({
+      latitude: gw.last_latitude!,
+      longitude: gw.last_longitude!,
+      latitudeDelta: 0.003,
+      longitudeDelta: 0.003,
+    }, 800);
   };
 
   return (
@@ -418,6 +437,44 @@ export default function MapScreen() {
         </TouchableOpacity>
       )}
 
+      {/* Find Herdsman button */}
+      {gateways.some(g => g.last_latitude && g.last_longitude) && (
+        <TouchableOpacity
+          style={styles.findHerdsmanBtn}
+          onPress={findHerdsman}
+          accessibilityLabel="Find herdsman on map"
+        >
+          <Text style={styles.findHerdsmanIcon}>🚶</Text>
+          <Text style={styles.findHerdsmanLabel}>Find</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Herdsman info card — shows after navigating to herdsman */}
+      {herdsmanInfoVisible && focusedHerdsman && (
+        <View style={styles.herdsmanInfoCard}>
+          <View style={styles.herdsmanInfoHeader}>
+            <View style={styles.herdsmanInfoDot} />
+            <Text style={styles.herdsmanInfoName}>
+              {focusedHerdsman.herdsman_name || focusedHerdsman.name}
+            </Text>
+            <TouchableOpacity onPress={() => setHerdsmanInfoVisible(false)}>
+              <Text style={styles.herdsmanInfoClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.herdsmanInfoCoords}>
+            📍 {focusedHerdsman.last_latitude!.toFixed(5)}, {focusedHerdsman.last_longitude!.toFixed(5)}
+          </Text>
+          <Text style={styles.herdsmanInfoDetail}>
+            📡 {focusedHerdsman.serial_number} · 🔋 {focusedHerdsman.last_battery_pct ?? '?'}%
+          </Text>
+          {focusedHerdsman.last_seen && (
+            <Text style={styles.herdsmanInfoSeen}>
+              Last seen: {new Date(focusedHerdsman.last_seen).toLocaleTimeString()}
+            </Text>
+          )}
+        </View>
+      )}
+
       {/* Overlay: count */}
       <View style={styles.overlay}>
         <Text style={styles.overlayText}>🐄 {withPosition.length} tracked · Updates every 30s</Text>
@@ -532,4 +589,29 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: 8, padding: 8, alignItems: 'center',
   },
   overlayText: { color: '#fff', fontSize: 12 },
+  // Find Herdsman button
+  findHerdsmanBtn: {
+    position: 'absolute', bottom: 140, right: 12,
+    backgroundColor: '#2563eb', borderRadius: 24,
+    width: 48, height: 48, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4, shadowRadius: 4, elevation: 6,
+  },
+  findHerdsmanIcon: { fontSize: 18, marginTop: -2 },
+  findHerdsmanLabel: { fontSize: 8, color: '#bfdbfe', fontWeight: '600', marginTop: -2 },
+  // Herdsman info card
+  herdsmanInfoCard: {
+    position: 'absolute', bottom: 120, left: 16, right: 16,
+    backgroundColor: 'rgba(17,24,39,0.95)', borderRadius: 12,
+    padding: 12, borderLeftWidth: 3, borderLeftColor: '#2563eb',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
+  },
+  herdsmanInfoHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  herdsmanInfoDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#2563eb', marginRight: 8 },
+  herdsmanInfoName: { color: '#fff', fontSize: 14, fontWeight: 'bold', flex: 1 },
+  herdsmanInfoClose: { color: '#9ca3af', fontSize: 16, paddingHorizontal: 4 },
+  herdsmanInfoCoords: { color: '#93c5fd', fontSize: 12, fontWeight: '600', marginBottom: 4 },
+  herdsmanInfoDetail: { color: '#d1d5db', fontSize: 11, marginBottom: 2 },
+  herdsmanInfoSeen: { color: '#6b7280', fontSize: 10 },
 });
