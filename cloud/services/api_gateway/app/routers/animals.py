@@ -509,3 +509,109 @@ async def get_offspring(animal_id: UUID, db: AsyncSession = Depends(get_db)):
     offspring = result.scalars().all()
 
     return [_animal_to_response(calf) for calf in offspring]
+
+
+# ─── CSV Import ───────────────────────────────────────────────────────────────
+
+
+class CsvImportRow(BaseModel):
+    name: str
+    tag_id: str
+    species: str = "cattle"
+    breed: Optional[str] = None
+    gender: Optional[str] = None
+    colour: Optional[str] = None
+    description: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    weight_kg: Optional[float] = None
+
+
+class CsvImportRequest(BaseModel):
+    farm_id: UUID
+    animals: List[CsvImportRow]
+
+
+class CsvImportResult(BaseModel):
+    imported: int
+    skipped: int
+    errors: List[str]
+
+
+@router.post("/import/csv", response_model=CsvImportResult)
+async def import_animals_csv(
+    request: CsvImportRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Bulk import animals from a parsed CSV payload.
+
+    Accepts a list of animal records (pre-parsed by the frontend) and batch-inserts
+    them into the database. Skips rows with duplicate tag_ids (within this farm).
+
+    Expected CSV columns: name, tag_id, species, breed, gender, colour,
+    description, date_of_birth (YYYY-MM-DD), weight_kg
+    """
+    farm_id = request.farm_id
+    imported = 0
+    skipped = 0
+    errors: List[str] = []
+
+    # Get existing tag_ids for this farm to avoid duplicates
+    existing_result = await db.execute(
+        select(Animal.tag_id).where(Animal.farm_id == farm_id, Animal.status == "active")
+    )
+    existing_tags = {row[0] for row in existing_result.all()}
+
+    for i, row in enumerate(request.animals):
+        row_num = i + 1
+
+        # Validate required fields
+        if not row.name or not row.tag_id:
+            errors.append(f"Row {row_num}: name and tag_id are required")
+            skipped += 1
+            continue
+
+        # Skip duplicates
+        if row.tag_id in existing_tags:
+            errors.append(f"Row {row_num}: tag_id '{row.tag_id}' already exists")
+            skipped += 1
+            continue
+
+        # Parse date_of_birth if provided
+        dob = None
+        if row.date_of_birth:
+            try:
+                dob = date.fromisoformat(row.date_of_birth)
+            except ValueError:
+                errors.append(f"Row {row_num}: invalid date_of_birth '{row.date_of_birth}'")
+
+        # Validate gender
+        gender = row.gender.lower() if row.gender else None
+        if gender and gender not in ("male", "female"):
+            gender = None
+
+        try:
+            new_animal = Animal(
+                farm_id=farm_id,
+                name=row.name.strip(),
+                tag_id=row.tag_id.strip(),
+                species=row.species or "cattle",
+                breed=row.breed,
+                gender=gender,
+                colour=row.colour,
+                description=row.description,
+                date_of_birth=dob,
+                weight_kg=row.weight_kg,
+                status="active",
+            )
+            db.add(new_animal)
+            existing_tags.add(row.tag_id)
+            imported += 1
+        except Exception as e:
+            errors.append(f"Row {row_num}: {str(e)}")
+            skipped += 1
+
+    if imported > 0:
+        await db.commit()
+
+    return CsvImportResult(imported=imported, skipped=skipped, errors=errors[:20])

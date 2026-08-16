@@ -182,9 +182,9 @@
 - [x] #12 Python linting in CI
 
 ### Sprint 5 — Admin UX (3-4 days)
-- [ ] #17 CSV animal import
-- [ ] #18 User management page
-- [ ] #19 Offline mobile queue
+- [x] #17 CSV animal import
+- [x] #18 User management page
+- [x] #19 Offline mobile queue
 
 ### Sprint 6 — Production Hardening (2 days)
 - [ ] #11 E2E in CI (nightly)

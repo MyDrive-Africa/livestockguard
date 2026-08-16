@@ -4,11 +4,13 @@ import AppLayout from '@/components/layout/AppLayout';
 import LoginPage from '@/pages/auth/LoginPage';
 import MapPage from '@/pages/map/MapPage';
 import AnimalsPage from '@/pages/animals/AnimalsPage';
+import ImportPage from '@/pages/animals/ImportPage';
 import GeofencesPage from '@/pages/geofences/GeofencesPage';
 import AlertsPage from '@/pages/alerts/AlertsPage';
 import AnalyticsPage from '@/pages/analytics/AnalyticsPage';
 import DevicesPage from '@/pages/devices/DevicesPage';
 import GatewayPage from '@/pages/gateway/GatewayPage';
+import UsersPage from '@/pages/users/UsersPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((state) => state.token);
@@ -38,6 +40,8 @@ export default function App() {
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="devices" element={<DevicesPage />} />
         <Route path="gateway" element={<GatewayPage />} />
+        <Route path="animals/import" element={<ImportPage />} />
+        <Route path="users" element={<UsersPage />} />
       </Route>
     </Routes>
   );

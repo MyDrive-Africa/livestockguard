@@ -12,6 +12,7 @@ import GeofencesScreen from './src/screens/GeofencesScreen';
 import FarmPicker from './src/components/FarmPicker';
 import { FarmProvider } from './src/context/FarmContext';
 import { getToken, getUserRole, setLogoutCallback, api } from './src/services/api';
+import { offlineSyncManager } from './src/services/offlineSync';
 
 type Tab = 'dashboard' | 'map' | 'cattle' | 'alerts' | 'devices' | 'geofences' | 'insights' | 'herdsman';
 type ConnectionStatus = 'connected' | 'connecting' | 'disconnected';
@@ -74,6 +75,7 @@ export default function App() {
       if (token) {
         setAuthenticated(true);
         setRole(savedRole || 'viewer');
+        offlineSyncManager.start();
       }
       setLoading(false);
     }
@@ -92,7 +94,7 @@ export default function App() {
     return (
       <>
         <StatusBar barStyle="dark-content" />
-        <LoginScreen onLogin={(r) => { setAuthenticated(true); setRole(r); }} />
+        <LoginScreen onLogin={(r) => { setAuthenticated(true); setRole(r); offlineSyncManager.start(); }} />
       </>
     );
   }
