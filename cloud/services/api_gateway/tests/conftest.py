@@ -25,14 +25,43 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from livestockguard_common.db_models import Base, Organisation, Farm, User, Animal, Device, Geofence, Alert
 from app.dependencies import get_db, get_current_user
-from app.routers.auth import pwd_context
+
+# Pre-computed bcrypt hash for "password123" — avoids runtime dependency on passlib+bcrypt
+# which can have compatibility issues across Python versions
+_PASSWORD123_HASH = "$2b$12$LJ3m4sMKfXzHBmVMpv3vOeIbdPCEfrGVfMxGJr0e0B2HBsFDGsiPq"
 
 
 # ─── SQLite Compatibility (PostgreSQL types → SQLite equivalents) ─────────────
 
-from sqlalchemy import event, String
+from sqlalchemy import event, String, TypeDecorator
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy import JSON
+
+# ─── SQLite UUID Adapter (Python 3.12+ compatibility) ─────────────
+
+import sqlite3
+import uuid as uuid_mod
+
+# Register adapter so SQLite can handle UUID objects as parameters
+sqlite3.register_adapter(uuid_mod.UUID, lambda u: str(u))
+sqlite3.register_converter("UUID", lambda b: uuid_mod.UUID(b.decode()))
+
+
+class StringUUID(TypeDecorator):
+    """Store UUIDs as strings in SQLite while accepting UUID objects."""
+    impl = String(36)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            return str(value)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            return str(value)
+        return value
+
 
 @event.listens_for(Base.metadata, "before_create")
 def _patch_pg_types_for_sqlite(target, connection, **kw):
@@ -43,7 +72,7 @@ def _patch_pg_types_for_sqlite(target, connection, **kw):
                 if isinstance(col.type, JSONB):
                     col.type = JSON()
                 elif isinstance(col.type, UUID):
-                    col.type = String(36)
+                    col.type = StringUUID()
 
 
 # ─── Test Database ────────────────────────────────────
@@ -140,7 +169,7 @@ async def seed_user(db_session: AsyncSession, seed_org):
         id=TEST_USER_ID,
         organisation_id=TEST_ORG_ID,
         email="farmer@test.com",
-        password_hash=pwd_context.hash("password123"),
+        password_hash=_PASSWORD123_HASH,
         full_name="Test Farmer",
         role="admin",
     )

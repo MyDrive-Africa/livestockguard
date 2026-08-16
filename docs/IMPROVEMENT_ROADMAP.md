@@ -1,7 +1,8 @@
 # LivestockGuard — Improvement Roadmap
 
-> Last updated: 2026-08-13
+> Last updated: 2026-08-16
 > Notifications (SES, FCM, SMS) deferred until AWS IAM setup.
+> Sprint 1 & 2 complete.
 
 ---
 
@@ -157,17 +158,17 @@
 ## Suggested Sprint Order
 
 ### Sprint 1 — Security & Critical Fixes (1-2 days)
-- [ ] #1 Fix insights auth
-- [ ] #2 JWT secret validation
-- [ ] #3 Security headers
-- [ ] #4 CORS tightening (env-based)
+- [x] #1 Fix insights auth
+- [x] #2 JWT secret validation
+- [x] #3 Security headers
+- [x] #4 CORS tightening (env-based)
 
 ### Sprint 2 — Test Coverage (3-4 days)
-- [ ] #6 Analytics engine tests
-- [ ] #9 Gateway router tests
-- [ ] #9 Assignments router tests
-- [ ] #9 Farms router tests
-- [ ] #10 Mobile CI job
+- [x] #6 Analytics engine tests
+- [x] #9 Gateway router tests
+- [x] #9 Assignments router tests
+- [x] #9 Farms router tests
+- [x] #10 Mobile CI job
 
 ### Sprint 3 — Mobile Feature Parity (3-5 days)
 - [ ] #14 Mobile alerts screen

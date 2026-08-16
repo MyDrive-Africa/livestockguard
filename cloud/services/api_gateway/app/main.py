@@ -8,6 +8,8 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from sqlalchemy import text
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
 
 from .routers import auth, devices, animals, geofences, alerts, analytics, farms
 from .routers.websocket import router as ws_router
@@ -41,6 +43,28 @@ except Exception:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup/shutdown events."""
+    import logging
+
+    logger = logging.getLogger("livestockguard.security")
+
+    # JWT secret validation — refuse to start in production with the default secret
+    jwt_secret = os.environ.get("JWT_SECRET", "dev_secret_change_in_production")
+    environment = os.environ.get("ENVIRONMENT", "development").lower()
+
+    if jwt_secret == "dev_secret_change_in_production":
+        if environment in ("production", "staging"):
+            logger.critical(
+                "FATAL: JWT_SECRET is set to the default development value in a %s environment. "
+                "Refusing to start. Set a strong, unique JWT_SECRET.",
+                environment,
+            )
+            raise SystemExit(1)
+        else:
+            logger.warning(
+                "JWT_SECRET is using the default development value. "
+                "This is acceptable for local development but MUST be changed before deployment."
+            )
+
     from livestockguard_common.database import engine
     async with engine.begin() as conn:
         await conn.execute(text("SELECT 1"))
@@ -64,20 +88,78 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# ─── CORS Configuration (env-based) ───────────────────
+
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "development").lower()
+
+# Origins: configurable via env, with sensible defaults per environment
+_default_dev_origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
+    "http://localhost:8082",
+]
+_default_prod_origins = [
+    "https://app.livestockguard.co.za",
+    "https://livestockguard.co.za",
+]
+
+_cors_origins_env = os.environ.get("CORS_ALLOWED_ORIGINS", "")
+if _cors_origins_env:
+    CORS_ORIGINS = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+elif ENVIRONMENT in ("production", "staging"):
+    CORS_ORIGINS = _default_prod_origins
+else:
+    CORS_ORIGINS = _default_dev_origins + _default_prod_origins
+
+# Methods & headers: restricted in production, open in dev
+if ENVIRONMENT in ("production", "staging"):
+    CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    CORS_HEADERS = ["Authorization", "Content-Type", "X-Request-ID", "Accept"]
+else:
+    CORS_METHODS = ["*"]
+    CORS_HEADERS = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:5175",
-        "http://localhost:8082",
-        "https://app.livestockguard.co.za",
-    ],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=CORS_METHODS,
+    allow_headers=CORS_HEADERS,
 )
+
+
+# ─── Security Headers Middleware ──────────────────────
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(self), camera=(), microphone=()"
+
+        # Only add HSTS and CSP in production/staging
+        environment = os.environ.get("ENVIRONMENT", "development").lower()
+        if environment in ("production", "staging"):
+            response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: https:; "
+                "connect-src 'self' wss: https:; "
+                "frame-ancestors 'none'"
+            )
+
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # ─── API v1 Routes (preferred) ────────────────────────
 

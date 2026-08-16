@@ -111,6 +111,33 @@ jobs:
         working-directory: cloud/services/geofence_engine
         run: cargo test --verbose
 
+  # ─── Python: Analytics Engine Tests ────────────────────
+  analytics-engine-tests:
+    name: Analytics Engine (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloud/services/analytics_engine
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: cloud/services/analytics_engine/requirements*.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt -r requirements-test.txt
+
+      - name: Run tests
+        env:
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          RUN_ON_STARTUP: "false"
+        run: pytest -v --tb=short
+
   # ─── TypeScript: Dashboard Build Check ────────────────
   dashboard-build:
     name: Dashboard (TypeScript)
@@ -137,6 +164,29 @@ jobs:
       - name: Build
         run: npm run build
 
+  # ─── TypeScript: Mobile Type Check ───────────────────
+  mobile-typecheck:
+    name: Mobile App (TypeScript)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
   # ─── Summary Job (required check) ────────────────────
   ci-pass:
     name: CI Pass
@@ -145,8 +195,10 @@ jobs:
       - api-gateway-tests
       - alert-engine-tests
       - mqtt-writer-tests
+      - analytics-engine-tests
       - rust-tests
       - dashboard-build
+      - mobile-typecheck
     if: always()
 
     steps:
@@ -155,8 +207,10 @@ jobs:
           if [[ "${{ needs.api-gateway-tests.result }}" != "success" ]] ||
              [[ "${{ needs.alert-engine-tests.result }}" != "success" ]] ||
              [[ "${{ needs.mqtt-writer-tests.result }}" != "success" ]] ||
+             [[ "${{ needs.analytics-engine-tests.result }}" != "success" ]] ||
              [[ "${{ needs.rust-tests.result }}" != "success" ]] ||
-             [[ "${{ needs.dashboard-build.result }}" != "success" ]]; then
+             [[ "${{ needs.dashboard-build.result }}" != "success" ]] ||
+             [[ "${{ needs.mobile-typecheck.result }}" != "success" ]]; then
             echo "One or more jobs failed"
             exit 1
           fi
