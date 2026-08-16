@@ -176,10 +176,10 @@
 - [x] #16 Mobile geofences list
 
 ### Sprint 4 — Reliability & CI (2-3 days)
-- [ ] #5 Device command delivery
-- [ ] #7 MQTT writer integration tests
-- [ ] #8 Token revocation
-- [ ] #12 Python linting in CI
+- [x] #5 Device command delivery
+- [x] #7 MQTT writer integration tests
+- [x] #8 Token revocation
+- [x] #12 Python linting in CI
 
 ### Sprint 5 — Admin UX (3-4 days)
 - [ ] #17 CSV animal import

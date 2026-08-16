@@ -1,6 +1,7 @@
 """Tests for device endpoints (list, get, command)."""
 
 import uuid
+from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient
@@ -70,22 +71,24 @@ class TestDeviceCommand:
     """POST /api/devices/{device_id}/command"""
 
     async def test_send_command_success(self, client: AsyncClient, seed_device):
-        """Valid command is queued."""
-        resp = await client.post(f"/api/devices/{TEST_DEVICE_ID}/command", json={
-            "command": "reboot",
-            "priority": "high",
-            "params": {"delay_seconds": 5},
-        })
+        """Valid command is delivered via MQTT."""
+        with patch("app.routers.devices.mqtt_publish.single"):
+            resp = await client.post(f"/api/v1/devices/{TEST_DEVICE_ID}/command", json={
+                "command": "reboot",
+                "priority": "high",
+                "params": {"delay_seconds": 5},
+            })
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "queued"
+        assert data["status"] == "delivered"
         assert data["command"] == "reboot"
         assert data["device_id"] == str(TEST_DEVICE_ID)
 
     async def test_send_command_minimal(self, client: AsyncClient, seed_device):
         """Command with only required field works."""
-        resp = await client.post(f"/api/devices/{TEST_DEVICE_ID}/command", json={
-            "command": "ping",
-        })
+        with patch("app.routers.devices.mqtt_publish.single"):
+            resp = await client.post(f"/api/v1/devices/{TEST_DEVICE_ID}/command", json={
+                "command": "ping",
+            })
         assert resp.status_code == 200
         assert resp.json()["command"] == "ping"

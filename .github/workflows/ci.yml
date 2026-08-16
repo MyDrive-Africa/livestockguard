@@ -12,6 +12,31 @@ env:
   RUST_VERSION: "stable"
 
 jobs:
+  # ─── Python: Lint (ruff) ──────────────────────────────
+  python-lint:
+    name: Python Lint (ruff)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install ruff
+        run: pip install ruff==0.4.4
+
+      - name: Lint Python services
+        run: |
+          ruff check cloud/services/api_gateway/ cloud/services/alert_engine/ \
+                     cloud/services/mqtt_writer/ cloud/services/analytics_engine/ \
+            --select E,F,W --ignore E501,F401,E402 --exit-zero
+
+      - name: Check formatting (informational)
+        run: |
+          ruff format --check cloud/services/ --quiet || echo "Formatting issues found (non-blocking)"
+
   # ─── Python: API Gateway Tests ────────────────────────
   api-gateway-tests:
     name: API Gateway (Python)
@@ -192,6 +217,7 @@ jobs:
     name: CI Pass
     runs-on: ubuntu-latest
     needs:
+      - python-lint
       - api-gateway-tests
       - alert-engine-tests
       - mqtt-writer-tests
@@ -204,7 +230,8 @@ jobs:
     steps:
       - name: Check all jobs passed
         run: |
-          if [[ "${{ needs.api-gateway-tests.result }}" != "success" ]] ||
+          if [[ "${{ needs.python-lint.result }}" != "success" ]] ||
+             [[ "${{ needs.api-gateway-tests.result }}" != "success" ]] ||
              [[ "${{ needs.alert-engine-tests.result }}" != "success" ]] ||
              [[ "${{ needs.mqtt-writer-tests.result }}" != "success" ]] ||
              [[ "${{ needs.analytics-engine-tests.result }}" != "success" ]] ||

@@ -2,12 +2,14 @@
 Device management router — wired to real database.
 """
 
+import json
 import os
 import sys
 from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
+import paho.mqtt.publish as mqtt_publish
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select, func, text
@@ -142,11 +144,56 @@ async def get_device_positions(
 
 
 @router.post("/{device_id}/command")
-async def send_device_command(device_id: UUID, command: DeviceCommand):
-    """Queue a command for a device (delivered on next check-in)."""
-    # TODO: Push to Redis command queue for device
-    return {
-        "status": "queued",
-        "device_id": str(device_id),
+async def send_device_command(
+    device_id: UUID,
+    command: DeviceCommand,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Send a command to a device via MQTT.
+
+    The command is published to the MQTT topic lg/cmd/{serial_number} as JSON.
+    The device (or simulator) subscribes to its command topic and processes it
+    on the next check-in.
+    """
+    # Verify device exists and get its serial number
+    result = await db.execute(select(Device).where(Device.id == device_id))
+    device = result.scalar_one_or_none()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    # Build command payload
+    payload = json.dumps({
         "command": command.command,
+        "priority": command.priority,
+        "params": command.params,
+        "issued_at": datetime.now(timezone.utc).isoformat(),
+        "device_id": str(device_id),
+    })
+
+    # Publish to MQTT broker
+    mqtt_broker = os.environ.get("MQTT_BROKER", "localhost")
+    mqtt_port = int(os.environ.get("MQTT_PORT", "1883"))
+    topic = f"lg/cmd/{device.serial_number}"
+
+    try:
+        mqtt_publish.single(
+            topic,
+            payload=payload,
+            hostname=mqtt_broker,
+            port=mqtt_port,
+            qos=1,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to deliver command to MQTT broker: {str(e)}",
+        )
+
+    return {
+        "status": "delivered",
+        "device_id": str(device_id),
+        "serial_number": device.serial_number,
+        "command": command.command,
+        "topic": topic,
     }

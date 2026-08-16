@@ -166,6 +166,8 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(request: RefreshRequest, db: AsyncSession = Depends(get_db)):
     """Refresh an expired access token using a valid refresh token."""
+    import redis.asyncio as aioredis
+
     try:
         payload = jwt.decode(request.refresh_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         if payload.get("type") != "refresh":
@@ -174,10 +176,35 @@ async def refresh(request: RefreshRequest, db: AsyncSession = Depends(get_db)):
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
+    # Check if token has been revoked (Redis blacklist)
+    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+    try:
+        redis_client = aioredis.from_url(redis_url, decode_responses=True)
+        is_revoked = await redis_client.get(f"token:revoked:{request.refresh_token}")
+        await redis_client.aclose()
+        if is_revoked:
+            raise HTTPException(status_code=401, detail="Token has been revoked")
+    except aioredis.ConnectionError:
+        # If Redis is unavailable, allow refresh (graceful degradation in dev)
+        pass
+
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
+
+    # Revoke the old refresh token (prevents reuse)
+    try:
+        redis_client = aioredis.from_url(redis_url, decode_responses=True)
+        # Token lives in blacklist until it would naturally expire (7 days)
+        await redis_client.setex(
+            f"token:revoked:{request.refresh_token}",
+            REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+            "1",
+        )
+        await redis_client.aclose()
+    except Exception:
+        pass  # Non-fatal — token rotation still works without Redis
 
     access_token = create_access_token(str(user.id), user.email, user.role)
     refresh_token = create_refresh_token(str(user.id))
@@ -187,3 +214,23 @@ async def refresh(request: RefreshRequest, db: AsyncSession = Depends(get_db)):
         refresh_token=refresh_token,
         expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
+
+
+@router.post("/logout")
+async def logout_revoke(request: RefreshRequest):
+    """Revoke a refresh token (logout from all sessions using this token)."""
+    import redis.asyncio as aioredis
+
+    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+    try:
+        redis_client = aioredis.from_url(redis_url, decode_responses=True)
+        await redis_client.setex(
+            f"token:revoked:{request.refresh_token}",
+            REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+            "1",
+        )
+        await redis_client.aclose()
+    except Exception:
+        pass  # Best-effort revocation
+
+    return {"status": "revoked"}
