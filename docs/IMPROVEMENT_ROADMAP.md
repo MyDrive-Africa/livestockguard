@@ -1,8 +1,8 @@
 # LivestockGuard — Improvement Roadmap
 
 > Last updated: 2026-08-16
-> Notifications (SES, FCM, SMS) deferred until AWS IAM setup.
-> Sprint 1 & 2 complete.
+> Notifications (SES, FCM, SMS) deferred until AWS IAM setup — see [AWS_CLOUD9_DEPLOYMENT_PLAN.md](AWS_CLOUD9_DEPLOYMENT_PLAN.md).
+> Sprint 1, 2, & 3 (documentation) complete.
 
 ---
 
@@ -248,7 +248,30 @@
 
 ## Notes
 
-- **Notifications (SES, FCM, Africa's Talking SMS):** Implementation exists and is tested. Activation deferred until AWS IAM credentials are configured.
+- **Notifications (SES, FCM, Africa's Talking SMS):** Implementation exists and is tested. Activation deferred until AWS IAM credentials are configured. Full plan in [AWS_CLOUD9_DEPLOYMENT_PLAN.md](AWS_CLOUD9_DEPLOYMENT_PLAN.md).
 - **Rust services (ingestion, geofence_engine):** Both have solid test coverage via `cargo test`. No immediate action needed.
 - **Firmware:** Out of scope for this roadmap (hardware-dependent development cycle).
 - **Analytics engine:** The 4-job pipeline is well-designed and functional — it just needs test coverage to be production-trustworthy.
+
+---
+
+## Completed (Sprint 3 — 2026-08-16)
+
+### Documentation Coverage (All Layers)
+
+- [x] **Rust ingestion service** — `//!` module docs, `///` on all structs/enums/functions with `# Arguments`/`# Returns`/`# Errors`
+- [x] **Rust geofence engine** — `//!` module docs, `///` on all structs/enums/functions with full API docs
+- [x] **Dashboard pages** (10 files) — JSDoc `@file`/`@description` with feature lists and `@see` cross-references
+- [x] **Dashboard components** (10 files) — JSDoc `@file`/`@description`/`@param` on all motion primitives + layout
+- [x] **Dashboard stores** (5 files) — JSDoc documenting state shape, actions, and persistence behaviour
+- [x] **useWebSocket hook** — Connection lifecycle, message types, reconnection strategy documentation
+- [x] **API Gateway** (auth.py, animals.py) — `Args`/`Returns`/`Raises`/`Notes` on all key functions
+- [x] **MQTT Writer** — `Args`/`Returns`/`Side Effects` on all 8 key functions
+- [x] **Alert Engine** — `Args`/`Returns`/`Side Effects` on all dispatcher and core methods
+- [x] **AWS Cloud9 & IAM Deployment Plan** — New doc: IAM setup → Cloud9 → Kiro IDE strategy → production ECS Fargate
+
+### Verification
+
+- [x] Python `py_compile` passes on all modified services
+- [x] TypeScript `tsc --noEmit` passes on dashboard (zero errors)
+- [x] All changes pushed to `main`

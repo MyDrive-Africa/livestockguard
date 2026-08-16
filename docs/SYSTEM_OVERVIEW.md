@@ -884,6 +884,28 @@ cd e2e && npx playwright test tests/features.spec.ts --reporter=list
 
 ---
 
+## Documentation Standards
+
+All code in the repository follows per-language documentation conventions:
+
+| Layer | Format | Coverage |
+|-------|--------|----------|
+| **Python** (FastAPI, MQTT Writer, Alert Engine) | Google-style docstrings with `Args`/`Returns`/`Raises` | Module, class, and function level |
+| **TypeScript** (Dashboard) | JSDoc `@file`/`@description`/`@param`/`@see` | File-level on all pages, components, stores, and hooks |
+| **Rust** (Ingestion, Geofence Engine) | `//!` module docs + `///` with `# Arguments`/`# Returns`/`# Errors` | All public structs, enums, and functions |
+| **C** (Firmware) | Doxygen `@file`/`@brief`/`@param`/`@return` + inline field docs | All source files, public and static functions |
+| **Simulator** (Python) | Module-level docstrings with usage examples + method docs | All files and dataclass methods |
+
+### Dependency Version Pinning
+
+| Stack | Strategy | Lockfile |
+|-------|----------|----------|
+| Python | Exact pins (`==`) in all `requirements.txt` | N/A (pip freeze) |
+| TypeScript (npm) | Caret ranges (`^`) + lockfile | `package-lock.json` committed |
+| Rust | Semver ranges in `Cargo.toml` | `Cargo.lock` committed (generate via `cargo generate-lockfile`) |
+
+---
+
 ## Technology Stack Summary
 
 ### Languages
@@ -1128,4 +1150,9 @@ The dashboard uses MapLibre GL with OpenStreetMap tiles. All coordinates are WGS
 | [MOBILE_APP_SPEC.md](MOBILE_APP_SPEC.md) | React Native app, BLE scanning, offline buffer, roles |
 | [HERDSMAN_GATEWAY_SPEC.md](HERDSMAN_GATEWAY_SPEC.md) | BLE ear tag system, RSSI math, cost analysis |
 | [CONNECTIVITY_SPEC.md](CONNECTIVITY_SPEC.md) | Multi-protocol fallback, compression, duty cycling |
+| [AWS_CLOUD9_DEPLOYMENT_PLAN.md](AWS_CLOUD9_DEPLOYMENT_PLAN.md) | IAM setup, Cloud9 dev env, Kiro IDE strategy, ECS production deployment |
+| [ANALYTICS_INTELLIGENCE_SPEC.md](ANALYTICS_INTELLIGENCE_SPEC.md) | Anomaly detection, baselines, scheduled analytics |
+| [DEPLOYMENT_SPEC.md](DEPLOYMENT_SPEC.md) | AWS target architecture, infra-as-code |
+| [SIMULATION_GUIDE.md](SIMULATION_GUIDE.md) | All simulator modes, scenarios, seed data |
+| [IMPROVEMENT_ROADMAP.md](IMPROVEMENT_ROADMAP.md) | Prioritised tech debt and feature backlog |
 | [DEPLOYMENT_SPEC.md](DEPLOYMENT_SPEC.md) | AWS deployment, POPIA compliance, pricing model |
