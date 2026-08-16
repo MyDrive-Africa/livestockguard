@@ -190,6 +190,59 @@
 - [ ] #13 Dependency scanning
 - [ ] #20-26 Polish items
 
+### Sprint 7 — AWS IAM & Cloud Deployment (after readiness achieved)
+
+> **Prerequisite:** Sprints 1-6 complete (security hardened, tests passing, CI green, mobile parity).
+> This sprint transitions LivestockGuard from local Docker Compose to AWS production infrastructure.
+
+- [ ] AWS account setup & IAM organisation structure
+  - Root account hardening (MFA, no access keys)
+  - IAM Identity Center (SSO) for team access
+  - Separate AWS accounts or OUs: `dev`, `staging`, `prod`
+- [ ] IAM roles & policies (least-privilege)
+  - `LivestockGuard-APITask` — ECS task role: RDS access, SES send, S3 read, SSM params
+  - `LivestockGuard-MQTTWriter` — ECS task role: RDS access, IoT Core publish
+  - `LivestockGuard-AlertEngine` — ECS task role: SES send, FCM (Secrets Manager), SMS
+  - `LivestockGuard-AnalyticsEngine` — ECS task role: RDS access only
+  - `LivestockGuard-CI` — GitHub Actions OIDC: ECR push, ECS deploy, S3 sync
+  - `LivestockGuard-InfraAdmin` — Terraform/IaC: full provisioning scope
+- [ ] Secrets management
+  - Move `JWT_SECRET`, DB passwords, API keys to AWS Secrets Manager or SSM Parameter Store (SecureString)
+  - Firebase service account JSON → Secrets Manager
+  - Africa's Talking API key → Secrets Manager
+- [ ] Infrastructure provisioning (Terraform or CDK)
+  - VPC: private subnets (services), public subnets (ALB, NAT)
+  - RDS PostgreSQL 16 (TimescaleDB) — Multi-AZ, private subnet, encrypted at rest
+  - ElastiCache Redis 7 — cluster mode, private subnet
+  - ECS Fargate cluster — services: api_gateway, mqtt_writer, alert_engine, analytics_engine
+  - ALB + ACM certificate (livestockguard.co.za)
+  - S3 + CloudFront for dashboard static assets
+  - EMQX Cloud or AWS IoT Core for MQTT broker
+- [ ] Networking & security groups
+  - ALB → ECS (port 8000 only)
+  - ECS → RDS (5432), Redis (6379), MQTT (1883/8883)
+  - No direct internet access for task containers (NAT gateway for outbound)
+- [ ] CI/CD pipeline for AWS
+  - GitHub Actions OIDC → assume `LivestockGuard-CI` role (no long-lived keys)
+  - Build Docker images → push to ECR
+  - Deploy to ECS via `aws ecs update-service` or blue/green with CodeDeploy
+  - Dashboard: `npm run build` → S3 sync → CloudFront invalidation
+- [ ] Activate notifications
+  - SES: verify sender domain, request production access, configure DKIM/SPF
+  - FCM: upload service account to Secrets Manager, wire into alert_engine
+  - Africa's Talking: configure SMS sender ID for South African numbers
+- [ ] Monitoring & observability
+  - CloudWatch Logs (structured JSON from all services)
+  - CloudWatch Alarms: API 5xx rate, RDS CPU, Redis memory, ECS task failures
+  - X-Ray or OpenTelemetry tracing (optional, P4)
+- [ ] DNS & TLS
+  - Route 53: `api.livestockguard.co.za` → ALB
+  - Route 53: `app.livestockguard.co.za` → CloudFront
+  - ACM certificates (auto-renew)
+- [ ] Data migration strategy
+  - Export seeded demo data as SQL dump (for staging)
+  - Plan for zero-downtime migration from dev → prod (hypertable considerations)
+
 ---
 
 ## Notes
