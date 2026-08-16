@@ -1,3 +1,18 @@
+/**
+ * @file LoginPage.tsx
+ * @description Authentication page with email/password login form.
+ * On successful authentication, stores JWT tokens in the auth store
+ * and redirects to the main dashboard (MapPage).
+ *
+ * Features:
+ * - Email + password form with validation
+ * - Error display for invalid credentials
+ * - Loading state during authentication
+ * - Theme toggle accessible from login screen
+ * - Redirects to "/" on successful login
+ *
+ * @see useAuthStore — Handles JWT token storage and login API call
+ */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';

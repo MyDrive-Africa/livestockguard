@@ -1,3 +1,19 @@
+/**
+ * @file themeStore.ts
+ * @description Zustand store for colour theme management. Supports light, dark,
+ * and system (auto-detect from OS preference) modes. Applies the `dark` class
+ * to `<html>` for Tailwind's `darkMode: 'class'` strategy. Persisted to localStorage.
+ *
+ * State:
+ * - `theme` — User's selected preference ('light' | 'dark' | 'system')
+ * - `resolved` — Actual applied theme after resolving 'system' to a concrete value
+ *
+ * Actions:
+ * - `setTheme(theme)` — Update preference, persist, and apply to DOM immediately
+ *
+ * Also listens to `prefers-color-scheme` media query changes to update
+ * automatically when the user switches their OS theme while in 'system' mode.
+ */
 import { create } from 'zustand';
 
 export type Theme = 'light' | 'dark' | 'system';

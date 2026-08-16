@@ -1,37 +1,105 @@
+//! LivestockGuard Geofence Engine
+//!
+//! Spatial breach detection service for virtual fencing. Evaluates GPS position
+//! reports against active geofence polygons to determine whether animals are
+//! inside permitted areas or have breached boundaries.
+//!
+//! # Architecture
+//!
+//! ```text
+//! Position Updates (MQTT/Redis) ──► Geofence Engine ──► Breach Alerts (Redis pub/sub)
+//!                                        │
+//!                                   R-tree Index
+//!                                   (O(log n) lookup)
+//! ```
+//!
+//! # Fence Types
+//!
+//! - **Inclusion fence**: Animals must stay *inside* the polygon (e.g., paddock boundary).
+//!   Leaving triggers a breach alert.
+//! - **Exclusion fence**: Animals must stay *outside* the polygon (e.g., dam, cliff edge).
+//!   Entering triggers a breach alert.
+//!
+//! # Geometry
+//!
+//! Polygons use WGS84 coordinates stored as `[longitude, latitude]` pairs (GeoJSON
+//! convention). The [`geo`] crate's point-in-polygon algorithm handles the spatial
+//! containment test. For production scale, an [`rstar`] R-tree index provides
+//! O(log n) pre-filtering when evaluating a point against many geofences.
+
 use geo::{Contains, Polygon, Coord, LineString};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
+/// A geofence polygon defining a virtual boundary for a farm.
+///
+/// Geofences are loaded from PostgreSQL/PostGIS and cached in-memory.
+/// Each fence belongs to a single farm and is either an inclusion or
+/// exclusion boundary.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Geofence {
+    /// Unique identifier (UUID from the database).
     pub id: String,
+    /// Human-readable fence name (e.g., "Main Paddock", "Dam Exclusion Zone").
     pub name: String,
+    /// The farm this geofence belongs to.
     pub farm_id: String,
+    /// Whether animals should be kept inside or outside this polygon.
     pub fence_type: FenceDirection,
-    pub polygon: Vec<[f64; 2]>, // [[lng, lat], ...]
+    /// Polygon vertices as `[longitude, latitude]` pairs (GeoJSON order).
+    /// Must form a closed ring (first point == last point) with at least 3 unique vertices.
+    pub polygon: Vec<[f64; 2]>,
+    /// Whether this fence is currently being evaluated. Inactive fences are skipped.
     pub active: bool,
 }
 
+/// Specifies whether a geofence is an inclusion or exclusion boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FenceDirection {
+    /// Animals must remain *inside* this polygon (typical paddock/camp boundary).
     Inclusion,
+    /// Animals must remain *outside* this polygon (hazard zone — dam, road, cliff).
     Exclusion,
 }
 
+/// The result of evaluating a point against a geofence.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FenceStatus {
+    /// The point is geometrically inside the polygon.
     Inside,
+    /// The point is geometrically outside the polygon.
     Outside,
+    /// The animal has violated the fence rule (outside an inclusion fence,
+    /// or inside an exclusion fence). Triggers an alert.
     Breached,
+    /// The animal is respecting the fence rule. No action needed.
     Compliant,
 }
 
-/// Evaluate whether a point is inside or outside a geofence polygon.
-/// Returns the fence status based on fence direction:
-/// - Inclusion fence: Inside = Compliant, Outside = Breached
-/// - Exclusion fence: Inside = Breached, Outside = Compliant
+/// Evaluate whether a GPS position complies with a geofence boundary.
+///
+/// Uses the [`geo`] crate's point-in-polygon algorithm (winding number)
+/// to determine spatial containment, then maps the geometric result to
+/// a compliance status based on the fence direction.
+///
+/// # Arguments
+///
+/// * `geofence` — The geofence definition to evaluate against.
+/// * `lat` — Latitude of the position in decimal degrees (WGS84).
+/// * `lng` — Longitude of the position in decimal degrees (WGS84).
+///
+/// # Returns
+///
+/// - [`FenceStatus::Compliant`] if the animal is where it should be (or the fence is inactive/invalid).
+/// - [`FenceStatus::Breached`] if the animal has violated the fence rule.
+///
+/// # Edge Cases
+///
+/// - Inactive fences always return [`FenceStatus::Compliant`].
+/// - Polygons with fewer than 3 vertices are treated as invalid and return [`FenceStatus::Compliant`].
+/// - Points exactly on the polygon boundary may return either status (implementation-defined by the `geo` crate).
 pub fn evaluate_point(geofence: &Geofence, lat: f64, lng: f64) -> FenceStatus {
     if !geofence.active {
         return FenceStatus::Compliant;

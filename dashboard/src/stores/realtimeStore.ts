@@ -1,3 +1,20 @@
+/**
+ * @file realtimeStore.ts
+ * @description Zustand store for real-time data received over WebSocket.
+ * Holds live animal positions and recent alerts, updated continuously
+ * as the WebSocket hook pushes new messages from the API gateway.
+ *
+ * State:
+ * - `positions` — Map of animal ID → latest position (updated on every WS position message)
+ * - `alerts` — Rolling list of the 100 most recent alerts (newest first)
+ * - `connectionStatus` — WebSocket connection health ('connecting' | 'connected' | 'disconnected')
+ *
+ * Actions:
+ * - `updatePosition(animalId, position)` — Upsert a live position
+ * - `addAlert(alert)` — Prepend a new alert (capped at 100)
+ * - `acknowledgeAlert(alertId)` — Mark an alert as acknowledged
+ * - `setConnectionStatus(status)` — Update WebSocket connection state
+ */
 import { create } from 'zustand';
 import { AnimalPosition, Alert } from '@/types';
 

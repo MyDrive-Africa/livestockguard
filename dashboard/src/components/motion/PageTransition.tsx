@@ -1,3 +1,12 @@
+/**
+ * @file PageTransition.tsx
+ * @description Framer Motion wrapper that applies a fade-and-slide entrance
+ * animation to page-level content. Used by all page components to provide
+ * consistent route transition effects.
+ *
+ * @param children - Page content to animate
+ * @param className - Additional CSS classes for the wrapper div
+ */
 import { motion } from 'framer-motion';
 import type { ReactNode } from 'react';
 

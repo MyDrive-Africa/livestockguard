@@ -1,18 +1,52 @@
+//! Binary protocol decoder for LivestockGuard GPS collar telemetry.
+//!
+//! This module handles the compact binary wire format used by GPS collar
+//! devices over MQTT, LoRaWAN, and satellite links. The format prioritises
+//! minimal byte count for constrained radio channels while maintaining
+//! data integrity via CRC-16/CCITT.
+//!
+//! # Wire Format Overview
+//!
+//! ```text
+//! ┌──────────┬───────────┬─────┬──────────┬──────────┬─────────┬──────┬─────┐
+//! │ msg_type │ device_id │ seq │ pos_cnt  │positions │ battery │ temp │ CRC │
+//! │  1 byte  │  4 bytes  │ 2B  │  1 byte  │ N×11B    │  2B     │ 1+1B │ 2B  │
+//! └──────────┴───────────┴─────┴──────────┴──────────┴─────────┴──────┴─────┘
+//! ```
+//!
+//! All multi-byte integers are big-endian. Positions encode latitude and
+//! longitude as `i32` microdegrees (value × 1,000,000).
+
 use thiserror::Error;
 
 use crate::{DeviceTelemetry, Position};
 
+/// Type discriminator for uplink messages from collar devices.
+///
+/// Each message type uses the same outer frame (header + CRC) but carries
+/// different payload semantics. Currently only [`PositionReport`](Self::PositionReport)
+/// is fully decoded; other types are recognised but their payloads are not yet parsed.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MessageType {
+    /// Batch of GPS position fixes (normal telemetry).
     PositionReport = 0x01,
+    /// Device-generated alert (geofence breach, theft, low battery).
     AlertEvent = 0x02,
+    /// Periodic keep-alive with battery and signal status only.
     HeartBeat = 0x03,
+    /// Acknowledgement of a configuration update pushed to the device.
     ConfigAck = 0x04,
 }
 
 impl TryFrom<u8> for MessageType {
     type Error = DecodeError;
 
+    /// Convert a raw byte to a known message type.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DecodeError::UnknownMessageType`] if the byte does not
+    /// match any defined message type.
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             0x01 => Ok(MessageType::PositionReport),
@@ -24,27 +58,56 @@ impl TryFrom<u8> for MessageType {
     }
 }
 
+/// Errors that can occur during binary frame decoding.
 #[derive(Debug, Error)]
 pub enum DecodeError {
+    /// The payload is shorter than the minimum required frame length.
     #[error("Payload too short: expected at least {expected} bytes, got {actual}")]
     PayloadTooShort { expected: usize, actual: usize },
 
+    /// The hex string could not be parsed into raw bytes.
     #[error("Invalid hex string: {0}")]
     InvalidHex(String),
 
+    /// The message type byte does not match any known type.
     #[error("Unknown message type: 0x{0:02X}")]
     UnknownMessageType(u8),
 
+    /// The CRC-16/CCITT checksum does not match, indicating data corruption.
     #[error("CRC mismatch: expected 0x{expected:04X}, got 0x{actual:04X}")]
     CrcMismatch { expected: u16, actual: u16 },
 
+    /// A position record within the payload has invalid or truncated data.
     #[error("Invalid position data")]
     InvalidPosition,
 }
 
 /// Decode an uplink hex payload into structured telemetry data.
 ///
-/// Frame format:
+/// This is the primary entry point for all binary frame decoding. It handles
+/// CRC verification, header parsing, position extraction, and device health
+/// field decoding in a single pass.
+///
+/// # Arguments
+///
+/// * `hex_payload` — The full frame as a hex-encoded string (e.g., from MQTT or webhook body).
+///
+/// # Returns
+///
+/// A [`DeviceTelemetry`] struct containing the decoded device ID, position batch,
+/// battery voltage, temperature, and signal strength.
+///
+/// # Errors
+///
+/// - [`DecodeError::InvalidHex`] — Input is not valid hexadecimal.
+/// - [`DecodeError::PayloadTooShort`] — Frame is shorter than the 14-byte minimum.
+/// - [`DecodeError::CrcMismatch`] — Data integrity check failed (corruption in transit).
+/// - [`DecodeError::UnknownMessageType`] — Unrecognised message type byte.
+/// - [`DecodeError::InvalidPosition`] — Position record is truncated.
+///
+/// # Frame Format
+///
+/// ```text
 ///   [0]     - message type (u8)
 ///   [1..5]  - device ID (4 bytes, big-endian u32)
 ///   [5..7]  - sequence number (u16 big-endian)
@@ -54,6 +117,7 @@ pub enum DecodeError {
 ///   [N+2]   - temperature (i8, offset by +40)
 ///   [N+3]   - signal RSSI (i8)
 ///   [last 2]- CRC-16/CCITT
+/// ```
 pub fn decode_uplink(hex_payload: &str) -> Result<DeviceTelemetry, DecodeError> {
     let bytes = hex::decode(hex_payload).map_err(|e| DecodeError::InvalidHex(e.to_string()))?;
 
@@ -134,7 +198,19 @@ pub fn decode_uplink(hex_payload: &str) -> Result<DeviceTelemetry, DecodeError> 
     })
 }
 
-/// CRC-16/CCITT (polynomial 0x1021, initial value 0xFFFF)
+/// Compute CRC-16/CCITT checksum over a byte slice.
+///
+/// Uses polynomial `0x1021` with initial value `0xFFFF` (no final XOR).
+/// This matches the CRC computed by the firmware encoder and the Python
+/// MQTT writer decoder.
+///
+/// # Arguments
+///
+/// * `data` — The byte slice to checksum (typically the full frame minus the trailing 2 CRC bytes).
+///
+/// # Returns
+///
+/// The 16-bit CRC value.
 pub fn crc16_ccitt(data: &[u8]) -> u16 {
     let mut crc: u16 = 0xFFFF;
     for &byte in data {
@@ -150,8 +226,17 @@ pub fn crc16_ccitt(data: &[u8]) -> u16 {
     crc
 }
 
-// Need hex crate for decode
+/// Minimal hex-decoding utility (avoids external `hex` crate dependency).
 mod hex {
+    /// Decode a hex-encoded string into raw bytes.
+    ///
+    /// # Arguments
+    ///
+    /// * `s` — A string of hexadecimal characters (case-insensitive, even length).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if the input has odd length or contains invalid hex characters.
     pub fn decode(s: &str) -> Result<Vec<u8>, String> {
         if s.len() % 2 != 0 {
             return Err("Odd-length hex string".to_string());

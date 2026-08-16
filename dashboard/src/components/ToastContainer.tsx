@@ -1,3 +1,12 @@
+/**
+ * @file ToastContainer.tsx
+ * @description Animated toast notification overlay. Displays real-time alerts and
+ * system messages in the bottom-right corner with severity-based styling
+ * (critical, high, medium, low, info, success). Toasts auto-dismiss or can
+ * be manually closed.
+ *
+ * @see useToastStore — Manages the toast queue (add/remove)
+ */
 import { AnimatePresence, motion } from 'framer-motion';
 import { useToastStore, type Toast, type ToastSeverity } from '@/stores/toastStore';
 

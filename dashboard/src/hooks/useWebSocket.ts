@@ -1,11 +1,50 @@
+/**
+ * @file useWebSocket.ts
+ * @description React hook that establishes and manages a WebSocket connection
+ * to the API gateway for real-time position updates and alert notifications.
+ *
+ * ## Connection Lifecycle
+ *
+ * 1. Connects to `ws://<api_host>/ws?token=<JWT>&farm=<farm_id>`
+ * 2. Subscribes to the active farm channel on open
+ * 3. Routes incoming messages to the appropriate Zustand store action
+ * 4. Sends periodic ping frames every 30s to keep the connection alive
+ * 5. Auto-reconnects on unexpected close (up to {@link MAX_RECONNECT_ATTEMPTS} times)
+ * 6. Cleans up on component unmount (sends close code 1000 — no reconnect)
+ *
+ * ## Message Types Handled
+ *
+ * | Type              | Action                                    |
+ * |-------------------|-------------------------------------------|
+ * | `position.update` | Updates animal position in realtimeStore   |
+ * | `alert.created`   | Adds alert to realtimeStore + shows toast  |
+ * | `pong`            | Heartbeat acknowledgement (no-op)          |
+ *
+ * ## Reconnection Strategy
+ *
+ * Uses linear backoff: `RECONNECT_DELAY_MS * attempt` with a cap at 5× base delay.
+ * After {@link MAX_RECONNECT_ATTEMPTS} failures, marks connection as "connected"
+ * (graceful degradation — the UI falls back to polling-based data).
+ *
+ * @see useRealtimeStore — Target store for position and alert updates
+ * @see useToastStore — Displays toast notifications for new alerts
+ * @see useAuthStore — Provides JWT token and current farm ID
+ */
 import { useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { useRealtimeStore } from '@/stores/realtimeStore';
 import { useToastStore } from '@/stores/toastStore';
 
+/** Milliseconds to wait before attempting reconnection. */
 const RECONNECT_DELAY_MS = 3000;
+
+/** Maximum number of automatic reconnection attempts before giving up. */
 const MAX_RECONNECT_ATTEMPTS = 3;
 
+/**
+ * Maps alert severity to toast auto-dismiss duration (ms).
+ * Critical alerts require manual dismissal (duration: 0).
+ */
 const SEVERITY_DURATIONS: Record<string, number> = {
   critical: 0,      // Manual dismiss only
   high: 10000,
@@ -14,6 +53,22 @@ const SEVERITY_DURATIONS: Record<string, number> = {
   info: 4000,
 };
 
+/**
+ * Establishes a WebSocket connection to the LivestockGuard API gateway
+ * and dispatches real-time position/alert messages to Zustand stores.
+ *
+ * Call this hook once at the app layout level. It manages its own
+ * lifecycle (connect, reconnect, cleanup) and requires no return value.
+ *
+ * @example
+ * ```tsx
+ * // In AppLayout.tsx
+ * export default function AppLayout() {
+ *   useWebSocket(); // connects on mount, disconnects on unmount
+ *   return <Outlet />;
+ * }
+ * ```
+ */
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttempts = useRef(0);

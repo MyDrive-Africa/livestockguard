@@ -1,3 +1,14 @@
+/**
+ * @file SkeletonLoader.tsx
+ * @description Animated placeholder skeletons shown while data is loading.
+ * Provides a pulsing opacity animation to indicate content is being fetched.
+ * Includes pre-built variants for cards and table rows.
+ *
+ * Exports:
+ * - `SkeletonLoader` — Generic skeleton block (configurable count)
+ * - `CardSkeleton` — Pre-styled card placeholder
+ * - `TableRowSkeleton` — Pre-styled table row placeholder
+ */
 import { motion } from 'framer-motion';
 
 interface SkeletonLoaderProps {

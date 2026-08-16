@@ -1,3 +1,22 @@
+/**
+ * @file StaggerList.tsx
+ * @description Container component that staggers the entrance animation of its
+ * children. Each child fades and slides in sequentially with a configurable delay.
+ * Pair with the exported `staggerItem` variants on child elements.
+ *
+ * @param children - List items to stagger
+ * @param className - CSS classes for the container
+ * @param staggerDelay - Delay between each child animation (seconds)
+ *
+ * @example
+ * ```tsx
+ * <StaggerList>
+ *   {items.map(item => (
+ *     <motion.div key={item.id} variants={staggerItem}>{item.name}</motion.div>
+ *   ))}
+ * </StaggerList>
+ * ```
+ */
 import { motion } from 'framer-motion';
 import type { ReactNode } from 'react';
 

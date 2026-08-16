@@ -1,3 +1,19 @@
+/**
+ * @file GeofencesPage.tsx
+ * @description Geofence management page for creating, editing, and monitoring
+ * virtual fence boundaries. Displays all geofences for the selected farm
+ * with their type (inclusion/exclusion), active status, and area metrics.
+ *
+ * Features:
+ * - List all geofences with type, status, and area (hectares/km2)
+ * - Create new geofences (polygon drawing on map)
+ * - Edit fence properties (name, type, active, alert-on-breach)
+ * - Delete geofences with confirmation
+ * - Visual indicator for active vs inactive fences
+ *
+ * @see GeofenceEngine (Rust) — Backend spatial evaluation of these fences
+ * @see useAuthStore — Determines which farm's fences to display
+ */
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '@/stores/authStore';

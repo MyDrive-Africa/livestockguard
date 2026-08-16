@@ -1,3 +1,20 @@
+/**
+ * @file authStore.ts
+ * @description Zustand store for authentication state. Manages JWT tokens
+ * (access + refresh), the current user profile, and the active farm selection.
+ * Persisted to localStorage so sessions survive page reloads.
+ *
+ * State:
+ * - `user` — Authenticated user profile (null when logged out)
+ * - `token` — JWT access token for API requests
+ * - `refreshToken` — JWT refresh token for silent re-auth
+ * - `currentFarm` — Currently selected farm ID for multi-farm RBAC scoping
+ *
+ * Actions:
+ * - `login(email, password)` — Authenticate and store tokens
+ * - `logout()` — Clear all auth state
+ * - `switchFarm(farmId)` — Change the active farm context
+ */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { apiClient } from '@/api/client';

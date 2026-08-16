@@ -1,3 +1,19 @@
+/**
+ * @file AlertsPage.tsx
+ * @description Alert management dashboard showing geofence breaches, theft detections,
+ * low battery warnings, and device offline notifications. Alerts are colour-coded
+ * by severity (critical → info) and update in real-time via WebSocket.
+ *
+ * Features:
+ * - Severity-grouped alert list with time-based filtering
+ * - Real-time new alert notifications (pushed via WebSocket)
+ * - Acknowledge/dismiss individual alerts
+ * - Filter by alert type, severity, and date range
+ * - Links to MapPage for breach location context
+ *
+ * @see useRealtimeStore — Pushes new alerts to the page in real-time
+ * @see useAuthStore — Scopes alerts to the current farm
+ */
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useRealtimeStore } from '@/stores/realtimeStore';

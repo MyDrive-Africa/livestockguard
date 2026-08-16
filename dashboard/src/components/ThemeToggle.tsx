@@ -1,3 +1,14 @@
+/**
+ * @file ThemeToggle.tsx
+ * @description Compact toggle button group for switching between light, dark,
+ * and system (auto-detect) colour themes. Renders as a pill-shaped button group
+ * with icons for each mode.
+ *
+ * @example
+ * ```tsx
+ * <ThemeToggle />
+ * ```
+ */
 import { useThemeStore, type Theme } from '@/stores/themeStore';
 import clsx from 'clsx';
 

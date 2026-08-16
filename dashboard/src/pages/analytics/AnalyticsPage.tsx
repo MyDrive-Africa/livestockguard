@@ -1,3 +1,22 @@
+/**
+ * @file AnalyticsPage.tsx
+ * @description Farm analytics dashboard with interactive charts for movement distance,
+ * activity classification, geofence compliance, and AI-powered insights. Supports
+ * multiple date ranges and CSV/print export.
+ *
+ * Features:
+ * - Distance travelled chart (area chart, per-animal breakdown)
+ * - Activity classification (grazing/resting/walking/running pie + time-series)
+ * - Geofence compliance scores by category
+ * - AI-powered insights dashboard (anomalies, suggestions, reports)
+ * - Date range selector (24h, 7d, 30d)
+ * - CSV export and print-friendly report generation
+ *
+ * @see useDistance — TanStack Query hook for distance data
+ * @see useActivity — TanStack Query hook for activity classification
+ * @see useCompliance — TanStack Query hook for compliance scores
+ * @see useInsightsDashboard — TanStack Query hook for AI insights
+ */
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {

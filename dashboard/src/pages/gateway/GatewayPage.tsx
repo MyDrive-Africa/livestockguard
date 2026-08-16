@@ -1,3 +1,19 @@
+/**
+ * @file GatewayPage.tsx
+ * @description BLE gateway monitoring page showing herdsman devices, active sessions,
+ * and animal sighting history. Each gateway is a herdsman's phone that scans
+ * for BLE ear tags and reports batched sightings to the API.
+ *
+ * Features:
+ * - Gateway device list with battery, last-seen, and animals-in-range
+ * - Active/completed session tracking per herdsman
+ * - Animal sighting log with RSSI-based distance estimation
+ * - Gateway configuration (scan interval, report interval, max range)
+ * - Session start/stop controls
+ *
+ * @see HERDSMAN_GATEWAY_SPEC.md — Full specification of the BLE gateway protocol
+ * @see useAuthStore — Scopes gateways to the current farm
+ */
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '@/stores/authStore';

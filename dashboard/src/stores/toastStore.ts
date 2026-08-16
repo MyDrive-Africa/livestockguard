@@ -1,3 +1,20 @@
+/**
+ * @file toastStore.ts
+ * @description Zustand store for ephemeral toast notifications. Manages a capped
+ * queue of up to 10 visible toasts with severity-based styling and auto-dismiss.
+ *
+ * State:
+ * - `toasts` — Array of active toast notifications (max 10)
+ *
+ * Actions:
+ * - `addToast(toast)` — Add a notification (auto-generates ID and timestamp)
+ * - `removeToast(id)` — Dismiss a specific toast
+ * - `clearAll()` — Remove all toasts at once
+ *
+ * Auto-dismiss: Toasts with `duration > 0` are automatically removed after the
+ * specified milliseconds. Set `duration: 0` for persistent toasts that require
+ * manual dismissal.
+ */
 import { create } from 'zustand';
 
 export type ToastSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info' | 'success';

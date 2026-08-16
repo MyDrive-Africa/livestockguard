@@ -45,7 +45,15 @@ stats = {"positions": 0, "alerts": 0, "errors": 0}
 
 
 def crc16_ccitt(data: bytes) -> int:
-    """Verify CRC-16/CCITT."""
+    """
+    Compute CRC-16/CCITT checksum for binary message integrity verification.
+
+    Args:
+        data: Raw bytes to checksum (typically the full message minus the trailing 2 CRC bytes).
+
+    Returns:
+        16-bit unsigned integer CRC value. Must match the CRC appended by the device firmware.
+    """
     crc = 0xFFFF
     for byte in data:
         crc ^= byte << 8
@@ -59,7 +67,17 @@ def crc16_ccitt(data: bytes) -> int:
 
 
 def decode_header(data: bytes) -> dict:
-    """Decode message header (11 bytes)."""
+    """
+    Decode the 11-byte binary message header.
+
+    Args:
+        data: Raw message bytes (at least 11 bytes required).
+
+    Returns:
+        Dict with keys: version, msg_type, priority, device_id, timestamp,
+        sequence, payload_len. Returns None if data is too short or version
+        does not match PROTOCOL_VERSION (0x01).
+    """
     if len(data) < 11:
         return None
 
@@ -81,7 +99,18 @@ def decode_header(data: bytes) -> dict:
 
 
 def decode_position_record(data: bytes, offset: int = 0) -> dict:
-    """Decode a single position record (16 bytes)."""
+    """
+    Decode a single 16-byte position record from the payload.
+
+    Args:
+        data: Raw payload bytes containing one or more position records.
+        offset: Byte offset within data where this record starts (default: 0).
+
+    Returns:
+        Dict with keys: timestamp (datetime UTC), latitude (float degrees),
+        longitude (float degrees), speed (km/h), heading (0-360 degrees),
+        hdop (float), flags (uint8). Returns None if insufficient data.
+    """
     if len(data) < offset + 16:
         return None
 
@@ -106,7 +135,17 @@ def decode_position_record(data: bytes, offset: int = 0) -> dict:
 
 
 async def publish_realtime(channel: str, message: dict):
-    """Publish a real-time event to Redis pub/sub for WebSocket distribution."""
+    """
+    Publish a real-time event to Redis pub/sub for WebSocket fan-out.
+
+    Args:
+        channel: Redis channel name (e.g., 'farm:<uuid>' or 'alerts:incoming').
+        message: Dict payload to JSON-serialize and publish.
+
+    Notes:
+        Fails silently if Redis is unavailable — real-time updates are
+        best-effort and should not block telemetry ingestion.
+    """
     global redis_client
     if redis_client is None:
         return
@@ -117,7 +156,20 @@ async def publish_realtime(channel: str, message: dict):
 
 
 async def write_position(device_id: int, position: dict):
-    """Write a position record to TimescaleDB and publish to Redis for real-time push."""
+    """
+    Persist a decoded GPS position to TimescaleDB and broadcast via Redis.
+
+    Args:
+        device_id: Numeric device identifier (u16 from the binary header).
+        position: Decoded position dict with keys: timestamp, latitude, longitude,
+                  speed, heading, hdop, flags (as returned by decode_position_record).
+
+    Side Effects:
+        - INSERTs into the `positions` hypertable (TimescaleDB).
+        - Publishes 'position.update' event to Redis `farm:<farm_id>` channel.
+        - Increments stats['positions'] on success, stats['errors'] on failure.
+        - Auto-registers unknown devices via get_device_uuid.
+    """
     global db_pool, stats
 
     if db_pool is None:
@@ -177,7 +229,21 @@ async def write_position(device_id: int, position: dict):
 
 
 async def write_alert(device_id: int, alert_type: str, severity: str, message: str):
-    """Write an alert record and publish to Redis for real-time push."""
+    """
+    Persist an alert to PostgreSQL and broadcast via Redis for real-time + notification dispatch.
+
+    Args:
+        device_id: Numeric device identifier (u16 from the binary header).
+        alert_type: Alert category string (e.g., 'geofence_breach', 'theft_detected').
+        severity: Alert severity level ('critical', 'high', 'medium', 'low', 'info').
+        message: Human-readable alert description shown in the dashboard.
+
+    Side Effects:
+        - INSERTs into the `alerts` table with status='active'.
+        - Publishes 'alert.created' event to Redis `farm:<farm_id>` channel (dashboard WebSocket).
+        - Publishes to Redis `alerts:incoming` channel (Alert Engine picks up for email/push/SMS).
+        - Increments stats['alerts'] on success, stats['errors'] on failure.
+    """
     global db_pool, stats
 
     if db_pool is None:
@@ -241,7 +307,21 @@ async def write_alert(device_id: int, alert_type: str, severity: str, message: s
 
 
 async def get_device_uuid(conn, device_id: int):
-    """Look up device UUID from serial number (device_id as hex)."""
+    """
+    Resolve a numeric device ID to its PostgreSQL UUID, auto-registering if unknown.
+
+    Args:
+        conn: Active asyncpg connection (from pool.acquire()).
+        device_id: Numeric device identifier (u16) — converted to hex serial (e.g., '001A').
+
+    Returns:
+        UUID of the device row in the `devices` table.
+
+    Notes:
+        If no device exists with the given serial, one is auto-created with
+        type='collar', status='active', assigned to the first available farm.
+        Also updates `last_seen` timestamp on every lookup.
+    """
     serial = f"{device_id:04X}"
     uuid = await conn.fetchval(
         "SELECT id FROM devices WHERE serial_number = $1", serial
@@ -262,7 +342,23 @@ async def get_device_uuid(conn, device_id: int):
 
 
 def on_message(client, userdata, msg):
-    """MQTT message callback — decode and dispatch to DB writer."""
+    """
+    MQTT message callback — decode binary payload and dispatch to async DB writer.
+
+    Args:
+        client: paho-mqtt Client instance.
+        userdata: User-defined data (unused).
+        msg: MQTTMessage with .topic (str) and .payload (bytes).
+
+    Processing pipeline:
+        1. Verify minimum message length (header + CRC = 13 bytes).
+        2. Validate CRC-16/CCITT integrity.
+        3. Decode header to determine message type.
+        4. For MSG_POSITION_BATCH: decode each 16-byte position record, write to DB.
+        5. For MSG_GEOFENCE_ALERT: create a critical geofence breach alert.
+        6. For MSG_THEFT_ALERT: create a critical theft alert.
+        7. For MSG_HEARTBEAT: no-op (device last_seen updated via get_device_uuid).
+    """
     global loop
 
     try:

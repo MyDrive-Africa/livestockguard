@@ -1,3 +1,16 @@
+/**
+ * @file CountUp.tsx
+ * @description Animated number counter that springs from 0 to the target value.
+ * Used in dashboard stat cards to give a dynamic feel when numbers load.
+ * Supports prefixes, suffixes, and decimal precision.
+ *
+ * @param value - Target number to animate towards
+ * @param duration - Animation duration in seconds (default: 1.2)
+ * @param className - CSS classes for the text element
+ * @param suffix - Text appended after the number (e.g., '%', ' km')
+ * @param prefix - Text prepended before the number (e.g., 'R')
+ * @param decimals - Number of decimal places to display
+ */
 import { useEffect, useState, useRef } from 'react';
 import { motion, useSpring, useTransform } from 'framer-motion';
 

@@ -1,3 +1,20 @@
+/**
+ * @file AnimalsPage.tsx
+ * @description Herd inventory management page displaying all animals for the
+ * selected farm. Supports CRUD operations, filtering by species/status/gender,
+ * real-time position overlays, and export capabilities.
+ *
+ * Features:
+ * - Tabular animal listing with search, sort, and pagination
+ * - Battery level and GPS status indicators per animal
+ * - Inline editing for animal metadata (breed, weight, notes)
+ * - Add new animals and register devices
+ * - Real-time last-seen position from WebSocket updates
+ * - Responsive card/table layout switching
+ *
+ * @see useRealtimeStore — Provides live position updates for last-seen indicators
+ * @see useAuthStore — Determines which farm's animals to display
+ */
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '@/stores/authStore';

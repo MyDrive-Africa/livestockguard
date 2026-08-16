@@ -1,3 +1,18 @@
+/**
+ * @file DevicesPage.tsx
+ * @description Device fleet management page showing GPS collars and BLE ear tags.
+ * Displays battery levels, signal strength, online/offline status, and allows
+ * registration of new devices.
+ *
+ * Features:
+ * - Fleet summary cards (total, online, offline, maintenance counts)
+ * - Device list with battery, signal, and status indicators
+ * - Device registration and configuration
+ * - Colour-coded status badges
+ *
+ * @note Currently uses demo data. Will be wired to the live API
+ * at GET /api/v1/devices once fleet management endpoints are finalised.
+ */
 import { motion } from 'framer-motion';
 import { PageTransition, AnimatedCard, CountUp } from '@/components/motion';
 

@@ -1,3 +1,18 @@
+/**
+ * @file AppLayout.tsx
+ * @description Root application shell with collapsible sidebar navigation,
+ * header bar (connection status, theme toggle, logout), and content outlet.
+ * Initialises the WebSocket connection for real-time updates.
+ *
+ * Renders:
+ * - Sidebar: nav links to Map, Animals, Geofences, Alerts, Analytics, Devices, Herdsman
+ * - Header: active alert count badge, WebSocket connection indicator, farm switcher
+ * - Content: React Router `<Outlet />` for child page rendering
+ * - Toast overlay for real-time notifications
+ *
+ * @see useWebSocket — Establishes the real-time connection on mount
+ * @see useRealtimeStore — Provides connection status and live alert count
+ */
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useRealtimeStore } from '@/stores/realtimeStore';

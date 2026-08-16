@@ -1,3 +1,18 @@
+/**
+ * @file UsersPage.tsx
+ * @description User management page for farm administrators. Allows viewing,
+ * creating, and managing user accounts with role-based access control.
+ *
+ * Features:
+ * - User list with role, status, and last login
+ * - Create new users with role assignment (admin, farm_owner, herdsman, viewer)
+ * - Edit user details and role
+ * - Activate/deactivate user accounts
+ * - Last login tracking for security audit
+ *
+ * @see user_farm_assignments — Database table controlling per-farm access
+ * @see useAuthStore — Current user's role determines visibility of this page
+ */
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { apiClient } from '@/api/client';

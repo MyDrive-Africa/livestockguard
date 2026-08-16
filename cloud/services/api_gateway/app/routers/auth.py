@@ -35,7 +35,16 @@ class LoginRequest(BaseModel):
 
 
 def validate_password_strength(password: str) -> str | None:
-    """Return error message if password is too weak, or None if valid."""
+    """
+    Validate password against minimum complexity requirements.
+
+    Args:
+        password: The plaintext password to validate.
+
+    Returns:
+        Error message string if the password is too weak, or None if it passes.
+        Requirements: min 8 chars, at least one digit, at least one letter.
+    """
     if len(password) < 8:
         return "Password must be at least 8 characters"
     if not re.search(r'\d', password):
@@ -74,6 +83,18 @@ class RefreshRequest(BaseModel):
 # ─── Helpers ────────────────────────────────────────
 
 def create_access_token(user_id: str, email: str, role: str) -> str:
+    """
+    Generate a short-lived JWT access token.
+
+    Args:
+        user_id: UUID string identifying the authenticated user.
+        email: User's email address (included in token claims for convenience).
+        role: Organisation-level role ('admin', 'farm_owner', 'herdsman', 'viewer').
+
+    Returns:
+        Encoded JWT string with 'access' type claim, expiring in
+        ACCESS_TOKEN_EXPIRE_MINUTES (default: 60 minutes).
+    """
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": user_id,
@@ -86,6 +107,17 @@ def create_access_token(user_id: str, email: str, role: str) -> str:
 
 
 def create_refresh_token(user_id: str) -> str:
+    """
+    Generate a long-lived JWT refresh token for silent re-authentication.
+
+    Args:
+        user_id: UUID string of the user to issue the token for.
+
+    Returns:
+        Encoded JWT string with 'refresh' type claim, expiring in
+        REFRESH_TOKEN_EXPIRE_DAYS (default: 7 days). Should be stored
+        securely by the client and exchanged at POST /auth/refresh.
+    """
     expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     payload = {
         "sub": user_id,
@@ -99,7 +131,26 @@ def create_refresh_token(user_id: str) -> str:
 
 @router.post("/login", response_model=TokenResponse)
 async def login(request: LoginRequest, req: Request, db: AsyncSession = Depends(get_db)):
-    """Authenticate user with email and password, returns JWT tokens. Rate limited: 10/minute."""
+    """
+    Authenticate user with email and password, returns JWT tokens.
+
+    Args:
+        request: Login credentials (email + password).
+        req: Raw FastAPI Request (used for rate-limit key extraction).
+        db: Async database session (injected).
+
+    Returns:
+        TokenResponse with access_token, refresh_token, and user info.
+
+    Raises:
+        HTTPException 401: Invalid email or password.
+        HTTPException 429: Account locked after 5 consecutive failed attempts (15-min lockout).
+
+    Security:
+        - Failed login attempts tracked in Redis (5 failures → 15-min lockout).
+        - Successful login clears the failure counter.
+        - Updates user.last_login timestamp on success.
+    """
     import redis.asyncio as aioredis
 
     redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
@@ -170,7 +221,25 @@ async def login(request: LoginRequest, req: Request, db: AsyncSession = Depends(
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    """Register a new user account."""
+    """
+    Register a new user account.
+
+    Args:
+        request: Registration payload (email, password, full_name, optional organisation_id).
+        db: Async database session (injected).
+
+    Returns:
+        TokenResponse with freshly minted access and refresh tokens.
+
+    Raises:
+        HTTPException 400: Password too weak (min 8 chars, must have letter + digit).
+        HTTPException 409: Email already registered.
+        HTTPException 400: No organisation available for assignment.
+
+    Notes:
+        New users are assigned the 'viewer' role by default. If no organisation_id
+        is provided, the user is assigned to the first available organisation.
+    """
     # Password complexity check
     password_error = validate_password_strength(request.password)
     if password_error:
@@ -223,7 +292,24 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(request: RefreshRequest, db: AsyncSession = Depends(get_db)):
-    """Refresh an expired access token using a valid refresh token."""
+    """
+    Refresh an expired access token using a valid refresh token.
+
+    Args:
+        request: Contains the refresh_token to exchange.
+        db: Async database session (injected).
+
+    Returns:
+        TokenResponse with new access_token and a rotated refresh_token.
+
+    Raises:
+        HTTPException 401: Token is invalid, expired, wrong type, revoked, or user not found.
+
+    Security:
+        - Implements refresh token rotation: the old token is blacklisted in Redis
+          (stored for its remaining TTL) so it cannot be reused.
+        - If Redis is unavailable, refresh still works (graceful degradation for dev).
+    """
     import redis.asyncio as aioredis
 
     try:
@@ -276,7 +362,20 @@ async def refresh(request: RefreshRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/logout")
 async def logout_revoke(request: RefreshRequest):
-    """Revoke a refresh token (logout from all sessions using this token)."""
+    """
+    Revoke a refresh token (logout from all sessions using this token).
+
+    Args:
+        request: Contains the refresh_token to revoke.
+
+    Returns:
+        {"status": "revoked"} on success.
+
+    Notes:
+        Best-effort operation — if Redis is unavailable, the token remains valid
+        until its natural expiry (7 days). The client should discard its local
+        copy regardless of the server response.
+    """
     import redis.asyncio as aioredis
 
     redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")

@@ -1,3 +1,20 @@
+/**
+ * @file MapPage.tsx
+ * @description Real-time GPS tracking map showing animal positions, movement trails,
+ * and geofence polygons. The primary operational view for farmers to monitor
+ * their livestock across multiple farms.
+ *
+ * Features:
+ * - Live animal position markers with battery/signal indicators
+ * - Geofence polygons rendered as map layers (fill + outline)
+ * - Movement trail history with time-based filtering
+ * - Multiple tile sources (street, satellite, terrain)
+ * - Auto-centres on the selected farm with adaptive zoom
+ * - Real-time updates via WebSocket (markers update without page refresh)
+ *
+ * @see useRealtimeStore — Provides live position updates via WebSocket
+ * @see useAuthStore — Determines which farm to display
+ */
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import maplibregl from 'maplibre-gl';

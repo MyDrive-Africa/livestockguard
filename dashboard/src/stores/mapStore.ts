@@ -1,3 +1,23 @@
+/**
+ * @file mapStore.ts
+ * @description Zustand store for map UI state. Controls viewport (centre, zoom),
+ * selected animal highlighting, layer visibility toggles, and the interactive
+ * geofence polygon drawing workflow.
+ *
+ * State:
+ * - `center` — Map centre as [longitude, latitude]
+ * - `zoom` — Current zoom level
+ * - `selectedAnimalId` — Currently focused animal (highlights marker + opens info panel)
+ * - `visibleLayers` — Toggle flags for map layers (animals, geofences, heatmap, trails)
+ * - `isDrawingFence` — Whether the user is in polygon drawing mode
+ * - `drawingCoordinates` — Vertices collected during fence drawing
+ *
+ * Actions:
+ * - `setCenter/setZoom` — Programmatic viewport control
+ * - `selectAnimal` — Focus on an animal marker
+ * - `toggleLayer` — Show/hide a map layer
+ * - `startDrawing/addDrawingPoint/finishDrawing/cancelDrawing` — Geofence creation workflow
+ */
 import { create } from 'zustand';
 
 interface MapState {

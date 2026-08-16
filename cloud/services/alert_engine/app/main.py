@@ -129,21 +129,50 @@ class AlertEngine:
         logger.info("AlertEngine initialized with dispatchers: SES, FCM, Redis, Webhook, SMS(AT)")
 
     def _load_email_recipients(self) -> list[str]:
-        """Load default email recipients from env."""
+        """
+        Load default email recipients from the ALERT_EMAIL_RECIPIENTS env variable.
+
+        Returns:
+            List of email address strings (comma-separated in env). Empty list if unset.
+        """
         recipients = os.environ.get("ALERT_EMAIL_RECIPIENTS", "")
         return [e.strip() for e in recipients.split(",") if e.strip()]
 
     def _load_sms_recipients(self) -> list[str]:
-        """Load default SMS recipients from env (E.164 format)."""
+        """
+        Load default SMS recipients from the ALERT_SMS_RECIPIENTS env variable.
+
+        Returns:
+            List of phone number strings in E.164 format (e.g., '+27821234567').
+            Empty list if unset.
+        """
         recipients = os.environ.get("ALERT_SMS_RECIPIENTS", "")
         return [p.strip() for p in recipients.split(",") if p.strip()]
 
     def _cooldown_key(self, event: AlertEvent) -> str:
-        """Generate a unique key for cooldown tracking."""
+        """
+        Generate a unique cooldown tracking key for deduplication.
+
+        Args:
+            event: The alert event to generate a key for.
+
+        Returns:
+            String key in format '{alert_type}:{device_id}' used to look up
+            the last fire time in the cooldown dictionary.
+        """
         return f"{event.alert_type.value}:{event.device_id}"
 
     def should_alert(self, event: AlertEvent) -> bool:
-        """Check if an alert should be fired (respecting cooldown period)."""
+        """
+        Determine whether an alert should fire, respecting the cooldown period.
+
+        Args:
+            event: The incoming alert event to evaluate.
+
+        Returns:
+            True if the alert should be dispatched (no recent firing for this
+            device+type combo within cooldown_seconds). False if suppressed.
+        """
         key = self._cooldown_key(event)
         last_time = self._last_alert_times.get(key, 0)
         now = time.time()
@@ -155,7 +184,20 @@ class AlertEngine:
         return True
 
     def process_event(self, event: AlertEvent) -> bool:
-        """Process an alert event. Returns True if alert was dispatched."""
+        """
+        Process an alert event through the full dispatch pipeline.
+
+        Args:
+            event: The alert event to process.
+
+        Returns:
+            True if the alert was dispatched to at least one channel.
+            False if suppressed by cooldown.
+
+        Side Effects:
+            - Updates the cooldown timestamp for this device+type.
+            - Dispatches to channels determined by the event's severity level.
+        """
         if not self.should_alert(event):
             return False
 
@@ -173,7 +215,18 @@ class AlertEngine:
         return True
 
     def dispatch(self, event: AlertEvent, channels: list[NotificationChannel]) -> None:
-        """Dispatch alert notifications through the specified channels."""
+        """
+        Dispatch alert notifications through the specified channels.
+
+        Args:
+            event: The alert event containing all notification context.
+            channels: List of notification channels to send through
+                      (push, sms, email, webhook, dashboard).
+
+        Notes:
+            Each channel dispatch is independent — if one fails, others still fire.
+            Errors are logged but do not raise exceptions.
+        """
         for channel in channels:
             try:
                 if channel == NotificationChannel.PUSH:
@@ -190,13 +243,25 @@ class AlertEngine:
                 logger.error(f"Dispatch error ({channel.value}): {e}")
 
     def _send_push(self, event: AlertEvent) -> None:
-        """Send push notification via Firebase Cloud Messaging."""
+        """
+        Send push notification via Firebase Cloud Messaging.
+
+        Args:
+            event: Alert event to notify about. Sends to the FCM topic
+                   'farm_{farm_id}' so all subscribed users receive it.
+        """
         # Send to farm topic — all users subscribed to this farm get notified
         topic = f"farm_{event.farm_id}"
         self.push_dispatcher.dispatch(event, topic=topic)
 
     def _send_sms(self, event: AlertEvent) -> None:
-        """Send SMS notification via Africa's Talking."""
+        """
+        Send SMS notification via Africa's Talking.
+
+        Args:
+            event: Alert event to format into an SMS body. Only fires for
+                   critical severity when recipients are configured.
+        """
         recipients = self.default_sms_recipients
         if recipients:
             self.sms_dispatcher.dispatch(event, recipients)
@@ -204,7 +269,13 @@ class AlertEngine:
             logger.debug("No SMS recipients configured")
 
     def _send_email(self, event: AlertEvent) -> None:
-        """Send email notification via Amazon SES."""
+        """
+        Send email notification via Amazon SES.
+
+        Args:
+            event: Alert event to format into an email body. Recipients are
+                   loaded from ALERT_EMAIL_RECIPIENTS env (or per-farm in production).
+        """
         # In production: look up farm owner/manager emails from DB
         recipients = self.default_email_recipients
         if recipients:
@@ -213,18 +284,38 @@ class AlertEngine:
             logger.debug("No email recipients configured")
 
     def _send_webhook(self, event: AlertEvent) -> None:
-        """Send webhook notification."""
+        """
+        Send webhook notification to configured HTTP endpoints.
+
+        Args:
+            event: Alert event serialized as JSON POST body to WEBHOOK_URLS.
+        """
         self.webhook_dispatcher.dispatch(event)
 
     def _send_dashboard(self, event: AlertEvent) -> None:
-        """Publish alert to dashboard via Redis pub/sub."""
+        """
+        Publish alert to the dashboard via Redis pub/sub.
+
+        Args:
+            event: Alert event published to Redis for WebSocket fan-out
+                   to connected dashboard clients.
+        """
         self.dashboard_dispatcher.dispatch(event)
 
 
 async def run_alert_engine():
     """
-    Main event loop — subscribes to Redis for alert events
-    and processes them through the alert engine.
+    Main event loop — subscribes to Redis 'alerts:incoming' channel and
+    processes events through the AlertEngine dispatch pipeline.
+
+    Lifecycle:
+        1. Initialise AlertEngine with all dispatcher plugins.
+        2. Connect to Redis and subscribe to the alerts channel.
+        3. For each incoming message, parse JSON → AlertEvent → process_event().
+        4. Runs indefinitely until interrupted (Ctrl+C or container stop).
+
+    The MQTT writer and other services publish to 'alerts:incoming' whenever
+    they detect alert-worthy conditions (geofence breach, theft, etc.).
     """
     engine = AlertEngine()
 

@@ -1,3 +1,19 @@
+/**
+ * @file ImportPage.tsx
+ * @description CSV bulk import page for adding multiple animals to a farm at once.
+ * Parses CSV files with columns matching the animal schema, validates rows,
+ * and submits them to the API in batch.
+ *
+ * Features:
+ * - Drag-and-drop or file picker for CSV upload
+ * - Column mapping preview before import
+ * - Row-level validation with error highlighting
+ * - Import progress indicator (imported/skipped counts)
+ * - Template CSV download for correct formatting
+ *
+ * @see AnimalsPage — The inventory page where imported animals appear
+ * @see POST /api/v1/animals/import — Backend endpoint for CSV import
+ */
 import { useState, useCallback } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { apiClient } from '@/api/client';

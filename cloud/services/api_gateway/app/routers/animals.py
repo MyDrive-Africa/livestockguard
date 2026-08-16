@@ -110,7 +110,18 @@ class NewbornRequest(BaseModel):
 
 def _animal_to_response(animal: Animal, device_serial: Optional[str] = None,
                         pos=None) -> AnimalResponse:
-    """Convert Animal ORM instance to response model."""
+    """
+    Convert Animal ORM instance to API response model.
+
+    Args:
+        animal: SQLAlchemy Animal model instance from the database.
+        device_serial: Serial number of the GPS collar assigned to this animal (if any).
+        pos: Latest position row (from the positions hypertable) with attributes:
+             latitude, longitude, speed, battery_mv. Can be None if no GPS fix recorded.
+
+    Returns:
+        AnimalResponse Pydantic model ready for JSON serialization.
+    """
     return AnimalResponse(
         id=str(animal.id),
         name=animal.name,
@@ -147,7 +158,21 @@ async def list_animals(
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
 ):
-    """List animals with their latest position. Filterable by farm, species, status, gender."""
+    """
+    List animals with their latest position. Filterable by farm, species, status, gender.
+
+    Args:
+        farm_id: Filter by farm UUID (optional — returns all farms if omitted).
+        species: Filter by species string (e.g., 'cattle', 'sheep').
+        status: Filter by status ('active', 'sold', 'deceased'). Defaults to 'active' if omitted.
+        gender: Filter by gender ('male', 'female').
+        limit: Maximum number of results (default 100, max 1000).
+        offset: Pagination offset for cursor-based paging.
+        db: Async database session (injected).
+
+    Returns:
+        List of AnimalResponse objects, each including the latest GPS position if available.
+    """
     query = select(Animal, Device.serial_number.label("device_serial")).outerjoin(
         Device, Animal.device_id == Device.id
     )
