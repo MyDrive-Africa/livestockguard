@@ -171,9 +171,9 @@
 - [x] #10 Mobile CI job
 
 ### Sprint 3 — Mobile Feature Parity (3-5 days)
-- [ ] #14 Mobile alerts screen
-- [ ] #15 Mobile devices screen
-- [ ] #16 Mobile geofences list
+- [x] #14 Mobile alerts screen
+- [x] #15 Mobile devices screen
+- [x] #16 Mobile geofences list
 
 ### Sprint 4 — Reliability & CI (2-3 days)
 - [ ] #5 Device command delivery

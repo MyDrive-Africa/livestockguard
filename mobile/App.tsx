@@ -6,11 +6,14 @@ import AdminDashboard from './src/screens/AdminDashboard';
 import AnimalsScreen from './src/screens/AnimalsScreen';
 import MapScreen from './src/screens/MapScreen';
 import InsightsScreen from './src/screens/InsightsScreen';
+import AlertsScreen from './src/screens/AlertsScreen';
+import DevicesScreen from './src/screens/DevicesScreen';
+import GeofencesScreen from './src/screens/GeofencesScreen';
 import FarmPicker from './src/components/FarmPicker';
 import { FarmProvider } from './src/context/FarmContext';
 import { getToken, getUserRole, setLogoutCallback, api } from './src/services/api';
 
-type Tab = 'dashboard' | 'map' | 'cattle' | 'insights' | 'herdsman';
+type Tab = 'dashboard' | 'map' | 'cattle' | 'alerts' | 'devices' | 'geofences' | 'insights' | 'herdsman';
 type ConnectionStatus = 'connected' | 'connecting' | 'disconnected';
 
 function useConnectionStatus(authenticated: boolean): ConnectionStatus {
@@ -102,6 +105,9 @@ export default function App() {
       case 'dashboard': return <AdminDashboard />;
       case 'map': return <MapScreen />;
       case 'cattle': return <AnimalsScreen />;
+      case 'alerts': return <AlertsScreen />;
+      case 'devices': return <DevicesScreen />;
+      case 'geofences': return <GeofencesScreen />;
       case 'insights': return <InsightsScreen role={role} />;
       case 'herdsman': return <HerdsmanScreen />;
     }
@@ -125,9 +131,16 @@ export default function App() {
 
         {/* Bottom Tab Bar */}
         <View style={styles.tabBar}>
-          <TabButton icon="📊" label="Dashboard" active={activeTab === 'dashboard'} onPress={() => setActiveTab('dashboard')} />
+          <TabButton icon="📊" label="Home" active={activeTab === 'dashboard'} onPress={() => setActiveTab('dashboard')} />
           <TabButton icon="🗺️" label="Map" active={activeTab === 'map'} onPress={() => setActiveTab('map')} />
+          <TabButton icon="🚨" label="Alerts" active={activeTab === 'alerts'} onPress={() => setActiveTab('alerts')} />
           <TabButton icon="🐄" label="Cattle" active={activeTab === 'cattle'} onPress={() => setActiveTab('cattle')} />
+          {!isHerdsman && (
+            <TabButton icon="📡" label="Devices" active={activeTab === 'devices'} onPress={() => setActiveTab('devices')} />
+          )}
+          {!isHerdsman && (
+            <TabButton icon="🗺️" label="Fences" active={activeTab === 'geofences'} onPress={() => setActiveTab('geofences')} />
+          )}
           {!isHerdsman && (
             <TabButton icon="💡" label="Insights" active={activeTab === 'insights'} onPress={() => setActiveTab('insights')} />
           )}
