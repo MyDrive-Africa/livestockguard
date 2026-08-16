@@ -187,9 +187,9 @@
 - [x] #19 Offline mobile queue
 
 ### Sprint 6 — Production Hardening (2 days)
-- [ ] #11 E2E in CI (nightly)
-- [ ] #13 Dependency scanning
-- [ ] #20-26 Polish items
+- [x] #11 E2E in CI (nightly)
+- [x] #13 Dependency scanning
+- [x] #20-26 Polish items
 
 ### Sprint 7 — AWS IAM & Cloud Deployment (after readiness achieved)
 

@@ -1,0 +1,91 @@
+version: 2
+updates:
+  # Python: API Gateway
+  - package-ecosystem: "pip"
+    directory: "/cloud/services/api_gateway"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "python"
+
+  # Python: Alert Engine
+  - package-ecosystem: "pip"
+    directory: "/cloud/services/alert_engine"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "python"
+
+  # Python: MQTT Writer
+  - package-ecosystem: "pip"
+    directory: "/cloud/services/mqtt_writer"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "python"
+
+  # Python: Analytics Engine
+  - package-ecosystem: "pip"
+    directory: "/cloud/services/analytics_engine"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "python"
+
+  # Node: Dashboard
+  - package-ecosystem: "npm"
+    directory: "/dashboard"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "javascript"
+
+  # Node: Mobile
+  - package-ecosystem: "npm"
+    directory: "/mobile"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "javascript"
+
+  # Rust: Ingestion
+  - package-ecosystem: "cargo"
+    directory: "/cloud/services/ingestion"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "rust"
+
+  # Rust: Geofence Engine
+  - package-ecosystem: "cargo"
+    directory: "/cloud/services/geofence_engine"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "rust"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ci"

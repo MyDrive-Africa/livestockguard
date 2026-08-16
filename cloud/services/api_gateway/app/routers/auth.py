@@ -27,9 +27,22 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # ─── Schemas ────────────────────────────────────────
 
+import re
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+def validate_password_strength(password: str) -> str | None:
+    """Return error message if password is too weak, or None if valid."""
+    if len(password) < 8:
+        return "Password must be at least 8 characters"
+    if not re.search(r'\d', password):
+        return "Password must contain at least one digit"
+    if not re.search(r'[a-zA-Z]', password):
+        return "Password must contain at least one letter"
+    return None
 
 
 class RegisterRequest(BaseModel):
@@ -87,16 +100,53 @@ def create_refresh_token(user_id: str) -> str:
 @router.post("/login", response_model=TokenResponse)
 async def login(request: LoginRequest, req: Request, db: AsyncSession = Depends(get_db)):
     """Authenticate user with email and password, returns JWT tokens. Rate limited: 10/minute."""
+    import redis.asyncio as aioredis
+
+    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+
+    # Account lockout check
+    lockout_key = f"login:lockout:{request.email}"
+    attempts_key = f"login:attempts:{request.email}"
+    try:
+        redis_client = aioredis.from_url(redis_url, decode_responses=True)
+        is_locked = await redis_client.get(lockout_key)
+        if is_locked:
+            await redis_client.aclose()
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Account temporarily locked due to too many failed attempts. Try again in 15 minutes.",
+            )
+    except aioredis.ConnectionError:
+        redis_client = None
+
     result = await db.execute(
         select(User).where(User.email == request.email)
     )
     user = result.scalar_one_or_none()
 
     if user is None or not pwd_context.verify(request.password, user.password_hash):
+        # Track failed attempt
+        try:
+            if redis_client:
+                attempts = await redis_client.incr(attempts_key)
+                await redis_client.expire(attempts_key, 900)  # 15 min window
+                if int(attempts) >= 5:
+                    await redis_client.setex(lockout_key, 900, "1")  # Lock for 15 min
+                await redis_client.aclose()
+        except Exception:
+            pass
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
+
+    # Successful login — clear failed attempts
+    try:
+        if redis_client:
+            await redis_client.delete(attempts_key, lockout_key)
+            await redis_client.aclose()
+    except Exception:
+        pass
 
     # Update last_login
     user.last_login = datetime.now(timezone.utc)
@@ -121,6 +171,14 @@ async def login(request: LoginRequest, req: Request, db: AsyncSession = Depends(
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db)):
     """Register a new user account."""
+    # Password complexity check
+    password_error = validate_password_strength(request.password)
+    if password_error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=password_error,
+        )
+
     # Check if email already exists
     existing = await db.execute(
         select(User).where(User.email == request.email)

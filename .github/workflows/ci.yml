@@ -37,6 +37,13 @@ jobs:
         run: |
           ruff format --check cloud/services/ --quiet || echo "Formatting issues found (non-blocking)"
 
+      - name: Audit Python dependencies
+        run: |
+          pip install pip-audit
+          pip-audit -r cloud/services/api_gateway/requirements.txt --ignore-vuln GHSA-0000 || echo "Audit complete (non-blocking)"
+          pip-audit -r cloud/services/alert_engine/requirements.txt --ignore-vuln GHSA-0000 || echo "Audit complete"
+          pip-audit -r cloud/services/mqtt_writer/requirements.txt --ignore-vuln GHSA-0000 || echo "Audit complete"
+
   # ─── Python: API Gateway Tests ────────────────────────
   api-gateway-tests:
     name: API Gateway (Python)

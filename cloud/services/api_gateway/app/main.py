@@ -44,7 +44,9 @@ except Exception:
 async def lifespan(app: FastAPI):
     """Startup/shutdown events."""
     import logging
+    from livestockguard_common.logging import setup_logging
 
+    setup_logging(service_name="api_gateway")
     logger = logging.getLogger("livestockguard.security")
 
     # JWT secret validation — refuse to start in production with the default secret
@@ -178,6 +180,23 @@ app.include_router(assignments_router, prefix=f"/api/{API_VERSION}/assignments",
 app.include_router(insights_router, prefix=f"/api/{API_VERSION}/insights", tags=["insights"])
 
 # ─── Backward-compatible unversioned routes (deprecated) ─
+
+
+class DeprecationMiddleware(BaseHTTPMiddleware):
+    """Add Deprecation and Sunset headers to unversioned /api/* routes."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        # Only add to unversioned routes (not /api/v1/*)
+        if path.startswith("/api/") and "/api/v1/" not in path and path != "/api/version":
+            response.headers["Deprecation"] = "true"
+            response.headers["Sunset"] = "2027-01-01T00:00:00Z"
+            response.headers["Link"] = f'</api/v1{path[4:]}>; rel="successor-version"'
+        return response
+
+
+app.add_middleware(DeprecationMiddleware)
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"], include_in_schema=False)
 app.include_router(farms.router, prefix="/api/farms", tags=["farms"], include_in_schema=False)

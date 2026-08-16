@@ -1,0 +1,105 @@
+name: E2E Tests (Nightly)
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # 02:00 UTC daily
+  workflow_dispatch:  # Manual trigger
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: timescale/timescaledb-ha:pg16
+        env:
+          POSTGRES_USER: livestockguard
+          POSTGRES_PASSWORD: livestockguard_dev
+          POSTGRES_DB: livestockguard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            dashboard/package-lock.json
+            e2e/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install API dependencies
+        run: pip install -r cloud/services/api_gateway/requirements.txt
+        
+      - name: Run migrations
+        run: |
+          for f in cloud/migrations/versions/*.sql; do
+            PGPASSWORD=livestockguard_dev psql -h localhost -U livestockguard -d livestockguard -f "$f" || true
+          done
+
+      - name: Start API Gateway
+        run: |
+          cd cloud/services/api_gateway
+          DATABASE_URL="postgresql+asyncpg://livestockguard:livestockguard_dev@localhost:5432/livestockguard" \
+          REDIS_URL="redis://localhost:6379/0" \
+          JWT_SECRET="e2e_test_secret" \
+          python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+          curl -f http://localhost:8000/health
+
+      - name: Install dashboard deps & build
+        working-directory: dashboard
+        run: |
+          npm ci
+          npm run build
+
+      - name: Serve dashboard
+        run: |
+          npx serve -s dashboard/dist -l 5173 &
+          sleep 2
+
+      - name: Install Playwright
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        working-directory: e2e
+        env:
+          BASE_URL: http://localhost:5173
+          CI: true
+        run: npx playwright test --reporter=github
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7
