@@ -11,15 +11,16 @@
 2. [Phase 1: IAM Foundation](#phase-1-iam-foundation)
 3. [Phase 2: Secrets & Configuration](#phase-2-secrets--configuration)
 4. [Phase 3: Cloud9 Development Environment](#phase-3-cloud9-development-environment)
-5. [Phase 4: Running the Full Stack on Cloud9](#phase-4-running-the-full-stack-on-cloud9)
-6. [Phase 5: Simulators & Demo Mode](#phase-5-simulators--demo-mode)
-7. [Phase 6: Testing on Cloud9](#phase-6-testing-on-cloud9)
-8. [Phase 7: Code Changes for AWS Integration](#phase-7-code-changes-for-aws-integration)
-9. [Phase 8: Production Deployment (ECS Fargate)](#phase-8-production-deployment-ecs-fargate)
-10. [Phase 9: CI/CD Pipeline](#phase-9-cicd-pipeline)
-11. [Phase 10: Monitoring & Operations](#phase-10-monitoring--operations)
-12. [Cost Estimate](#cost-estimate)
-13. [Execution Checklist](#execution-checklist)
+5. [Phase 4: IDE Strategy — Kiro + Cloud9](#phase-4-ide-strategy--kiro--cloud9)
+6. [Phase 5: Running the Full Stack on Cloud9](#phase-5-running-the-full-stack-on-cloud9)
+7. [Phase 6: Simulators & Demo Mode](#phase-6-simulators--demo-mode)
+8. [Phase 7: Testing on Cloud9](#phase-7-testing-on-cloud9)
+9. [Phase 8: Code Changes for AWS Integration](#phase-8-code-changes-for-aws-integration)
+10. [Phase 9: Production Deployment (ECS Fargate)](#phase-9-production-deployment-ecs-fargate)
+11. [Phase 10: CI/CD Pipeline](#phase-10-cicd-pipeline)
+12. [Phase 11: Monitoring & Operations](#phase-11-monitoring--operations)
+13. [Cost Estimate](#cost-estimate)
+14. [Execution Checklist](#execution-checklist)
 
 ---
 
@@ -344,9 +345,123 @@ make setup-frontend --web
 
 ---
 
-## Phase 4: Running the Full Stack on Cloud9
+## Phase 4: IDE Strategy — Kiro + Cloud9
 
-### 4.1 Start Backend Infrastructure
+### 4.1 The Problem
+
+Kiro is a desktop IDE (built on VS Code) that provides AI-powered development assistance.
+Cloud9 is a browser-based IDE that runs on an EC2 instance with IAM credentials.
+They are different products — Kiro cannot run *inside* the Cloud9 browser IDE.
+
+### 4.2 Recommended Approach: Kiro + Remote-SSH (Best of Both Worlds)
+
+Use Kiro locally on your Mac, connected to the Cloud9 EC2 instance via SSH.
+This gives you:
+
+- Full Kiro AI features (specs, steering, hooks, agent assistance)
+- IAM credentials from the EC2 instance role (SES, Secrets Manager, etc.)
+- Rust toolchain, Docker, and all dev tools running on the Cloud9 instance
+- No credential files on your local machine
+
+```
+┌────────────────────────┐         SSH          ┌────────────────────────────┐
+│   Your Mac (local)     │ ◄──────────────────► │  Cloud9 EC2 Instance       │
+│                        │                       │                            │
+│  Kiro IDE              │                       │  - IAM Role attached       │
+│  - AI agent            │                       │  - Rust, Node, Python      │
+│  - Specs & steering    │                       │  - Docker + Compose        │
+│  - Hooks               │                       │  - Full project code       │
+│  - Remote-SSH ext      │                       │  - SES/Secrets access      │
+│                        │                       │                            │
+└────────────────────────┘                       └────────────────────────────┘
+```
+
+### 4.3 Setup: Kiro Remote-SSH to Cloud9
+
+**Step 1: Enable SSH on the Cloud9 EC2 instance**
+
+```bash
+# In AWS Console: EC2 → Security Groups for the Cloud9 instance
+# Add inbound rule: SSH (port 22) from your IP address
+```
+
+**Step 2: Create an SSH key pair**
+
+```bash
+# On your Mac:
+ssh-keygen -t ed25519 -C "kiro-cloud9" -f ~/.ssh/kiro-cloud9
+
+# Copy public key to the instance (via Cloud9 browser terminal or SSM):
+# On the EC2 instance:
+echo "ssh-ed25519 AAAA... kiro-cloud9" >> ~/.ssh/authorized_keys
+```
+
+**Step 3: Configure SSH in Kiro**
+
+Add to `~/.ssh/config` on your Mac:
+
+```
+Host livestockguard-cloud9
+    HostName <ec2-public-ip-or-dns>
+    User ec2-user
+    IdentityFile ~/.ssh/kiro-cloud9
+    ForwardAgent yes
+```
+
+**Step 4: Connect from Kiro**
+
+1. Open Kiro
+2. Command Palette → "Remote-SSH: Connect to Host"
+3. Select `livestockguard-cloud9`
+4. Open the project folder: `/home/ec2-user/livestockguard`
+
+All Kiro features (AI chat, specs, hooks, steering) work normally over Remote-SSH.
+Terminal commands execute on the Cloud9 instance with IAM credentials.
+
+### 4.4 Alternative: AWS SSM Session Manager (No Public IP Needed)
+
+If you don't want to expose SSH publicly, use SSM port forwarding:
+
+```bash
+# Install Session Manager plugin locally
+# https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html
+
+# Create SSH tunnel via SSM (no inbound Security Group rule needed):
+aws ssm start-session \
+  --target <instance-id> \
+  --document-name AWS-StartPortForwardingSession \
+  --parameters '{"portNumber":["22"],"localPortNumber":["2222"]}'
+
+# Then in ~/.ssh/config:
+Host livestockguard-cloud9
+    HostName localhost
+    Port 2222
+    User ec2-user
+    IdentityFile ~/.ssh/kiro-cloud9
+```
+
+### 4.5 Alternative Options (Not Recommended)
+
+| Option | Pros | Cons |
+|--------|------|------|
+| Cloud9 browser IDE only | Zero local setup | No Kiro AI features, no specs/hooks/steering |
+| Kiro local + AWS CLI creds | No EC2 needed | Credentials in local files, no Rust toolchain |
+| VS Code Remote-SSH (no Kiro) | Works fine | Loses Kiro's AI agent, specs, and hooks |
+
+### 4.6 When to Use Which
+
+| Task | Use |
+|------|-----|
+| Feature development, code review, AI-assisted coding | Kiro + Remote-SSH |
+| Quick infra check, IAM policy edits, one-off commands | Cloud9 browser IDE |
+| CI/CD, deployment scripts | GitHub Actions (no IDE needed) |
+| Mobile app development (Expo) | Kiro locally (needs simulator/emulator) |
+
+---
+
+## Phase 5: Running the Full Stack on Cloud9
+
+### 5.1 Start Backend Infrastructure
 
 ```bash
 # Start all Docker services (Postgres, Redis, EMQX, API, MQTT Writer, Alert Engine)
@@ -360,7 +475,7 @@ make db-migrate
 make db-seed
 ```
 
-### 4.2 Start Dashboard (Web)
+### 5.2 Start Dashboard (Web)
 
 ```bash
 # Dashboard dev server (port 5173)
@@ -373,7 +488,7 @@ make dashboard
 > **Note**: Cloud9 proxies ports through HTTPS. Update the dashboard `.env` to use
 > the Cloud9 preview URL for API requests if needed.
 
-### 4.3 Access the Stack
+### 5.3 Access the Stack
 
 | Service | Access Method |
 |---------|--------------|
@@ -382,7 +497,7 @@ make dashboard
 | EMQX Dashboard | Cloud9 Preview (port 18083) |
 | PostgreSQL | `make db-shell` (or port-forward for GUI tools) |
 
-### 4.4 Port Forwarding for External Access
+### 5.4 Port Forwarding for External Access
 
 If you need to access from your local browser:
 
@@ -396,9 +511,9 @@ aws ssm start-session \
 
 ---
 
-## Phase 5: Simulators & Demo Mode
+## Phase 6: Simulators & Demo Mode
 
-### 5.1 Run Simulators on Cloud9
+### 6.1 Run Simulators on Cloud9
 
 All simulators work identically to local development:
 
@@ -418,7 +533,7 @@ make demo-normal         # Peaceful day, no alerts
 make demo-no-mobile      # Skip mobile app (Cloud9 can't run native)
 ```
 
-### 5.2 Full Day Simulation (Accelerated)
+### 6.2 Full Day Simulation (Accelerated)
 
 ```bash
 # Full herdsman day — 12 hours compressed into ~6 minutes
@@ -431,7 +546,7 @@ make simulate-day-sibanyoni
 make simulate-loop
 ```
 
-### 5.3 Testing SES Email Alerts
+### 6.3 Testing SES Email Alerts
 
 With the IAM role attached, email alerts fire automatically when:
 - A geofence breach is detected (`make simulate-breach`)
@@ -445,7 +560,7 @@ make simulate-breach
 docker compose -f cloud/docker-compose.yml logs alert_engine --tail 50
 ```
 
-### 5.4 Testing SMS Alerts
+### 6.4 Testing SMS Alerts
 
 Requires Africa's Talking API key in Secrets Manager:
 
@@ -460,16 +575,16 @@ make simulate-theft
 
 ---
 
-## Phase 6: Testing on Cloud9
+## Phase 7: Testing on Cloud9
 
-### 6.1 Run All Tests
+### 7.1 Run All Tests
 
 ```bash
 # Full test suite (same as CI)
 make test
 ```
 
-### 6.2 Individual Service Tests
+### 7.2 Individual Service Tests
 
 ```bash
 # API Gateway (47+ tests, in-memory SQLite)
@@ -498,7 +613,7 @@ cd cloud/services/geofence_engine && cargo test --verbose && cd -
 cd dashboard && npx tsc --noEmit && npm run build && cd -
 ```
 
-### 6.3 E2E Tests (Playwright)
+### 7.3 E2E Tests (Playwright)
 
 ```bash
 # Requires dashboard + full stack running
@@ -509,7 +624,7 @@ cd e2e && npx playwright install --with-deps chromium && cd -
 make verify-e2e
 ```
 
-### 6.4 API Verification
+### 7.4 API Verification
 
 ```bash
 # Hit health endpoint
@@ -522,7 +637,7 @@ make verify-api
 # Open Cloud9 Preview → port 8000 → /docs
 ```
 
-### 6.5 Integration Test: End-to-End Alert Flow
+### 7.5 Integration Test: End-to-End Alert Flow
 
 ```bash
 # 1. Start stack
@@ -551,9 +666,9 @@ aws ses get-send-statistics --region af-south-1
 
 ---
 
-## Phase 7: Code Changes for AWS Integration
+## Phase 8: Code Changes for AWS Integration
 
-### 7.1 AWS Configuration Loader
+### 8.1 AWS Configuration Loader
 
 Create `cloud/shared/livestockguard_common/aws_config.py`:
 
@@ -675,7 +790,7 @@ def load_database_url() -> str:
     )
 ```
 
-### 7.2 Wire Into Existing Services
+### 8.2 Wire Into Existing Services
 
 Modify service startup to use the loader:
 
@@ -699,9 +814,9 @@ DATABASE_URL = load_database_url()
 
 ---
 
-## Phase 8: Production Deployment (ECS Fargate)
+## Phase 9: Production Deployment (ECS Fargate)
 
-### 8.1 Infrastructure Resources
+### 9.1 Infrastructure Resources
 
 | Resource | Service | Configuration |
 |----------|---------|---------------|
@@ -715,7 +830,7 @@ DATABASE_URL = load_database_url()
 | ECR | Registry | Container images |
 | EMQX Cloud | MQTT | Managed EMQX or AWS IoT Core |
 
-### 8.2 ECS Task Definitions
+### 9.2 ECS Task Definitions
 
 **API Gateway**:
 ```json
@@ -789,7 +904,7 @@ DATABASE_URL = load_database_url()
 }
 ```
 
-### 8.3 Dashboard Deployment (S3 + CloudFront)
+### 9.3 Dashboard Deployment (S3 + CloudFront)
 
 ```bash
 # Build production bundle
@@ -804,7 +919,7 @@ aws cloudfront create-invalidation \
   --paths "/*"
 ```
 
-### 8.4 Database Migration (Production RDS)
+### 9.4 Database Migration (Production RDS)
 
 ```bash
 # Connect to RDS via bastion/SSM and run migrations
@@ -818,9 +933,9 @@ done
 
 ---
 
-## Phase 9: CI/CD Pipeline
+## Phase 10: CI/CD Pipeline
 
-### 9.1 GitHub Actions Updates
+### 10.1 GitHub Actions Updates
 
 Add deployment steps to `.github/workflows/ci.yml`:
 
@@ -863,7 +978,7 @@ Add deployment steps to `.github/workflows/ci.yml`:
           aws cloudfront create-invalidation --distribution-id ${{ secrets.CF_DISTRIBUTION_ID }} --paths "/*"
 ```
 
-### 9.2 GitHub OIDC for AWS (No Long-Lived Keys)
+### 10.2 GitHub OIDC for AWS (No Long-Lived Keys)
 
 ```bash
 # Create OIDC provider in IAM (one-time)
@@ -878,9 +993,9 @@ aws iam create-open-id-connect-provider \
 
 ---
 
-## Phase 10: Monitoring & Operations
+## Phase 11: Monitoring & Operations
 
-### 10.1 CloudWatch Alarms
+### 11.1 CloudWatch Alarms
 
 ```bash
 # API Gateway 5xx errors
@@ -898,7 +1013,7 @@ aws cloudwatch put-metric-alarm \
 # Redis memory > 75%
 ```
 
-### 10.2 Log Groups
+### 11.2 Log Groups
 
 | Service | Log Group |
 |---------|-----------|
@@ -906,7 +1021,7 @@ aws cloudwatch put-metric-alarm \
 | MQTT Writer | `/ecs/livestockguard/mqtt-writer` |
 | Alert Engine | `/ecs/livestockguard/alert-engine` |
 
-### 10.3 Health Checks
+### 11.3 Health Checks
 
 | Endpoint | Expected |
 |----------|----------|
