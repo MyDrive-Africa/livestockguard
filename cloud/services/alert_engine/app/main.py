@@ -23,6 +23,13 @@ from typing import Optional
 
 import redis.asyncio as aioredis
 
+from livestockguard_common.aws_config import (
+    load_redis_url,
+    load_ses_config,
+    load_sms_config,
+    load_firebase_config,
+    load_webhook_urls,
+)
 from .dispatchers.email_ses import SESEmailDispatcher
 from .dispatchers.push_fcm import FCMPushDispatcher
 from .dispatchers.dashboard_redis import DashboardRedisDispatcher
@@ -36,7 +43,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("alert_engine")
 
-REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+REDIS_URL = load_redis_url()
 
 
 class AlertSeverity(str, Enum):
@@ -115,16 +122,31 @@ class AlertEngine:
         self.cooldown_seconds = cooldown_seconds
         self._last_alert_times: dict[str, float] = {}
 
-        # Initialize dispatchers
-        self.email_dispatcher = SESEmailDispatcher()
-        self.push_dispatcher = FCMPushDispatcher()
-        self.dashboard_dispatcher = DashboardRedisDispatcher()
-        self.webhook_dispatcher = WebhookDispatcher()
-        self.sms_dispatcher = AfricasTalkingSMSDispatcher()
+        # Load AWS-aware configuration for dispatchers
+        ses_config = load_ses_config()
+        sms_config = load_sms_config()
+        firebase_creds = load_firebase_config()
+        webhook_urls = load_webhook_urls()
 
-        # Default notification recipients (override per farm in production)
-        self.default_email_recipients = self._load_email_recipients()
-        self.default_sms_recipients = self._load_sms_recipients()
+        # Initialize dispatchers with AWS-sourced config
+        self.email_dispatcher = SESEmailDispatcher(
+            sender_email=ses_config["sender_email"],
+            aws_region=ses_config["region"],
+        )
+        self.push_dispatcher = FCMPushDispatcher(
+            credentials_path=None  # Will use firebase_creds dict if available
+        )
+        self.dashboard_dispatcher = DashboardRedisDispatcher(redis_url=REDIS_URL)
+        self.webhook_dispatcher = WebhookDispatcher(webhook_urls=webhook_urls or None)
+        self.sms_dispatcher = AfricasTalkingSMSDispatcher(
+            username=sms_config.get("username"),
+            api_key=sms_config.get("api_key"),
+            sender_id=sms_config.get("sender_id"),
+        )
+
+        # Default notification recipients (from AWS or env fallback)
+        self.default_email_recipients = ses_config.get("recipients", []) or self._load_email_recipients()
+        self.default_sms_recipients = sms_config.get("recipients", []) or self._load_sms_recipients()
 
         logger.info("AlertEngine initialized with dispatchers: SES, FCM, Redis, Webhook, SMS(AT)")
 

@@ -11,13 +11,14 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from livestockguard_common.aws_config import load_jwt_secret
 from livestockguard_common.db_models import User
 from ..dependencies import get_db
 
 router = APIRouter()
 
 # Config
-JWT_SECRET = os.environ.get("JWT_SECRET", "dev_secret_change_in_production")
+JWT_SECRET = load_jwt_secret()
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 REFRESH_TOKEN_EXPIRE_DAYS = 7

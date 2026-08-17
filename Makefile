@@ -1,7 +1,7 @@
 # LivestockGuard — Development Makefile
 # Run `make help` for available commands
 
-.PHONY: help setup setup-frontend setup-frontend-web start stop restart status logs simulate test clean dev dev-no-mobile dev-backend demo demo-normal demo-theft demo-no-mobile demo-no-sim
+.PHONY: help setup setup-frontend setup-frontend-web start stop restart status logs simulate test clean dev dev-no-mobile dev-backend demo demo-normal demo-theft demo-no-mobile demo-no-sim aws-iam aws-secrets aws-setup aws-verify cloud9-bootstrap
 
 # Colours
 GREEN  := \033[32m
@@ -13,8 +13,8 @@ help: ## Show this help
 	@echo ""
 	@echo "$(CYAN)LivestockGuard Development Commands$(RESET)"
 	@echo "────────────────────────────────────────"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-18s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 
 # ─── SETUP ──────────────────────────────────────────
@@ -265,3 +265,25 @@ clean: ## Stop everything and remove volumes
 	rm -rf cloud/services/ingestion/target
 	rm -rf cloud/services/geofence_engine/target
 	@echo "$(GREEN)Clean!$(RESET)"
+
+# ─── AWS DEPLOYMENT (Sprint 7) ──────────────────────
+
+aws-iam: ## Phase 1: Create IAM policy, role, instance profile, verify SES
+	@echo "$(CYAN)Running AWS IAM setup (Phase 1)...$(RESET)"
+	@bash cloud/aws/setup-iam.sh
+
+aws-secrets: ## Phase 2: Store secrets in Secrets Manager + Parameter Store
+	@echo "$(CYAN)Running AWS Secrets setup (Phase 2)...$(RESET)"
+	@bash cloud/aws/setup-secrets.sh
+
+cloud9-bootstrap: ## Phase 3: Bootstrap Cloud9 dev environment (run ON Cloud9)
+	@echo "$(CYAN)Running Cloud9 bootstrap (Phase 3)...$(RESET)"
+	@bash cloud/aws/cloud9-bootstrap.sh
+
+aws-verify: ## Verify all AWS setup (IAM, Secrets, Toolchain)
+	@echo "$(CYAN)Verifying AWS setup...$(RESET)"
+	@bash cloud/aws/verify-setup.sh
+
+aws-setup: aws-iam aws-secrets ## Run Phase 1 + 2 together (from local machine)
+	@echo ""
+	@echo "$(GREEN)AWS Phases 1-2 complete. Next: create Cloud9 and run 'make cloud9-bootstrap'$(RESET)"

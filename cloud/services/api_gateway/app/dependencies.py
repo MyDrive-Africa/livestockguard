@@ -18,12 +18,13 @@ from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from livestockguard_common.aws_config import load_jwt_secret
 from livestockguard_common.database import async_session_factory
 from livestockguard_common.db_models import Farm, User, UserFarmAssignment
 
 # ─── Auth Configuration ───────────────────────────────
 
-JWT_SECRET = os.environ.get("JWT_SECRET", "dev_secret_change_in_production")
+JWT_SECRET = load_jwt_secret()
 JWT_ALGORITHM = "HS256"
 
 security = HTTPBearer(auto_error=False)

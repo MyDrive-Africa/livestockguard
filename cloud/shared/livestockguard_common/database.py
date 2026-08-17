@@ -8,10 +8,9 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL",
-    "postgresql+asyncpg://livestockguard:livestockguard_dev@localhost:5432/livestockguard",
-)
+from livestockguard_common.aws_config import load_database_url
+
+DATABASE_URL = load_database_url(driver="postgresql+asyncpg")
 
 engine = create_async_engine(
     DATABASE_URL,

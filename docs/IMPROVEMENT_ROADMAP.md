@@ -1,8 +1,9 @@
 # LivestockGuard — Improvement Roadmap
 
-> Last updated: 2026-08-16
+> Last updated: 2026-08-17
 > Notifications (SES, FCM, SMS) deferred until AWS IAM setup — see [AWS_CLOUD9_DEPLOYMENT_PLAN.md](AWS_CLOUD9_DEPLOYMENT_PLAN.md).
 > Sprint 1, 2, & 3 (documentation) complete.
+> Sprint 7 in progress — Phases 1-8 code/scripts delivered.
 
 ---
 
@@ -200,17 +201,21 @@
   - Root account hardening (MFA, no access keys)
   - IAM Identity Center (SSO) for team access
   - Separate AWS accounts or OUs: `dev`, `staging`, `prod`
-- [ ] IAM roles & policies (least-privilege)
-  - `LivestockGuard-APITask` — ECS task role: RDS access, SES send, S3 read, SSM params
-  - `LivestockGuard-MQTTWriter` — ECS task role: RDS access, IoT Core publish
-  - `LivestockGuard-AlertEngine` — ECS task role: SES send, FCM (Secrets Manager), SMS
-  - `LivestockGuard-AnalyticsEngine` — ECS task role: RDS access only
-  - `LivestockGuard-CI` — GitHub Actions OIDC: ECR push, ECS deploy, S3 sync
-  - `LivestockGuard-InfraAdmin` — Terraform/IaC: full provisioning scope
-- [ ] Secrets management
-  - Move `JWT_SECRET`, DB passwords, API keys to AWS Secrets Manager or SSM Parameter Store (SecureString)
-  - Firebase service account JSON → Secrets Manager
-  - Africa's Talking API key → Secrets Manager
+- [x] IAM roles & policies (least-privilege) — `cloud/aws/setup-iam.sh` + `policies/`
+  - `LivestockGuardServiceRole` — unified role for Cloud9 + ECS tasks
+  - `LivestockGuardServicePolicy` — SES, Secrets Manager, SSM, CloudWatch, ECR
+  - `LivestockGuardCloud9` instance profile
+- [x] Secrets management — `cloud/aws/setup-secrets.sh`
+  - JWT, Postgres, Firebase, Africa's Talking, Webhooks → Secrets Manager
+  - SES sender, region, recipients, cooldown, Redis, MQTT → Parameter Store
+- [x] AWS-aware config loader — `cloud/shared/livestockguard_common/aws_config.py`
+  - Auto-detects AWS vs local environment
+  - All services wired: API Gateway, Alert Engine, MQTT Writer
+  - Backward-compatible (env var fallback for local dev)
+- [x] Cloud9 development bootstrap — `cloud/aws/cloud9-bootstrap.sh`
+  - Disk resize, Rust, Node 20, Python 3.12, Docker, project clone
+  - IAM role verification
+- [x] Makefile targets — `make aws-iam`, `make aws-secrets`, `make cloud9-bootstrap`, `make aws-verify`
 - [ ] Infrastructure provisioning (Terraform or CDK)
   - VPC: private subnets (services), public subnets (ALB, NAT)
   - RDS PostgreSQL 16 (TimescaleDB) — Multi-AZ, private subnet, encrypted at rest
