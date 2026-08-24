@@ -18,10 +18,12 @@ import redis.asyncio as aioredis
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from jose import JWTError, jwt
 
+from livestockguard_common.aws_config import load_jwt_secret, load_redis_url
+
 router = APIRouter()
 
-REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-JWT_SECRET = os.environ.get("JWT_SECRET", "dev_secret_change_in_production")
+REDIS_URL = load_redis_url()
+JWT_SECRET = load_jwt_secret()
 JWT_ALGORITHM = "HS256"
 
 

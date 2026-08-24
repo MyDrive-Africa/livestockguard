@@ -22,13 +22,13 @@ import redis.asyncio as aioredis
 import click
 
 # Configuration
-MQTT_BROKER = os.environ.get("MQTT_BROKER", "localhost")
-MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL",
-    "postgresql://livestockguard:livestockguard_dev@localhost:5432/livestockguard"
-)
-REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+from livestockguard_common.aws_config import load_database_url, load_redis_url, load_mqtt_config
+
+_mqtt_config = load_mqtt_config()
+MQTT_BROKER = _mqtt_config["broker"]
+MQTT_PORT = _mqtt_config["port"]
+DATABASE_URL = load_database_url(driver="postgresql")
+REDIS_URL = load_redis_url()
 
 # Protocol constants
 PROTOCOL_VERSION = 0x01

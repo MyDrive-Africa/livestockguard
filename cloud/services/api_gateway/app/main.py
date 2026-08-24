@@ -45,12 +45,13 @@ async def lifespan(app: FastAPI):
     """Startup/shutdown events."""
     import logging
     from livestockguard_common.logging import setup_logging
+    from livestockguard_common.aws_config import load_jwt_secret, is_aws_environment
 
     setup_logging(service_name="api_gateway")
     logger = logging.getLogger("livestockguard.security")
 
     # JWT secret validation — refuse to start in production with the default secret
-    jwt_secret = os.environ.get("JWT_SECRET", "dev_secret_change_in_production")
+    jwt_secret = load_jwt_secret()
     environment = os.environ.get("ENVIRONMENT", "development").lower()
 
     if jwt_secret == "dev_secret_change_in_production":
