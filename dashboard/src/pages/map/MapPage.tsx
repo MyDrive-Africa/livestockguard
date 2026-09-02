@@ -24,7 +24,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { apiClient } from '@/api/client';
 import { useToastStore } from '@/stores/toastStore';
-import type { Farm } from '@/types';
+import type { Farm, BeamSensor } from '@/types';
 
 // Fallback centre (South Africa overview) — used only if no farm is selected
 const DEFAULT_CENTER: [number, number] = [27.5, -28.0];
@@ -88,7 +88,7 @@ const DEMO_ANIMALS = [
 ];
 
 type TileSource = keyof typeof TILE_SOURCES;
-type LayerToggle = 'animals' | 'geofences' | 'trails' | 'markers';
+type LayerToggle = 'animals' | 'geofences' | 'trails' | 'markers' | 'beams';
 
 export default function MapPage() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -101,7 +101,7 @@ export default function MapPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [tileSource, setTileSource] = useState<TileSource>('satellite');
   const [layers, setLayers] = useState<Record<LayerToggle, boolean>>({
-    animals: true, geofences: true, trails: false, markers: true,
+    animals: true, geofences: true, trails: false, markers: true, beams: true,
   });
   const [selectedAnimal, setSelectedAnimal] = useState<string | null>(null);
   const [trailData, setTrailData] = useState<[number, number][]>([]);
@@ -246,6 +246,7 @@ export default function MapPage() {
       await loadGeofencesForFarm(map, selectedFarmId);
       await fetchPositionsForFarm(map, selectedFarmId);
       await fetchHerdsmanPositions(map, selectedFarmId);
+      await fetchBeamsForFarm(map, selectedFarmId);
       addToast({ title: 'Refreshed', message: 'Dashboard data updated', severity: 'info', duration: 2000 });
     } finally {
       setRefreshing(false);
@@ -901,6 +902,127 @@ export default function MapPage() {
     fetchHerdsmanPositions(mapRef.current, selectedFarmId);
   }, [selectedFarmId, loading]);
 
+  // ─── Beam Sensor Perimeter Layer ───────────────────
+  // Physical break-beam sensors mounted at chokepoints along the border.
+  // Each beam is drawn as a guarded span line (if endpoints exist) plus a
+  // mount-point marker. Complements the polygon geofence — see
+  // docs/BEAM_SENSOR_PERIMETER_SPEC.md.
+  const beamMarkersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
+  const beamSpanIdsRef = useRef<string[]>([]);
+
+  const BEAM_STATUS_COLOR: Record<string, string> = {
+    active: '#dc2626', maintenance: '#f59e0b', fault: '#f59e0b', inactive: '#9ca3af',
+  };
+
+  function clearAllBeams(map: maplibregl.Map) {
+    beamSpanIdsRef.current.forEach((id) => {
+      const layerId = `beam-span-${id}`;
+      if (map.getLayer(layerId)) map.removeLayer(layerId);
+      if (map.getSource(`beam-span-${id}`)) map.removeSource(`beam-span-${id}`);
+    });
+    beamSpanIdsRef.current = [];
+    beamMarkersRef.current.forEach((m) => m.remove());
+    beamMarkersRef.current.clear();
+  }
+
+  async function fetchBeamsForFarm(map: maplibregl.Map, farmId: string) {
+    const fid = farmId || currentFarm || '';
+    if (!fid) return;
+    clearAllBeams(map);
+    try {
+      const resp = await apiClient.get('/api/v1/beam', { params: { farm_id: fid } });
+      const beams: BeamSensor[] = resp.data;
+      const spanIds: string[] = [];
+
+      beams.forEach((beam) => {
+        const color = BEAM_STATUS_COLOR[beam.status] || '#dc2626';
+
+        // Draw the guarded span line if both endpoints are present.
+        if (
+          beam.span_start_latitude != null && beam.span_start_longitude != null &&
+          beam.span_end_latitude != null && beam.span_end_longitude != null
+        ) {
+          const sourceId = `beam-span-${beam.id}`;
+          map.addSource(sourceId, {
+            type: 'geojson',
+            data: {
+              type: 'Feature',
+              properties: { name: beam.name },
+              geometry: {
+                type: 'LineString',
+                coordinates: [
+                  [beam.span_start_longitude, beam.span_start_latitude],
+                  [beam.span_end_longitude, beam.span_end_latitude],
+                ],
+              },
+            },
+          });
+          map.addLayer({
+            id: `beam-span-${beam.id}`,
+            type: 'line',
+            source: sourceId,
+            paint: { 'line-color': color, 'line-width': 3, 'line-dasharray': [2, 1] },
+          });
+          spanIds.push(beam.id);
+        }
+
+        // Mount-point marker (beam icon + name).
+        const el = document.createElement('div');
+        el.style.cssText = 'display:flex;flex-direction:column;align-items:center;pointer-events:auto;cursor:pointer;';
+        const battery = beam.last_battery_pct != null ? `${beam.last_battery_pct}%` : '—';
+        el.innerHTML = `
+          <div style="font-size:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));line-height:1;">📡</div>
+          <div style="font-size:9px;font-weight:bold;color:#fff;background:${color};padding:1px 5px;border-radius:3px;margin-top:-2px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.3);">${beam.name}</div>
+        `;
+        const popup = new maplibregl.Popup({ offset: 14 }).setHTML(`
+          <div style="padding:8px;max-width:220px;">
+            <strong style="color:${color};">📡 ${beam.name}</strong><br/>
+            <span style="font-size:12px;color:#666;">
+              Serial: ${beam.serial_number}<br/>
+              Type: ${beam.beam_type}<br/>
+              Status: <strong>${beam.status}</strong><br/>
+              On-crossing severity: ${beam.breach_severity}<br/>
+              Battery: ${battery}
+            </span>
+          </div>
+        `);
+        const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+          .setLngLat([beam.longitude, beam.latitude])
+          .setPopup(popup)
+          .addTo(map);
+        beamMarkersRef.current.set(beam.id, marker);
+      });
+
+      beamSpanIdsRef.current = spanIds;
+
+      // Respect the current layer toggle after (re)loading.
+      const vis = layers.beams ? 'visible' : 'none';
+      spanIds.forEach((id) => {
+        if (map.getLayer(`beam-span-${id}`)) map.setLayoutProperty(`beam-span-${id}`, 'visibility', vis);
+      });
+      beamMarkersRef.current.forEach((m) => { m.getElement().style.display = layers.beams ? 'flex' : 'none'; });
+    } catch {
+      // Beam endpoint unavailable — silently ignore, other layers still work.
+    }
+  }
+
+  // Load beams when farm changes
+  useEffect(() => {
+    if (!mapRef.current || !selectedFarmId || loading) return;
+    fetchBeamsForFarm(mapRef.current, selectedFarmId);
+  }, [selectedFarmId, loading]);
+
+  // ─── Beam Layer Visibility Toggle ──────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || loading) return;
+    const vis = layers.beams ? 'visible' : 'none';
+    beamSpanIdsRef.current.forEach((id) => {
+      if (map.getLayer(`beam-span-${id}`)) map.setLayoutProperty(`beam-span-${id}`, 'visibility', vis);
+    });
+    beamMarkersRef.current.forEach((m) => { m.getElement().style.display = layers.beams ? 'flex' : 'none'; });
+  }, [layers.beams, loading]);
+
   // ─── Breach Alert Markers ──────────────────────────
   const alertMarkersRef = useRef<maplibregl.Marker[]>([]);
 
@@ -1319,6 +1441,20 @@ export default function MapPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
               </svg>
               <span className="map-control-tooltip">Structures</span>
+            </button>
+            <button
+              onClick={() => toggleLayer('beams')}
+              className={`map-control-btn relative p-2 rounded-md transition-colors ${
+                layers.beams
+                  ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400'
+                  : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+              aria-label="Toggle beam sensors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+              </svg>
+              <span className="map-control-tooltip">Beam Sensors</span>
             </button>
             <button
               onClick={flyToHerdsman}

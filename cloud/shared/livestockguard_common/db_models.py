@@ -315,3 +315,62 @@ class HerdsmanSession(Base):
 
     gateway = relationship("GatewayDevice", back_populates="sessions")
     farm = relationship("Farm")
+
+
+# ─── Beam Sensor Perimeter Models (Migration 012) ────────────────────────────
+
+
+class BeamSensor(Base):
+    """Fixed perimeter break-beam sensor guarding one crossing line (gate/gap).
+
+    Unlike collars/ear tags this is NOT attached to an animal — like a gateway
+    it is a fixed-location device. It detects a line-crossing event rather than
+    polygon containment, complementing the virtual geofence.
+    """
+    __tablename__ = "beam_sensors"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    farm_id = Column(UUID(as_uuid=True), ForeignKey("farms.id", ondelete="CASCADE"), nullable=False)
+    geofence_id = Column(UUID(as_uuid=True), ForeignKey("geofences.id", ondelete="SET NULL"))
+    serial_number = Column(String(100), unique=True, nullable=False)
+    name = Column(String(255), nullable=False)
+    beam_type = Column(String(50), nullable=False, default="infrared")
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    span_start_latitude = Column(Float)
+    span_start_longitude = Column(Float)
+    span_end_latitude = Column(Float)
+    span_end_longitude = Column(Float)
+    orientation_deg = Column(Float)
+    span_length_m = Column(Float)
+    breach_severity = Column(String(20), nullable=False, default="high")
+    alert_on_crossing = Column(Boolean, nullable=False, default=True)
+    status = Column(String(50), nullable=False, default="active")
+    firmware_version = Column(String(50))
+    last_seen = Column(DateTime(timezone=True))
+    last_battery_pct = Column(Integer)
+    config = Column(JSONB, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+    farm = relationship("Farm")
+    geofence = relationship("Geofence")
+
+
+class BeamCrossing(Base):
+    """A single crossing event detected by a beam sensor — stored as time-series.
+
+    The beam usually cannot identify which animal crossed, so animal_id is
+    nullable and only set when a crossing is later attributed to a nearby
+    GPS/BLE position.
+    """
+    __tablename__ = "beam_crossings"
+
+    time = Column(DateTime(timezone=True), primary_key=True, nullable=False)
+    beam_sensor_id = Column(UUID(as_uuid=True), ForeignKey("beam_sensors.id", ondelete="CASCADE"), primary_key=True, nullable=False)
+    farm_id = Column(UUID(as_uuid=True), ForeignKey("farms.id", ondelete="CASCADE"), nullable=False)
+    direction = Column(String(10), nullable=False, default="unknown")
+    confidence = Column(Float)
+    animal_id = Column(UUID(as_uuid=True), ForeignKey("animals.id", ondelete="SET NULL"))
+    beam_battery_pct = Column(Integer)
+    metadata_ = Column("metadata", JSONB, nullable=False, default=dict)

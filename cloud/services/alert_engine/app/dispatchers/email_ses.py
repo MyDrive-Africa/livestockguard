@@ -43,6 +43,20 @@ EMAIL_TEMPLATES = {
             "https://app.livestockguard.co.za/alerts"
         ),
     },
+    "beam_crossing": {
+        "subject": "🚨 LivestockGuard: Perimeter Crossing Alert",
+        "body_template": (
+            "PERIMETER CROSSING DETECTED\n\n"
+            "A physical beam sensor on the farm border was triggered.\n\n"
+            "Sensor: {device_id}\n"
+            "Farm: {farm_id}\n"
+            "Time: {timestamp}\n\n"
+            "Details: {message}\n\n"
+            "Something crossed a guarded gate or fence gap. Verify against the\n"
+            "live map — a crossing near a GPS/BLE breach is a strong theft signal.\n"
+            "https://app.livestockguard.co.za/alerts"
+        ),
+    },
     "low_battery": {
         "subject": "⚠️ LivestockGuard: Low Battery Warning",
         "body_template": (

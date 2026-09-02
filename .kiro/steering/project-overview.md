@@ -62,7 +62,7 @@ livestockguard/
 ├── Makefile              # All dev commands (make help)
 ├── cloud/                # Docker Compose backend
 │   ├── docker-compose.yml
-│   ├── migrations/versions/  # SQL migrations (001–011)
+│   ├── migrations/versions/  # SQL migrations (001–012)
 │   └── services/
 │       ├── api_gateway/      # FastAPI REST + WebSocket
 │       ├── mqtt_writer/      # MQTT → TimescaleDB bridge
