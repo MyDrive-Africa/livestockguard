@@ -52,6 +52,7 @@ SMS_TEMPLATES = {
 ALERT_TYPE_DISPLAY = {
     "geofence_breach": "Geofence Breach",
     "theft_detected": "Theft Detected",
+    "beam_crossing": "Perimeter Crossing",
     "low_battery": "Low Battery",
     "device_offline": "Device Offline",
     "unusual_activity": "Unusual Activity",

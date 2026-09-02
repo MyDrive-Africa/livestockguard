@@ -12,14 +12,19 @@ from livestockguard_common.aws_config import load_database_url
 
 DATABASE_URL = load_database_url(driver="postgresql+asyncpg")
 
-engine = create_async_engine(
-    DATABASE_URL,
-    echo=False,
-    pool_size=20,
-    max_overflow=30,
-    pool_timeout=30,
-    pool_pre_ping=True,
-)
+# Connection-pool tuning applies to server-based databases (PostgreSQL).
+# SQLite (used by the in-memory test harness) does not accept these pool
+# arguments, so only pass them for non-SQLite URLs.
+_engine_kwargs: dict = {"echo": False}
+if not DATABASE_URL.startswith("sqlite"):
+    _engine_kwargs.update(
+        pool_size=20,
+        max_overflow=30,
+        pool_timeout=30,
+        pool_pre_ping=True,
+    )
+
+engine = create_async_engine(DATABASE_URL, **_engine_kwargs)
 
 async_session_factory = async_sessionmaker(
     engine,

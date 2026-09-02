@@ -679,7 +679,7 @@ The Gateway page on the web dashboard has a Start/Stop button that spawns simula
 
 PostgreSQL 16 with TimescaleDB extension for time-series data.
 
-### Schema Overview (11 migrations)
+### Schema Overview (12 migrations)
 
 | Migration | What It Creates |
 |-----------|----------------|
@@ -692,6 +692,10 @@ PostgreSQL 16 with TimescaleDB extension for time-series data.
 | 007_herdsman_gateway | gateway_devices, ble_ear_tags, ble_sightings (hypertable), herdsman_sessions |
 | 008_geofence_breach_severity | Severity levels on alerts (low, medium, high, critical) |
 | 009_farm_schedule_config | Farm schedule configuration (kraal open/close times, feed times) |
+| 010_analytics_intelligence | Baselines, anomalies, suggestions, reports |
+| 010_user_farm_assignments | RBAC farm assignments (which user can access which farm) |
+| 011_ble_estimated_position | Per-cow estimated position from BLE sightings |
+| 012_beam_sensors | beam_sensors (fixed perimeter break-beam devices), beam_crossings (hypertable) |
 
 ### Key Tables
 

@@ -132,7 +132,7 @@ make demo-no-sim        # Backend + dashboard + mobile, no simulators
 `make demo` starts **the entire platform** automatically with detailed step-by-step logging:
 1. Docker infrastructure (Postgres, Redis, EMQX, API, MQTT Writer, Alert Engine)
 2. Database migrations (all 12 files)
-3. Seeds database (3 farms, 65 animals, 13 geofences, 2 gateways, 60 BLE tags)
+3. Seeds database (3 farms, 65 animals, 13 geofences, 2 gateways, 60 BLE tags, 9 beam sensors)
 4. Verifies API health
 5. GPS simulator: Boschhoek Farm (5 animals, binary MQTT, Free State)
 6. BLE gateway simulator: Sibanyoni Farm (50 animals, herdsman day, North West)
@@ -316,6 +316,9 @@ Run `make help` to see all available commands. Full reference:
 | `make simulate-day-offline` | BLE full day: offline mode |
 | `make simulate-day-theft` | BLE theft scenario at 10:00 (Loch Vaal, speed 360x) |
 | `make simulate-day-breach` | BLE geofence breach (Loch Vaal, speed 360x) |
+| `make simulate-beam` | Beam sensors: Sibanyoni 50ha perimeter, 5 beams, ambient crossings |
+| `make simulate-beam-theft` | Beam crossing burst at the main gate (theft scenario) |
+| `make simulate-beam-offline` | Lay out perimeter beams without a live API (print only) |
 
 ### Dashboard & Mobile
 
@@ -453,7 +456,7 @@ livestockguard/
 │   ├── docker-compose.yml      # Infrastructure definition
 │   ├── .env.example            # Environment variable template
 │   ├── config/                 # Firebase credentials (not committed)
-│   ├── migrations/versions/    # SQL schema migrations (001–011)
+│   ├── migrations/versions/    # SQL schema migrations (001–012)
 │   └── services/
 │       ├── api_gateway/        # FastAPI REST + WebSocket (Python)
 │       ├── mqtt_writer/        # MQTT → TimescaleDB bridge (Python)

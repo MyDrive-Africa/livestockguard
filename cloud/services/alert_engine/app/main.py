@@ -57,6 +57,7 @@ class AlertSeverity(str, Enum):
 class AlertType(str, Enum):
     GEOFENCE_BREACH = "geofence_breach"
     THEFT_DETECTED = "theft_detected"
+    BEAM_CROSSING = "beam_crossing"
     LOW_BATTERY = "low_battery"
     DEVICE_OFFLINE = "device_offline"
     UNUSUAL_ACTIVITY = "unusual_activity"

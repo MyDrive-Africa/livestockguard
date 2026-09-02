@@ -107,6 +107,18 @@ simulate-gateway-offline: ## Run gateway simulator without API (print only)
 	@echo "$(GREEN)Starting gateway simulator (offline mode)...$(RESET)"
 	cd tools/simulator && python3 gateway_simulator.py --farm lochvaal --animals 10 --offline
 
+simulate-beam: ## Run beam sensor simulator (Sibanyoni 50ha perimeter, 5 beams)
+	@echo "$(GREEN)Starting beam sensor simulator (Sibanyoni perimeter)...$(RESET)"
+	cd tools/simulator && python3 beam_simulator.py --farm sibanyoni --beams 5
+
+simulate-beam-theft: ## Run beam simulator with a theft crossing burst at the main gate
+	@echo "$(YELLOW)Starting beam sensor THEFT scenario (Sibanyoni gate)...$(RESET)"
+	cd tools/simulator && python3 beam_simulator.py --farm sibanyoni --beams 5 --scenario theft
+
+simulate-beam-offline: ## Lay out beam sensors without a live API (print only)
+	@echo "$(GREEN)Starting beam simulator (offline mode)...$(RESET)"
+	cd tools/simulator && python3 beam_simulator.py --farm sibanyoni --beams 5 --offline
+
 simulate-day: ## Simulate full herdsman day at Loch Vaal (12h in 6min)
 	@echo "$(GREEN)Starting herdsman daily routine simulation...$(RESET)"
 	cd tools/simulator && python3 gateway_daily_sim.py --speed 120

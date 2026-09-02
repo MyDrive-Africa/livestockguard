@@ -642,3 +642,87 @@ ON CONFLICT (user_id, farm_id) DO NOTHING;
 INSERT INTO user_farm_assignments (user_id, farm_id, role_at_farm) VALUES
     ('dddddddd-1111-2222-3333-666666666666', 'dddddddd-1111-2222-3333-555555555555', 'farm_owner')
 ON CONFLICT (user_id, farm_id) DO NOTHING;
+
+-- ═══════════════════════════════════════════════════════════════════
+-- BEAM SENSORS (Perimeter Layer — Migration 012)
+-- Physical break-beam sensors at chokepoints along each farm's border.
+-- Complements the virtual geofence: the polygon watches the area, the
+-- beams watch the gaps (gates, kraal entrances, fence gaps).
+-- span_* endpoints are the two posts of the guarded line; the `span`
+-- LINESTRING is derived so the dashboard can draw the guarded span.
+-- See docs/BEAM_SENSOR_PERIMETER_SPEC.md
+-- ═══════════════════════════════════════════════════════════════════
+
+-- ── Boschhoek Farm (Free State) — paddocks span lon 26.200–26.220 ──
+INSERT INTO beam_sensors (id, farm_id, geofence_id, serial_number, name, beam_type,
+    latitude, longitude, span_start_latitude, span_start_longitude,
+    span_end_latitude, span_end_longitude, orientation_deg, span_length_m,
+    breach_severity, alert_on_crossing, status, last_battery_pct) VALUES
+    ('beebeeee-0000-0000-0000-0000000b0001', '22222222-2222-2222-2222-222222222222',
+     NULL, 'BEAM-BH-001', 'Main Gate Beam', 'microwave',
+     -29.1175, 26.2200, -29.1172, 26.2200, -29.1178, 26.2200, 90, 6.7,
+     'critical', true, 'active', 96),
+    ('beebeeee-0000-0000-0000-0000000b0002', '22222222-2222-2222-2222-222222222222',
+     '66666666-6666-6666-6666-666666666601', 'BEAM-BH-002', 'Paddock North Gate', 'infrared',
+     -29.1100, 26.2100, -29.1100, 26.2097, -29.1100, 26.2103, 0, 5.8,
+     'high', true, 'active', 88)
+ON CONFLICT DO NOTHING;
+
+-- ── Loch Vaal Plot 30 (Gauteng) — kraal ~27.7093/-26.7189, yard 27.70876–27.71076 ──
+INSERT INTO beam_sensors (id, farm_id, geofence_id, serial_number, name, beam_type,
+    latitude, longitude, span_start_latitude, span_start_longitude,
+    span_end_latitude, span_end_longitude, orientation_deg, span_length_m,
+    breach_severity, alert_on_crossing, status, last_battery_pct) VALUES
+    ('beebeeee-0000-0000-0000-000000010001', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+     'ffffffff-ffff-ffff-ffff-fffffffffff1', 'BEAM-LV-001', 'Kraal Entrance Beam', 'infrared',
+     -26.71879, 27.70976, -26.71876, 27.70976, -26.71882, 27.70976, 90, 6.7,
+     'critical', true, 'active', 92),
+    ('beebeeee-0000-0000-0000-000000010002', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+     'ffffffff-ffff-ffff-ffff-fffffffffff2', 'BEAM-LV-002', 'Yard Gate Beam', 'microwave',
+     -26.71809, 27.70976, -26.71806, 27.70976, -26.71812, 27.70976, 90, 6.7,
+     'high', true, 'active', 79)
+ON CONFLICT DO NOTHING;
+
+-- ── Sibanyoni Farm (North West) — 60ha boundary lon 25.3506–25.3583, lat -25.3545566..-25.3615634 ──
+INSERT INTO beam_sensors (id, farm_id, geofence_id, serial_number, name, beam_type,
+    latitude, longitude, span_start_latitude, span_start_longitude,
+    span_end_latitude, span_end_longitude, orientation_deg, span_length_m,
+    breach_severity, alert_on_crossing, status, last_battery_pct) VALUES
+    -- Main gate on the west boundary edge
+    ('beebeeee-0000-0000-0000-00000005b001', 'dddddddd-1111-2222-3333-555555555555',
+     'dddddddd-1111-2222-3333-990000000020', 'BEAM-SB-001', 'Main Gate Beam', 'microwave',
+     -25.3580560, 25.3506000, -25.3577000, 25.3506000, -25.3584000, 25.3506000, 90, 7.8,
+     'critical', true, 'active', 97),
+    -- Kraal entrance (near farm centre)
+    ('beebeeee-0000-0000-0000-00000005b002', 'dddddddd-1111-2222-3333-555555555555',
+     'dddddddd-1111-2222-3333-990000000021', 'BEAM-SB-002', 'Kraal Entrance Beam', 'infrared',
+     -25.3580560, 25.3544500, -25.3577500, 25.3544500, -25.3583500, 25.3544500, 90, 6.7,
+     'critical', true, 'active', 90),
+    -- North fence gap
+    ('beebeeee-0000-0000-0000-00000005b003', 'dddddddd-1111-2222-3333-555555555555',
+     'dddddddd-1111-2222-3333-990000000020', 'BEAM-SB-003', 'North Fence Gap', 'infrared',
+     -25.3545566, 25.3544500, -25.3545566, 25.3541500, -25.3545566, 25.3547500, 0, 6.0,
+     'high', true, 'active', 84),
+    -- East boundary loading point
+    ('beebeeee-0000-0000-0000-00000005b004', 'dddddddd-1111-2222-3333-555555555555',
+     'dddddddd-1111-2222-3333-990000000020', 'BEAM-SB-004', 'East Loading Point', 'microwave',
+     -25.3580560, 25.3583000, -25.3577000, 25.3583000, -25.3584000, 25.3583000, 90, 7.8,
+     'high', true, 'active', 71),
+    -- South drainage line gap
+    ('beebeeee-0000-0000-0000-00000005b005', 'dddddddd-1111-2222-3333-555555555555',
+     'dddddddd-1111-2222-3333-990000000020', 'BEAM-SB-005', 'South Drainage Beam', 'infrared',
+     -25.3615634, 25.3544500, -25.3615634, 25.3541500, -25.3615634, 25.3547500, 0, 6.0,
+     'medium', true, 'active', 88)
+ON CONFLICT DO NOTHING;
+
+-- Derive the `span` LINESTRING geography from the endpoints so the dashboard
+-- can render the guarded spans on the map.
+UPDATE beam_sensors
+SET span = ST_SetSRID(ST_MakeLine(
+        ST_MakePoint(span_start_longitude, span_start_latitude),
+        ST_MakePoint(span_end_longitude, span_end_latitude)
+    ), 4326)::geography
+WHERE span IS NULL
+  AND span_start_latitude IS NOT NULL AND span_end_latitude IS NOT NULL;
+
+DO $$ BEGIN RAISE NOTICE 'Beam sensors seeded: Boschhoek (2), Loch Vaal (2), Sibanyoni (5)'; END $$;

@@ -19,11 +19,16 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-# Ensure shared lib is importable
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'shared'))
+# Ensure shared lib is importable.
+# conftest is at cloud/services/api_gateway/tests/ — the shared package lives at
+# cloud/shared, i.e. three levels up (tests → api_gateway → services → cloud) then shared.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'shared'))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from livestockguard_common.db_models import Base, Organisation, Farm, User, Animal, Device, Geofence, Alert
+from livestockguard_common.db_models import (
+    Base, Organisation, Farm, User, Animal, Device, Geofence, Alert,
+    BeamSensor, BeamCrossing,
+)
 from app.dependencies import get_db, get_current_user
 
 # Pre-computed bcrypt hash for "password123" — avoids runtime dependency on passlib+bcrypt

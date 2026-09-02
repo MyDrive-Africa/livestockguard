@@ -393,6 +393,7 @@ Located in `cloud/migrations/versions/`. Applied automatically via Docker init s
 010_analytics_intelligence.sql  — Baselines, anomalies, suggestions, reports
 010_user_farm_assignments.sql   — RBAC farm assignments
 011_ble_estimated_position.sql  — Estimated position from BLE sightings
+012_beam_sensors.sql            — Beam sensors + beam_crossings (perimeter layer)
 ```
 
 ### Useful Commands

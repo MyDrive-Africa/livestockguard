@@ -37,6 +37,7 @@ SEVERITY_PRIORITY = {
 ALERT_DISPLAY = {
     "geofence_breach": {"icon": "fence_alert", "color": "#ea580c"},
     "theft_detected": {"icon": "theft_alert", "color": "#dc2626"},
+    "beam_crossing": {"icon": "beam_alert", "color": "#dc2626"},
     "low_battery": {"icon": "battery_low", "color": "#f59e0b"},
     "device_offline": {"icon": "device_offline", "color": "#6b7280"},
     "unusual_activity": {"icon": "activity_alert", "color": "#8b5cf6"},
@@ -207,6 +208,7 @@ class FCMPushDispatcher:
         titles = {
             "geofence_breach": "Geofence Breach",
             "theft_detected": "THEFT ALERT",
+            "beam_crossing": "Perimeter Crossing",
             "low_battery": "Low Battery Warning",
             "device_offline": "Device Offline",
             "unusual_activity": "Unusual Activity",

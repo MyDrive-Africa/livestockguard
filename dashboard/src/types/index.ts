@@ -102,3 +102,26 @@ export interface PositionUpdatePayload {
 }
 
 export interface AlertCreatedPayload extends Alert {}
+
+// Beam sensor perimeter layer
+export interface BeamSensor {
+  id: string;
+  farm_id: string;
+  geofence_id?: string | null;
+  serial_number: string;
+  name: string;
+  beam_type: 'infrared' | 'microwave' | 'laser';
+  latitude: number;
+  longitude: number;
+  span_start_latitude?: number | null;
+  span_start_longitude?: number | null;
+  span_end_latitude?: number | null;
+  span_end_longitude?: number | null;
+  orientation_deg?: number | null;
+  span_length_m?: number | null;
+  breach_severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  alert_on_crossing: boolean;
+  status: 'active' | 'inactive' | 'maintenance' | 'fault';
+  last_seen?: string | null;
+  last_battery_pct?: number | null;
+}
