@@ -63,6 +63,7 @@ class AlertType(str, Enum):
     UNUSUAL_ACTIVITY = "unusual_activity"
     TEMPERATURE_ALERT = "temperature_alert"
     NO_MOVEMENT = "no_movement"
+    ANIMAL_MISSING = "animal_missing"
 
 
 class NotificationChannel(str, Enum):

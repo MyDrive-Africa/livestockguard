@@ -22,6 +22,7 @@ from app.jobs.baseline_builder import run_baseline_builder
 from app.jobs.anomaly_detector import run_anomaly_detector
 from app.jobs.suggestion_engine import run_suggestion_engine
 from app.jobs.report_generator import run_report_generator
+from app.jobs.missing_animal_detector import run_missing_animal_detector
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,6 +38,7 @@ async def run_full_analysis():
     try:
         await run_baseline_builder()
         await run_anomaly_detector()
+        await run_missing_animal_detector()
         await run_suggestion_engine()
         await run_report_generator()
         logger.info("Full analysis pipeline complete.")
@@ -63,6 +65,16 @@ def create_scheduler() -> AsyncIOScheduler:
         IntervalTrigger(hours=config.ANOMALY_CHECK_INTERVAL_HOURS),
         id="anomaly_detector",
         name="Anomaly Detector",
+        replace_existing=True,
+    )
+
+    # Missing-animal detector — short interval so undetected stock raises a
+    # major alert quickly (independent of the 2-hourly anomaly cycle).
+    scheduler.add_job(
+        run_missing_animal_detector,
+        IntervalTrigger(minutes=config.MISSING_ALERT_CHECK_INTERVAL_MINUTES),
+        id="missing_animal_detector",
+        name="Missing Animal Detector",
         replace_existing=True,
     )
 
@@ -103,6 +115,8 @@ async def main():
     logger.info(f" Started: {datetime.now(timezone.utc).isoformat()}")
     logger.info(f" Baseline window: {config.BASELINE_WINDOW_DAYS} days")
     logger.info(f" Anomaly check: every {config.ANOMALY_CHECK_INTERVAL_HOURS}h")
+    logger.info(f" Missing-animal check: every {config.MISSING_ALERT_CHECK_INTERVAL_MINUTES}m "
+                f"(threshold {config.MISSING_ALERT_THRESHOLD_HOURS}h, severity {config.MISSING_ALERT_SEVERITY})")
     logger.info(f" Daily report: {config.DAILY_REPORT_HOUR}:00 SAST")
     logger.info(f" Run on startup: {config.RUN_ON_STARTUP}")
     logger.info("=" * 60)

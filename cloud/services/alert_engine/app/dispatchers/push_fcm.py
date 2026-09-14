@@ -42,6 +42,7 @@ ALERT_DISPLAY = {
     "device_offline": {"icon": "device_offline", "color": "#6b7280"},
     "unusual_activity": {"icon": "activity_alert", "color": "#8b5cf6"},
     "no_movement": {"icon": "no_movement", "color": "#3b82f6"},
+    "animal_missing": {"icon": "animal_missing", "color": "#dc2626"},
 }
 
 
@@ -215,6 +216,7 @@ class FCMPushDispatcher:
             "device_offline": "Device Offline",
             "unusual_activity": "Unusual Activity",
             "no_movement": "No Movement Detected",
+            "animal_missing": "Animal Missing",
         }
         prefix = "🚨 " if event.severity.value in ("critical", "high") else "⚠️ "
         title = titles.get(event.alert_type.value, event.alert_type.value.replace("_", " ").title())

@@ -1,7 +1,7 @@
 # LivestockGuard — Development Makefile
 # Run `make help` for available commands
 
-.PHONY: help setup setup-frontend setup-frontend-web start stop restart status logs simulate test clean dev dev-no-mobile dev-backend demo demo-normal demo-theft demo-no-mobile demo-no-sim aws-iam aws-secrets aws-setup aws-verify cloud9-bootstrap
+.PHONY: help setup setup-frontend setup-frontend-web start stop restart status logs simulate test clean dev dev-no-mobile dev-backend demo demo-normal demo-theft demo-no-mobile demo-no-sim demo-missing-alert sim-setup aws-iam aws-secrets aws-setup aws-verify cloud9-bootstrap
 
 # Colours
 GREEN  := \033[32m
@@ -87,6 +87,15 @@ db-reset: ## Reset database (WARNING: destroys all data)
 	$(MAKE) db-seed
 
 # ─── SIMULATOR ──────────────────────────────────────
+
+demo-missing-alert: ## Demo: feed Loch Vaal detections, leave Sibanyoni dark, then fire critical "animal missing" alerts (stack must be up)
+	@bash scripts/demo-missing-alert.sh
+
+sim-setup: ## Create the simulator Python venv and install its dependencies
+	@echo "$(CYAN)Setting up simulator venv (tools/simulator/.venv)...$(RESET)"
+	@python3 -m venv tools/simulator/.venv
+	@tools/simulator/.venv/bin/pip install --quiet -r tools/simulator/requirements.txt
+	@echo "$(GREEN)Simulator venv ready.$(RESET)"
 
 simulate: ## Run device simulator (Boschhoek, 5 animals)
 	@echo "$(GREEN)Starting device simulator (Boschhoek Farm)...$(RESET)"

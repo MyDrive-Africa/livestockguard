@@ -98,6 +98,7 @@ services:
       dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgresql+asyncpg://livestockguard:${POSTGRES_PASSWORD:-livestockguard_dev}@postgres:5432/livestockguard
+      REDIS_URL: redis://redis:6379/0
       RUN_ON_STARTUP: "true"
       BASELINE_WINDOW_DAYS: "7"
       ANOMALY_CHECK_INTERVAL_HOURS: "2"
@@ -105,8 +106,14 @@ services:
       REDUCED_MOVEMENT_Z_THRESHOLD: "-2.0"
       ISOLATION_HOURS_THRESHOLD: "4"
       PATROL_GAP_DAYS_THRESHOLD: "3"
+      MISSING_ALERT_CHECK_INTERVAL_MINUTES: "15"
+      MISSING_ALERT_THRESHOLD_HOURS: "6"
+      MISSING_ALERT_SEVERITY: "critical"
+      MISSING_ALERT_ON_NEVER_SEEN: "false"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
 
