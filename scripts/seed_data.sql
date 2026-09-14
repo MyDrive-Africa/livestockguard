@@ -726,3 +726,16 @@ WHERE span IS NULL
   AND span_start_latitude IS NOT NULL AND span_end_latitude IS NOT NULL;
 
 DO $$ BEGIN RAISE NOTICE 'Beam sensors seeded: Boschhoek (2), Loch Vaal (2), Sibanyoni (5)'; END $$;
+
+-- ─── Farm schedules ─────────────────────────────────────────────────────────
+-- Default daily routine for Loch Vaal. Moved here from migration 009 so it runs
+-- after the farms exist (migrations run before any farm rows are seeded, which
+-- previously caused a FK error that aborted the init migration chain).
+-- The farm_schedule table itself is created by migration 009; other farms fall
+-- back to the table's column defaults until an admin configures them.
+INSERT INTO farm_schedule (farm_id, kraal_open_time, exit_gate_time, return_start_time, kraal_settle_time)
+SELECT 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '08:30', '09:20', '16:30', '17:45'
+WHERE EXISTS (SELECT 1 FROM farms WHERE id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb')
+ON CONFLICT (farm_id) DO NOTHING;
+
+DO $$ BEGIN RAISE NOTICE 'Farm schedule seeded: Loch Vaal default daily routine'; END $$;
