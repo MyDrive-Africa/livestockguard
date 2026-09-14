@@ -21,5 +21,17 @@ firebase-credentials.json
 
 # Mobile (Expo / React Native)
 mobile/.expo/
-mobile/ios/
-mobile/android/
+
+# Native projects are tracked (they carry the Xcode 26 / fmt consteval fix in
+# ios/Podfile), but their build output and downloaded dependencies are not.
+mobile/ios/Pods/
+mobile/ios/build/
+mobile/ios/*.xcworkspace/xcuserdata/
+mobile/ios/*.xcodeproj/xcuserdata/
+mobile/ios/DerivedData/
+mobile/android/.gradle/
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/.cxx/
+mobile/android/local.properties
+mobile/android/app/.cxx/

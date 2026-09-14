@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-09-14 — Migration Ordering Fix (fresh-DB reliability)
+
+### Problem
+
+On a fresh database, `cloud/docker-compose.yml` mounts `migrations/versions/` into
+Postgres `/docker-entrypoint-initdb.d`, which runs every `*.sql` at init in filename
+order. Migration `009_farm_schedule_config.sql` seeded a `farm_schedule` row for the
+Loch Vaal farm (`bbbb…`) that does not exist until `scripts/seed_data.sql` runs later.
+The resulting foreign-key error aborted the init chain, so migrations `010`–`013` never
+applied — leaving `beam_sensors`, `herding_robots`, and `ble_estimated_position` missing
+and the `herding_orchestrator` service crash-looping on `relation "herding_robots" does not exist`.
+
+### Fixes
+
+- `009_farm_schedule_config.sql`: the Loch Vaal seed `INSERT` is now guarded with
+  `DO $$ IF EXISTS (SELECT 1 FROM farms WHERE id = …) $$`, so it is a no-op on a fresh
+  DB instead of aborting the migration chain.
+- `scripts/seed_data.sql`: the Loch Vaal default schedule seed moved here (guarded with
+  `WHERE EXISTS (… farms …)` + `ON CONFLICT (farm_id) DO NOTHING`), so it runs after farms exist.
+- Renamed `010_user_farm_assignments.sql` → `010b_user_farm_assignments.sql` to remove a
+  duplicate `010_` prefix and make init order deterministic
+  (`010_analytics_intelligence` → `010b_user_farm_assignments` → `011` → `012` → `013`).
+
+### Verification
+
+`docker compose down -v && docker compose up -d` on fresh volumes applied all migrations
+`001`–`013` in order with no errors; seeding produced 3 farms, 65 animals, 23 geofences,
+9 beam sensors, 8 robots, and 1 farm schedule; `herding_orchestrator` runs its control
+loop cleanly. No manual migration steps are needed anymore.
+
 ## 2026-08-11 — Mobile BLE Scanner Fix & API Path Migration
 
 ### BLE Scanner — Zero Animals Fix (`mobile/src/services/bleScanner.ts`)
