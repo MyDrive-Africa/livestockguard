@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Platform, TouchableOpacity, ScrollView } from 'react-native';
-import MapView, { Marker, Polygon, Polyline, Region } from 'react-native-maps';
-import { api } from '../services/api';
+import { View, Text, StyleSheet, Platform, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import MapView, { Marker, Polygon, Polyline, Circle, Region } from 'react-native-maps';
+import { api, getRobots, getHerdingStatus, sendRobotCommand, stopAllRobots, Robot, HerdingStatus } from '../services/api';
 import { useFarm } from '../context/FarmContext';
 
 interface AnimalPosition {
@@ -21,6 +21,20 @@ interface Geofence {
   fence_type: string;
   area_hectares?: number;
   geometry?: { type: string; coordinates: number[][][] };
+  // Boundary shape (migration 013). For 'circle', centre + radius is authoritative.
+  shape?: string;
+  center_latitude?: number;
+  center_longitude?: number;
+  radius_m?: number;
+  buffer_m?: number;
+}
+
+/** Marker tint by robot status — active states are pink, idle purple, muted greys. */
+function robotTint(status?: string): string {
+  if (status === 'charging') return '#c4b5fd';
+  if (status === 'fault' || status === 'offline') return '#9ca3af';
+  if (status === 'shepherding' || status === 'enroute') return '#db2777';
+  return '#a855f7';
 }
 
 interface GatewayPosition {
@@ -59,6 +73,15 @@ export default function MapScreen() {
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [herdsmanInfoVisible, setHerdsmanInfoVisible] = useState(false);
   const [focusedHerdsman, setFocusedHerdsman] = useState<GatewayPosition | null>(null);
+  // Robotic herdsman
+  const [robots, setRobots] = useState<Robot[]>([]);
+  const [herding, setHerding] = useState<HerdingStatus | null>(null);
+  const [showRobots, setShowRobots] = useState(true);
+  const [showHerdingPanel, setShowHerdingPanel] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [selectedRobot, setSelectedRobot] = useState<string | null>(null);  // serial_number
+  const [sendHereMode, setSendHereMode] = useState(false);
+  const [robotBusy, setRobotBusy] = useState(false);
 
   const fetchData = async () => {
     if (!selectedFarm) return;
@@ -73,6 +96,99 @@ export default function MapScreen() {
       setGateways(gatewaysResp.data);
     } catch (err) {
       console.warn('Failed to fetch map data:', err);
+    }
+    // Robots are optional (not every farm has a fleet) — fetch separately so a
+    // failure here never blanks the rest of the map.
+    try {
+      const [fleet, status] = await Promise.all([
+        getRobots(selectedFarm.id),
+        getHerdingStatus(selectedFarm.id),
+      ]);
+      setRobots(fleet);
+      setHerding(status);
+    } catch (err) {
+      console.warn('Failed to fetch herding fleet:', err);
+      setRobots([]);
+      setHerding(null);
+    }
+  };
+
+  /** Emergency stop for the whole fleet — confirm first (safety-critical). */
+  const handleStopAll = () => {
+    if (!selectedFarm) return;
+    Alert.alert(
+      'Stop all robots?',
+      'This halts every herding robot on this farm immediately.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'STOP ALL',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setStopping(true);
+              const res = await stopAllRobots(selectedFarm.id);
+              await fetchData();
+              Alert.alert('Fleet halted', `Stop sent to ${res.commands_published}/${res.robots} robots.`);
+            } catch {
+              Alert.alert('Error', 'Could not reach the fleet. Check the connection and try again.');
+            } finally {
+              setStopping(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const focusedRobot = robots.find(r => r.serial_number === selectedRobot) ?? null;
+
+  /** Select a robot (tapping its marker) and centre the map on it. */
+  const selectRobot = (r: Robot) => {
+    setSelectedRobot(prev => (prev === r.serial_number ? null : r.serial_number));
+    setSendHereMode(false);
+    if (r.last_latitude != null && r.last_longitude != null) {
+      mapRef.current?.animateToRegion({
+        latitude: r.last_latitude,
+        longitude: r.last_longitude,
+        latitudeDelta: 0.004,
+        longitudeDelta: 0.004,
+      }, 600);
+    }
+  };
+
+  /**
+   * Issue a manual override to the selected robot. `move_to` is handled via
+   * "send here" mode (tap the map), so this covers return_home / patrol / stop.
+   */
+  const handleRobotCommand = async (
+    command: 'return_home' | 'patrol' | 'stop',
+  ) => {
+    if (!focusedRobot) return;
+    try {
+      setRobotBusy(true);
+      await sendRobotCommand(focusedRobot.serial_number, command);
+      await fetchData();
+    } catch {
+      Alert.alert('Error', `Could not send "${command}" to ${focusedRobot.name}.`);
+    } finally {
+      setRobotBusy(false);
+    }
+  };
+
+  /** Dispatch the selected robot to a tapped map coordinate (move_to). */
+  const handleMapPress = async (lat: number, lon: number) => {
+    if (!sendHereMode || !focusedRobot) return;
+    setSendHereMode(false);
+    try {
+      setRobotBusy(true);
+      await sendRobotCommand(focusedRobot.serial_number, 'move_to', { latitude: lat, longitude: lon });
+      await fetchData();
+      Alert.alert('On the way', `${focusedRobot.name} dispatched to ${lat.toFixed(5)}, ${lon.toFixed(5)}.`);
+    } catch {
+      Alert.alert('Error', `Could not dispatch ${focusedRobot.name}.`);
+    } finally {
+      setRobotBusy(false);
     }
   };
 
@@ -185,6 +301,12 @@ export default function MapScreen() {
         showsUserLocation={false}
         showsCompass={true}
         showsScale={true}
+        onPress={(e) => {
+          if (sendHereMode) {
+            const { latitude, longitude } = e.nativeEvent.coordinate;
+            handleMapPress(latitude, longitude);
+          }
+        }}
       >
         {/* Farm centre location pin 📍 */}
         {selectedFarm?.latitude && selectedFarm?.longitude && (
@@ -330,6 +452,58 @@ export default function MapScreen() {
             </View>
           </Marker>
         ))}
+
+        {/* Robotic herdsman — circular containment boundary + inner buffer band */}
+        {showRobots && geofences
+          .filter(f => f.shape === 'circle' && f.center_latitude != null && f.center_longitude != null && f.radius_m)
+          .map((f) => {
+            const center = { latitude: f.center_latitude!, longitude: f.center_longitude! };
+            const buffer = f.buffer_m ?? 0;
+            return (
+              <React.Fragment key={`boundary-${f.id}`}>
+                <Circle
+                  center={center}
+                  radius={f.radius_m!}
+                  strokeColor="#a855f7"
+                  fillColor="rgba(168,85,247,0.06)"
+                  strokeWidth={2}
+                />
+                {buffer > 0 && (
+                  <Circle
+                    center={center}
+                    radius={Math.max(1, f.radius_m! - buffer)}
+                    strokeColor="#f59e0b"
+                    fillColor="rgba(0,0,0,0)"
+                    strokeWidth={1}
+                  />
+                )}
+              </React.Fragment>
+            );
+          })}
+
+        {/* Herding robot markers — purple 🤖 pin, tinted by status */}
+        {showRobots && robots
+          .filter(r => r.last_latitude != null && r.last_longitude != null)
+          .map((r) => (
+            <Marker
+              key={`robot-${r.id}`}
+              coordinate={{ latitude: r.last_latitude!, longitude: r.last_longitude! }}
+              anchor={{ x: 0.5, y: 0.5 }}
+              tracksViewChanges={false}
+              onPress={() => selectRobot(r)}
+            >
+              <View style={[
+                styles.robotPin,
+                { backgroundColor: robotTint(r.status) },
+                selectedRobot === r.serial_number && styles.robotPinSelected,
+              ]}>
+                <Text style={styles.robotEmoji}>🤖</Text>
+              </View>
+              <View style={styles.robotLabel}>
+                <Text style={styles.robotLabelText}>{r.name} · {r.battery_pct ?? '?'}%</Text>
+              </View>
+            </Marker>
+          ))}
       </MapView>
 
       {/* Map type switcher */}
@@ -475,9 +649,127 @@ export default function MapScreen() {
         </View>
       )}
 
+      {/* Send-here mode banner — active while waiting for a map tap */}
+      {sendHereMode && focusedRobot && (
+        <View style={styles.sendHereBanner}>
+          <Text style={styles.sendHereBannerText}>
+            Tap the map to send {focusedRobot.name} there
+          </Text>
+          <TouchableOpacity onPress={() => setSendHereMode(false)}>
+            <Text style={styles.sendHereBannerCancel}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Per-robot action card — manual override commands */}
+      {focusedRobot && (
+        <View style={styles.robotCard}>
+          <View style={styles.robotCardHeader}>
+            <View style={[styles.robotCardDot, { backgroundColor: robotTint(focusedRobot.status) }]} />
+            <Text style={styles.robotCardName}>{focusedRobot.name}</Text>
+            <TouchableOpacity onPress={() => { setSelectedRobot(null); setSendHereMode(false); }}>
+              <Text style={styles.robotCardClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.robotCardDetail}>
+            {focusedRobot.serial_number} · {focusedRobot.model} · {focusedRobot.status} · 🔋 {focusedRobot.battery_pct ?? '?'}%
+          </Text>
+          <View style={styles.robotCardActions}>
+            <TouchableOpacity
+              style={[styles.robotActionBtn, sendHereMode && styles.robotActionBtnActive]}
+              disabled={robotBusy}
+              onPress={() => setSendHereMode(v => !v)}
+            >
+              <Text style={styles.robotActionText}>📍 Send here</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.robotActionBtn}
+              disabled={robotBusy}
+              onPress={() => handleRobotCommand('return_home')}
+            >
+              <Text style={styles.robotActionText}>🏠 Return</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.robotActionBtn}
+              disabled={robotBusy}
+              onPress={() => handleRobotCommand('patrol')}
+            >
+              <Text style={styles.robotActionText}>🔄 Patrol</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.robotActionBtn, styles.robotActionBtnStop]}
+              disabled={robotBusy}
+              onPress={() => handleRobotCommand('stop')}
+            >
+              <Text style={styles.robotActionText}>⛔ Stop</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Herding fleet button — only shown when this farm has a robot fleet */}
+      {robots.length > 0 && (
+        <TouchableOpacity
+          style={[styles.herdingBtn, showHerdingPanel && styles.herdingBtnActive]}
+          onPress={() => setShowHerdingPanel(v => !v)}
+          accessibilityLabel="Robotic herdsman fleet"
+        >
+          <Text style={styles.herdingIcon}>🤖</Text>
+          <Text style={styles.herdingLabel}>Fleet</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Herding fleet panel — status summary + layer toggle + STOP ALL */}
+      {showHerdingPanel && robots.length > 0 && (
+        <View style={styles.herdingPanel}>
+          <View style={styles.herdingPanelHeader}>
+            <Text style={styles.herdingPanelTitle}>🤖 Herding Fleet</Text>
+            <TouchableOpacity onPress={() => setShowHerdingPanel(false)}>
+              <Text style={styles.herdingPanelClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.herdingStatsRow}>
+            <View style={styles.herdingStat}>
+              <Text style={styles.herdingStatNum}>{herding?.robots_total ?? robots.length}</Text>
+              <Text style={styles.herdingStatLbl}>Robots</Text>
+            </View>
+            <View style={styles.herdingStat}>
+              <Text style={[styles.herdingStatNum, { color: '#db2777' }]}>{herding?.robots_active ?? 0}</Text>
+              <Text style={styles.herdingStatLbl}>Active</Text>
+            </View>
+            <View style={styles.herdingStat}>
+              <Text style={[styles.herdingStatNum, { color: '#c4b5fd' }]}>{herding?.robots_charging ?? 0}</Text>
+              <Text style={styles.herdingStatLbl}>Charging</Text>
+            </View>
+            <View style={styles.herdingStat}>
+              <Text style={[styles.herdingStatNum, { color: '#f59e0b' }]}>{herding?.active_jobs ?? 0}</Text>
+              <Text style={styles.herdingStatLbl}>Jobs</Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.herdingLayerToggle}
+            onPress={() => setShowRobots(v => !v)}
+          >
+            <Text style={styles.herdingLayerToggleText}>
+              {showRobots ? '👁️ Robots shown' : '👁️‍🗨️ Robots hidden'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.stopAllBtn, stopping && styles.stopAllBtnDisabled]}
+            onPress={handleStopAll}
+            disabled={stopping}
+          >
+            <Text style={styles.stopAllBtnText}>{stopping ? 'Stopping…' : '⛔ STOP ALL'}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Overlay: count */}
       <View style={styles.overlay}>
-        <Text style={styles.overlayText}>🐄 {withPosition.length} tracked · Updates every 30s</Text>
+        <Text style={styles.overlayText}>
+          🐄 {withPosition.length} tracked
+          {robots.length > 0 ? ` · 🤖 ${robots.length}` : ''} · Updates every 30s
+        </Text>
       </View>
     </View>
   );
@@ -614,4 +906,86 @@ const styles = StyleSheet.create({
   herdsmanInfoCoords: { color: '#93c5fd', fontSize: 12, fontWeight: '600', marginBottom: 4 },
   herdsmanInfoDetail: { color: '#d1d5db', fontSize: 11, marginBottom: 2 },
   herdsmanInfoSeen: { color: '#6b7280', fontSize: 10 },
+  // Robot markers
+  robotPin: {
+    width: 30, height: 30, borderRadius: 8,
+    borderWidth: 2, borderColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3, shadowRadius: 3, elevation: 5,
+  },
+  robotPinSelected: { borderColor: '#fde047', borderWidth: 3, transform: [{ scale: 1.15 }] },
+  robotEmoji: { fontSize: 15 },
+  robotLabel: {
+    backgroundColor: '#7e22ce', paddingHorizontal: 5, paddingVertical: 1,
+    borderRadius: 3, marginTop: 2, alignItems: 'center',
+  },
+  robotLabelText: { color: '#fff', fontSize: 9, fontWeight: 'bold' },
+  // Send-here mode banner
+  sendHereBanner: {
+    position: 'absolute', top: 60, left: 56, right: 56,
+    backgroundColor: '#a855f7', borderRadius: 8, padding: 8,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
+  },
+  sendHereBannerText: { color: '#fff', fontSize: 11, fontWeight: '600', flex: 1 },
+  sendHereBannerCancel: { color: '#fde047', fontSize: 11, fontWeight: 'bold', paddingLeft: 8 },
+  // Per-robot action card
+  robotCard: {
+    position: 'absolute', bottom: 120, left: 16, right: 16,
+    backgroundColor: 'rgba(17,24,39,0.97)', borderRadius: 12,
+    padding: 12, borderLeftWidth: 3, borderLeftColor: '#a855f7',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
+  },
+  robotCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  robotCardDot: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
+  robotCardName: { color: '#fff', fontSize: 14, fontWeight: 'bold', flex: 1 },
+  robotCardClose: { color: '#9ca3af', fontSize: 16, paddingHorizontal: 4 },
+  robotCardDetail: { color: '#d1d5db', fontSize: 11, marginBottom: 10 },
+  robotCardActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  robotActionBtn: {
+    backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 6,
+    paddingVertical: 8, paddingHorizontal: 10, flexGrow: 1, alignItems: 'center',
+  },
+  robotActionBtnActive: { backgroundColor: '#a855f7' },
+  robotActionBtnStop: { backgroundColor: 'rgba(220,38,38,0.85)' },
+  robotActionText: { color: '#fff', fontSize: 11, fontWeight: '600' },
+  // Herding fleet button (above Find Herdsman FAB)
+  herdingBtn: {
+    position: 'absolute', bottom: 196, right: 12,
+    backgroundColor: '#7e22ce', borderRadius: 24,
+    width: 48, height: 48, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4, shadowRadius: 4, elevation: 6,
+  },
+  herdingBtnActive: { backgroundColor: '#a855f7' },
+  herdingIcon: { fontSize: 18, marginTop: -2 },
+  herdingLabel: { fontSize: 8, color: '#e9d5ff', fontWeight: '600', marginTop: -2 },
+  // Herding fleet panel
+  herdingPanel: {
+    position: 'absolute', bottom: 120, left: 16, right: 16,
+    backgroundColor: 'rgba(17,24,39,0.97)', borderRadius: 12,
+    padding: 12, borderLeftWidth: 3, borderLeftColor: '#a855f7',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
+  },
+  herdingPanelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  herdingPanelTitle: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+  herdingPanelClose: { color: '#9ca3af', fontSize: 16, paddingHorizontal: 4 },
+  herdingStatsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  herdingStat: { alignItems: 'center', flex: 1 },
+  herdingStatNum: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  herdingStatLbl: { color: '#9ca3af', fontSize: 10, marginTop: 2 },
+  herdingLayerToggle: {
+    backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 6,
+    paddingVertical: 7, alignItems: 'center', marginBottom: 8,
+  },
+  herdingLayerToggleText: { color: '#d8b4fe', fontSize: 11, fontWeight: '600' },
+  stopAllBtn: {
+    backgroundColor: '#dc2626', borderRadius: 8, paddingVertical: 10, alignItems: 'center',
+  },
+  stopAllBtnDisabled: { opacity: 0.6 },
+  stopAllBtnText: { color: '#fff', fontSize: 13, fontWeight: 'bold', letterSpacing: 0.5 },
 });

@@ -49,6 +49,14 @@ class GeofenceResponse(BaseModel):
     area_hectares: Optional[float] = None
     area_km2: Optional[float] = None
     created_at: Optional[str] = None
+    # Boundary shape (migration 013). For 'circle' the authoritative boundary is
+    # centre + radius; polygon/rectangle use `geometry`. `buffer_m` is the inner
+    # warning band. Consumers that don't understand shapes can keep using geometry.
+    shape: Optional[str] = None
+    center_latitude: Optional[float] = None
+    center_longitude: Optional[float] = None
+    radius_m: Optional[float] = None
+    buffer_m: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -85,11 +93,17 @@ async def list_geofences(
         # Retrieve geometry and area from PostGIS
         geometry = None
         area_m2 = None
+        shape = None
+        center_latitude = None
+        center_longitude = None
+        radius_m = None
+        buffer_m = None
         try:
             geo_result = await db.execute(
                 text(
                     "SELECT ST_AsGeoJSON(geometry)::json as geojson, "
-                    "ST_Area(geometry) as area_m2 "
+                    "ST_Area(geometry) as area_m2, "
+                    "shape, center_latitude, center_longitude, radius_m, buffer_m "
                     "FROM geofences WHERE id = :id"
                 ),
                 {"id": str(fence.id)},
@@ -100,6 +114,11 @@ async def list_geofences(
                     geometry = row.geojson
                 if row.area_m2:
                     area_m2 = float(row.area_m2)
+                shape = row.shape
+                center_latitude = row.center_latitude
+                center_longitude = row.center_longitude
+                radius_m = float(row.radius_m) if row.radius_m is not None else None
+                buffer_m = float(row.buffer_m) if row.buffer_m is not None else None
         except Exception:
             pass
 
@@ -118,6 +137,11 @@ async def list_geofences(
             area_hectares=area_hectares,
             area_km2=area_km2,
             created_at=fence.created_at.isoformat() if fence.created_at else None,
+            shape=shape,
+            center_latitude=center_latitude,
+            center_longitude=center_longitude,
+            radius_m=radius_m,
+            buffer_m=buffer_m,
         ))
 
     return responses

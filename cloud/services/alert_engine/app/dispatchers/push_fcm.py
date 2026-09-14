@@ -65,8 +65,10 @@ class FCMPushDispatcher:
             firebase_admin.get_app()
             self._initialized = True
         except ValueError:
-            # Not initialized yet
-            if os.path.exists(self.credentials_path):
+            # Not initialized yet. Use isfile (not exists): a docker volume mount
+            # can create the creds path as an empty directory when no real file is
+            # provided, and Certificate()/open() on a directory raises IsADirectoryError.
+            if os.path.isfile(self.credentials_path):
                 cred = credentials.Certificate(self.credentials_path)
                 firebase_admin.initialize_app(cred)
                 self._initialized = True

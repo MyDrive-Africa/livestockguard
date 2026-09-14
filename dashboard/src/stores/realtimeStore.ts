@@ -16,24 +16,27 @@
  * - `setConnectionStatus(status)` — Update WebSocket connection state
  */
 import { create } from 'zustand';
-import { AnimalPosition, Alert } from '@/types';
+import { AnimalPosition, Alert, RobotUpdatePayload } from '@/types';
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
 
 interface RealtimeState {
   positions: Map<string, AnimalPosition>;
+  robots: Map<string, RobotUpdatePayload>;
   alerts: Alert[];
   wsConnected: boolean;
   connectionStatus: ConnectionStatus;
   setConnected: (connected: boolean) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
   updatePosition: (animalId: string, position: AnimalPosition) => void;
+  updateRobot: (serial: string, robot: RobotUpdatePayload) => void;
   addAlert: (alert: Alert) => void;
   acknowledgeAlert: (alertId: string) => void;
 }
 
 export const useRealtimeStore = create<RealtimeState>((set) => ({
   positions: new Map(),
+  robots: new Map(),
   alerts: [],
   wsConnected: false,
   connectionStatus: 'connecting',
@@ -53,6 +56,13 @@ export const useRealtimeStore = create<RealtimeState>((set) => ({
       const newPositions = new Map(state.positions);
       newPositions.set(animalId, position);
       return { positions: newPositions };
+    }),
+
+  updateRobot: (serial, robot) =>
+    set((state) => {
+      const newRobots = new Map(state.robots);
+      newRobots.set(serial, robot);
+      return { robots: newRobots };
     }),
 
   addAlert: (alert) =>

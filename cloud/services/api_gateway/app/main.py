@@ -16,6 +16,7 @@ from .routers.websocket import router as ws_router
 from .routers.notifications import router as notifications_router
 from .routers.gateway import router as gateway_router
 from .routers.beam import router as beam_router
+from .routers.robots import router as robots_router
 from .routers.system import router as system_router
 from .routers.users import router as users_router
 from .routers.assignments import router as assignments_router
@@ -177,6 +178,7 @@ app.include_router(analytics.router, prefix=f"/api/{API_VERSION}/analytics", tag
 app.include_router(notifications_router, prefix=f"/api/{API_VERSION}/notifications", tags=["notifications"])
 app.include_router(gateway_router, prefix=f"/api/{API_VERSION}/gateway", tags=["gateway"])
 app.include_router(beam_router, prefix=f"/api/{API_VERSION}/beam", tags=["beam"])
+app.include_router(robots_router, prefix=f"/api/{API_VERSION}/robots", tags=["robots"])
 app.include_router(system_router, prefix=f"/api/{API_VERSION}/system", tags=["system"])
 app.include_router(users_router, prefix=f"/api/{API_VERSION}/users", tags=["users"])
 app.include_router(assignments_router, prefix=f"/api/{API_VERSION}/assignments", tags=["assignments"])
@@ -211,6 +213,7 @@ app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"]
 app.include_router(notifications_router, prefix="/api/notifications", tags=["notifications"], include_in_schema=False)
 app.include_router(gateway_router, prefix="/api/gateway", tags=["gateway"], include_in_schema=False)
 app.include_router(beam_router, prefix="/api/beam", tags=["beam"], include_in_schema=False)
+app.include_router(robots_router, prefix="/api/robots", tags=["robots"], include_in_schema=False)
 app.include_router(system_router, prefix="/api/system", tags=["system"], include_in_schema=False)
 app.include_router(users_router, prefix="/api/users", tags=["users"], include_in_schema=False)
 app.include_router(assignments_router, prefix="/api/assignments", tags=["assignments"], include_in_schema=False)

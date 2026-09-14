@@ -73,6 +73,11 @@ db-seed: ## Load demo farm data (animals, devices, geofences)
 	cd cloud && docker compose exec -T postgres psql -U livestockguard -d livestockguard < ../scripts/seed_data.sql
 	@echo "$(GREEN)Loaded: Boschhoek Farm (5 animals) + Loch Vaal Plot 30 (10 animals)$(RESET)"
 
+seed-robots: ## Seed robotic herdsman demo (4 robots + circular boundary at Loch Vaal)
+	@echo "$(CYAN)Seeding robotic herdsman (4 robots + circular boundary)...$(RESET)"
+	cd cloud && docker compose exec -T postgres psql -U livestockguard -d livestockguard < ../scripts/seed_robots.sql
+	@echo "$(GREEN)Loaded: ROBO-LV-01..04 (200m circle, Loch Vaal) + ROBO-SI-01..04 (400m circle, Sibanyoni)$(RESET)"
+
 db-reset: ## Reset database (WARNING: destroys all data)
 	@echo "$(YELLOW)Resetting database...$(RESET)"
 	cd cloud && docker compose down -v
@@ -118,6 +123,34 @@ simulate-beam-theft: ## Run beam simulator with a theft crossing burst at the ma
 simulate-beam-offline: ## Lay out beam sensors without a live API (print only)
 	@echo "$(GREEN)Starting beam simulator (offline mode)...$(RESET)"
 	cd tools/simulator && python3 beam_simulator.py --farm sibanyoni --beams 5 --offline
+
+simulate-robots: ## Run robotic herdsman fleet simulator (Loch Vaal, 4 robots, keep herd inside)
+	@echo "$(GREEN)Starting robotic herdsman simulator (Loch Vaal, contain)...$(RESET)"
+	cd tools/simulator && python3 robot_simulator.py --farm lochvaal --robots 4 --cattle 10 --scenario contain
+
+simulate-robots-breach: ## Robotic herdsman: one cow breaches, nearest robot intercepts
+	@echo "$(YELLOW)Starting robotic herdsman BREACH scenario (Loch Vaal)...$(RESET)"
+	cd tools/simulator && python3 robot_simulator.py --farm lochvaal --robots 4 --cattle 10 --scenario breach
+
+simulate-robots-theft: ## Robotic herdsman: theft attempt, robot + alert respond
+	@echo "$(YELLOW)Starting robotic herdsman THEFT scenario (Loch Vaal)...$(RESET)"
+	cd tools/simulator && python3 robot_simulator.py --farm lochvaal --robots 4 --cattle 10 --scenario theft
+
+simulate-robots-sibanyoni: ## Robotic herdsman fleet at Sibanyoni (50 cattle, 4 robots)
+	@echo "$(GREEN)Starting robotic herdsman simulator (Sibanyoni, contain)...$(RESET)"
+	cd tools/simulator && python3 robot_simulator.py --farm sibanyoni --robots 4 --cattle 50 --radius 400 --scenario contain
+
+demo-robots: ## Robotic herdsman demo: seed 4 robots + boundary, then run the breach scenario (stack must be up)
+	@echo "$(CYAN)Robotic herdsman demo — seeding fleet + boundary...$(RESET)"
+	$(MAKE) seed-robots
+	@echo "$(GREEN)Launching robot simulator (breach scenario). Ensure mqtt-writer + orchestrator are running.$(RESET)"
+	cd tools/simulator && python3 robot_simulator.py --farm lochvaal --robots 4 --cattle 10 --scenario breach --seed 42
+
+demo-robots-sibanyoni: ## Robotic herdsman demo at Sibanyoni: seed fleet + boundary, then run the breach scenario (stack must be up)
+	@echo "$(CYAN)Robotic herdsman demo (Sibanyoni) — seeding fleet + boundary...$(RESET)"
+	$(MAKE) seed-robots
+	@echo "$(GREEN)Launching robot simulator (Sibanyoni breach scenario). Ensure mqtt-writer + orchestrator are running.$(RESET)"
+	cd tools/simulator && python3 robot_simulator.py --farm sibanyoni --robots 4 --cattle 50 --radius 400 --scenario breach --seed 42
 
 simulate-day: ## Simulate full herdsman day at Loch Vaal (12h in 6min)
 	@echo "$(GREEN)Starting herdsman daily routine simulation...$(RESET)"
@@ -168,6 +201,14 @@ simulate-many: ## Simulate 50 animals at Loch Vaal (stress test)
 mqtt-writer: ## Start MQTT→DB writer (bridges simulator to database)
 	@echo "$(GREEN)Starting MQTT writer (devices → database)...$(RESET)"
 	cd cloud/services/mqtt_writer && python3 mqtt_writer.py
+
+herding-orchestrator: ## Start the robotic-herdsman brain (containment → dispatch robots)
+	@echo "$(GREEN)Starting herding orchestrator (containment → robot dispatch)...$(RESET)"
+	cd cloud/services/herding_orchestrator && \
+		MQTT_HOST=localhost \
+		DATABASE_URL="postgresql+asyncpg://livestockguard:livestockguard_dev@localhost:5432/livestockguard" \
+		REDIS_URL="redis://localhost:6379/0" \
+		python3 -m app.main
 
 # ─── DASHBOARD ──────────────────────────────────────
 

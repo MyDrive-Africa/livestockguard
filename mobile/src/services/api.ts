@@ -123,3 +123,67 @@ export async function getSelectedFarmId(): Promise<string | null> {
 export async function setSelectedFarmId(farmId: string): Promise<void> {
   await AsyncStorage.setItem('selected_farm_id', farmId);
 }
+
+// ─── Robotic Herdsman ────────────────────────────────────────────────────────
+// Mirrors the /api/v1/robots surface. A herding robot is a mobile, non-animal
+// device (typically 4 per farm) that keeps cattle inside their boundary.
+
+export interface Robot {
+  id: string;
+  farm_id: string;
+  serial_number: string;
+  name: string;
+  model: string;                 // 'wheeled' | 'quadruped' | 'humanoid'
+  status: string;                // idle | patrolling | enroute | shepherding | charging | fault | offline
+  last_latitude?: number;
+  last_longitude?: number;
+  heading_deg?: number;
+  battery_pct?: number;
+  current_job_id?: string;
+  home_latitude?: number;
+  home_longitude?: number;
+  max_speed_mps: number;
+  last_seen?: string;
+}
+
+export interface HerdingStatus {
+  farm_id: string;
+  robots_total: number;
+  robots_active: number;   // enroute or shepherding
+  robots_charging: number;
+  active_jobs: number;
+}
+
+/** Fetch the herding-robot fleet for a farm. */
+export async function getRobots(farmId: string): Promise<Robot[]> {
+  const resp = await api.get(`/api/v1/robots?farm_id=${farmId}`);
+  return resp.data;
+}
+
+/** Fleet + job containment summary for a farm (for the Herding panel). */
+export async function getHerdingStatus(farmId: string): Promise<HerdingStatus> {
+  const resp = await api.get(`/api/v1/robots/herding/status?farm_id=${farmId}`);
+  return resp.data;
+}
+
+/**
+ * Issue a manual override to one robot. `move_to`/`shepherd` need target coords.
+ * Published to the same MQTT topic the orchestrator uses.
+ */
+export async function sendRobotCommand(
+  serial: string,
+  command: 'move_to' | 'return_home' | 'stop' | 'patrol' | 'shepherd',
+  target?: { latitude: number; longitude: number },
+): Promise<void> {
+  await api.post(`/api/v1/robots/${serial}/command`, {
+    command,
+    latitude: target?.latitude,
+    longitude: target?.longitude,
+  });
+}
+
+/** Emergency stop: halt every robot on a farm. Returns count published. */
+export async function stopAllRobots(farmId: string): Promise<{ robots: number; commands_published: number }> {
+  const resp = await api.post(`/api/v1/robots/herding/stop-all?farm_id=${farmId}`);
+  return resp.data;
+}

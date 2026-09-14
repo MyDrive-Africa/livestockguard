@@ -209,8 +209,9 @@ log_detail "  PostgreSQL 16 + TimescaleDB + PostGIS → :5432"
 log_detail "  Redis 7 → :6379"
 log_detail "  EMQX 5.5 (MQTT Broker) → :1883, :18083"
 log_detail "  API Gateway (FastAPI) → :8000"
-log_detail "  MQTT Writer (Python) → subscribed to lg/dev/+/pos"
+log_detail "  MQTT Writer (Python) → subscribed to lg/dev/+/pos, lg/robot/+/telemetry"
 log_detail "  Alert Engine (Python) → Redis pub/sub"
+log_detail "  Herding Orchestrator (Python) → containment → dispatch robots"
 
 # Log container status
 docker compose -f cloud/docker-compose.yml ps >> "$DOCKER_LOG" 2>&1 || true
@@ -298,14 +299,13 @@ log_detail "Loading seed_data.sql (Boschhoek + Loch Vaal)..."
 docker compose exec -T postgres psql -U livestockguard -d livestockguard \
   < ../scripts/seed_data.sql >> "$SEED_LOG" 2>&1 || true
 
-log_detail "Loading seed_sibanyoni.sql (Sibanyoni Farm, 50 cattle)..."
-# NOTE: seed_sibanyoni.sql is now superseded by seed_data.sql which includes
-# the full Sibanyoni farm (50 cattle, BLE tags, geofences). Skipping to avoid
-# duplicate farm entries.
-# if [ -f "../scripts/seed_sibanyoni.sql" ]; then
-#   docker compose exec -T postgres psql -U livestockguard -d livestockguard \
-#     < ../scripts/seed_sibanyoni.sql >> "$SEED_LOG" 2>&1 || true
-# fi
+# NOTE: seed_data.sql already includes the full Sibanyoni farm (50 cattle, BLE
+# tags, geofences) under farm_id dddddddd-...-555555555555, so no separate
+# Sibanyoni seed is needed.
+
+log_detail "Loading seed_robots.sql (Loch Vaal + Sibanyoni herding fleets + boundaries)..."
+docker compose exec -T postgres psql -U livestockguard -d livestockguard \
+  < ../scripts/seed_robots.sql >> "$SEED_LOG" 2>&1 || true
 
 cd "$ROOT_DIR"
 
@@ -314,7 +314,8 @@ log_detail "Boschhoek Farm (Free State) — 5 animals, GPS collars"
 log_detail "Loch Vaal Plot 30 (Gauteng) — 10 animals, BLE ear tags + gateway"
 log_detail "Sibanyoni Farm (North West) — 50 animals, BLE ear tags + gateway"
 log_detail "13 geofences, 2 gateway devices, 60 BLE ear tags"
-log_master "Database seeded: 3 farms, 65 animals"
+log_detail "Loch Vaal herding fleet — 4 robots + 200m circular boundary"
+log_master "Database seeded: 3 farms, 65 animals, 4 herding robots"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 5: Wait for API Gateway to be healthy

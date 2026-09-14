@@ -78,6 +78,7 @@ export function useWebSocket() {
   const currentFarm = useAuthStore((state) => state.currentFarm);
   const setConnectionStatus = useRealtimeStore((state) => state.setConnectionStatus);
   const updatePosition = useRealtimeStore((state) => state.updatePosition);
+  const updateRobot = useRealtimeStore((state) => state.updateRobot);
   const addAlert = useRealtimeStore((state) => state.addAlert);
   const addToast = useToastStore((state) => state.addToast);
 
@@ -128,6 +129,10 @@ export function useWebSocket() {
             });
             break;
 
+          case 'robot.update':
+            updateRobot(message.payload.serial, message.payload);
+            break;
+
           case 'alert.created':
             addAlert(message.payload);
             addToast({
@@ -168,7 +173,7 @@ export function useWebSocket() {
     ws.onerror = () => {
       // onclose will fire after onerror, so state transition is handled there
     };
-  }, [token, currentFarm, setConnectionStatus, updatePosition, addAlert]);
+  }, [token, currentFarm, setConnectionStatus, updatePosition, updateRobot, addAlert]);
 
   useEffect(() => {
     connect();

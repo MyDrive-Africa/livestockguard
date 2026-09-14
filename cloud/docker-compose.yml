@@ -60,8 +60,8 @@ services:
 
   mqtt_writer:
     build:
-      context: services/mqtt_writer
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/mqtt_writer/Dockerfile
     environment:
       MQTT_BROKER: emqx
       MQTT_PORT: 1883
@@ -77,8 +77,8 @@ services:
 
   alert_engine:
     build:
-      context: services/alert_engine
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/alert_engine/Dockerfile
     environment:
       REDIS_URL: redis://redis:6379/0
       AWS_REGION: af-south-1
@@ -108,6 +108,29 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    restart: unless-stopped
+
+  herding_orchestrator:
+    build:
+      context: services/herding_orchestrator
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://livestockguard:${POSTGRES_PASSWORD:-livestockguard_dev}@postgres:5432/livestockguard
+      REDIS_URL: redis://redis:6379/0
+      MQTT_HOST: emqx
+      MQTT_PORT: 1883
+      HERDING_DEFAULT_MODE: ${HERDING_DEFAULT_MODE:-auto}
+      HERDING_LOOP_INTERVAL_SEC: "3.0"
+      HERDING_DEFAULT_BUFFER_M: "15.0"
+      HERDING_MIN_BATTERY_FOR_JOB_PCT: "20"
+      RUN_ON_STARTUP: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      emqx:
+        condition: service_started
     restart: unless-stopped
 
 volumes:

@@ -374,3 +374,78 @@ class BeamCrossing(Base):
     animal_id = Column(UUID(as_uuid=True), ForeignKey("animals.id", ondelete="SET NULL"))
     beam_battery_pct = Column(Integer)
     metadata_ = Column("metadata", JSONB, nullable=False, default=dict)
+
+
+class HerdingRobot(Base):
+    """An autonomous herding robot — a mobile, non-animal device.
+
+    A small fleet (typically 4 per farm) keeps cattle inside their boundary by
+    driving to a straying animal and nudging it back with presence and sound
+    (non-contact), the way a human herdsman would. Body-agnostic: the model may
+    be humanoid, wheeled, or quadruped — the orchestrator only needs mobility,
+    presence, and a speaker.
+    """
+    __tablename__ = "herding_robots"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    farm_id = Column(UUID(as_uuid=True), ForeignKey("farms.id", ondelete="CASCADE"), nullable=False)
+    serial_number = Column(String(100), unique=True, nullable=False)
+    name = Column(String(255), nullable=False)
+    model = Column(String(50), nullable=False, default="wheeled")
+    status = Column(String(50), nullable=False, default="offline")
+    last_latitude = Column(Float)
+    last_longitude = Column(Float)
+    heading_deg = Column(Float)
+    battery_pct = Column(Integer)
+    # use_alter=True: herding_robots <-> herding_jobs form an intentional FK cycle
+    # (a robot points at its current job; a job points at its robot). This mirrors
+    # migration 013, which adds this constraint after both tables exist.
+    current_job_id = Column(UUID(as_uuid=True), ForeignKey("herding_jobs.id", ondelete="SET NULL", use_alter=True, name="fk_herding_robots_current_job"))
+    home_latitude = Column(Float)
+    home_longitude = Column(Float)
+    max_speed_mps = Column(Float, nullable=False, default=2.0)
+    capabilities = Column(JSONB, nullable=False, default=dict)
+    firmware_version = Column(String(50))
+    last_seen = Column(DateTime(timezone=True))
+    config = Column(JSONB, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now())
+
+    farm = relationship("Farm")
+
+
+class HerdingJob(Base):
+    """A unit of herding work the orchestrator created and assigned to a robot."""
+    __tablename__ = "herding_jobs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    farm_id = Column(UUID(as_uuid=True), ForeignKey("farms.id", ondelete="CASCADE"), nullable=False)
+    robot_id = Column(UUID(as_uuid=True), ForeignKey("herding_robots.id", ondelete="SET NULL"))
+    job_type = Column(String(30), nullable=False, default="intercept")
+    target_animal_id = Column(UUID(as_uuid=True), ForeignKey("animals.id", ondelete="SET NULL"))
+    target_latitude = Column(Float)
+    target_longitude = Column(Float)
+    priority = Column(Integer, nullable=False, default=0)
+    status = Column(String(20), nullable=False, default="pending")
+    reason = Column(String(255))
+    metadata_ = Column("metadata", JSONB, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), default=func.now())
+    assigned_at = Column(DateTime(timezone=True))
+    completed_at = Column(DateTime(timezone=True))
+
+
+class RobotTelemetry(Base):
+    """High-frequency robot pose/state sample — stored as time-series."""
+    __tablename__ = "robot_telemetry"
+
+    time = Column(DateTime(timezone=True), primary_key=True, nullable=False)
+    robot_id = Column(UUID(as_uuid=True), ForeignKey("herding_robots.id", ondelete="CASCADE"), primary_key=True, nullable=False)
+    farm_id = Column(UUID(as_uuid=True), ForeignKey("farms.id", ondelete="CASCADE"), nullable=False)
+    latitude = Column(Float)
+    longitude = Column(Float)
+    heading_deg = Column(Float)
+    speed_mps = Column(Float)
+    battery_pct = Column(Integer)
+    state = Column(String(50))
+    job_id = Column(UUID(as_uuid=True), ForeignKey("herding_jobs.id", ondelete="SET NULL"))
+    metadata_ = Column("metadata", JSONB, nullable=False, default=dict)
