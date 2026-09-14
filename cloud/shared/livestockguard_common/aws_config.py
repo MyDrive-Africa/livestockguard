@@ -302,9 +302,16 @@ def load_firebase_config() -> Optional[dict]:
     creds_file = os.environ.get(
         "FIREBASE_CREDENTIALS_FILE", "./config/firebase-credentials.json"
     )
-    if os.path.exists(creds_file):
-        with open(creds_file) as f:
-            return json.load(f)
+    # Use isfile (not exists): the docker volume mount can create the path as an
+    # empty directory when no real credentials file is provided, and open() on a
+    # directory raises IsADirectoryError. Treat "not a file" as "not configured".
+    if os.path.isfile(creds_file):
+        try:
+            with open(creds_file) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Firebase credentials file unreadable ({e}) — FCM disabled")
+            return None
 
     logger.debug("Firebase credentials file not found — FCM disabled")
     return None
