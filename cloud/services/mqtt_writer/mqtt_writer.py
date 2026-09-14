@@ -306,6 +306,89 @@ async def write_alert(device_id: int, alert_type: str, severity: str, message: s
         print(f"  ERROR writing alert: {e}")
 
 
+async def write_robot_telemetry(serial: str, telem: dict):
+    """
+    Persist a herding-robot telemetry sample and broadcast it via Redis.
+
+    Args:
+        serial: Robot serial number (e.g. 'ROBO-LV-01'), the fleet marker.
+        telem: Decoded telemetry dict with keys: lat, lon, heading_deg, speed_mps,
+               battery_pct, state, ts (as published by the robot / robot simulator).
+
+    Side Effects:
+        - INSERTs into the `robot_telemetry` hypertable.
+        - Updates the robot's live pose on `herding_robots` (last position/heading/
+          battery/status/last_seen).
+        - Publishes 'robot.update' to the Redis `farm:<farm_id>` channel for the
+          dashboard WebSocket.
+        - Increments stats['positions'] on success, stats['errors'] on failure.
+
+    Notes:
+        Telemetry for an unknown serial is ignored (robots must be registered via
+        the API first — they are not auto-created, unlike collars).
+    """
+    global db_pool, stats
+
+    if db_pool is None:
+        return
+
+    try:
+        async with db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT id, farm_id FROM herding_robots WHERE serial_number = $1", serial
+            )
+            if row is None:
+                return  # unknown robot; do not auto-register
+            robot_id = row["id"]
+            farm_id = row["farm_id"]
+
+            ts = telem.get("ts")
+            when = datetime.fromtimestamp(ts, tz=timezone.utc) if ts else datetime.now(timezone.utc)
+
+            await conn.execute("""
+                INSERT INTO robot_telemetry (time, robot_id, farm_id, latitude, longitude,
+                                             heading_deg, speed_mps, battery_pct, state)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            """,
+                when, robot_id, farm_id,
+                telem.get("lat"), telem.get("lon"), telem.get("heading_deg"),
+                telem.get("speed_mps"), telem.get("battery_pct"), telem.get("state"),
+            )
+
+            await conn.execute("""
+                UPDATE herding_robots
+                SET last_latitude = $2, last_longitude = $3, heading_deg = $4,
+                    battery_pct = $5, status = COALESCE($6, status), last_seen = NOW(),
+                    updated_at = NOW()
+                WHERE id = $1
+            """,
+                robot_id, telem.get("lat"), telem.get("lon"), telem.get("heading_deg"),
+                telem.get("battery_pct"), telem.get("state"),
+            )
+
+        stats["positions"] += 1
+
+        if farm_id:
+            await publish_realtime(f"farm:{farm_id}", {
+                "type": "robot.update",
+                "payload": {
+                    "serial": serial,
+                    "position": {
+                        "latitude": telem.get("lat"),
+                        "longitude": telem.get("lon"),
+                        "heading": telem.get("heading_deg"),
+                        "speed": telem.get("speed_mps"),
+                    },
+                    "batteryLevel": telem.get("battery_pct"),
+                    "state": telem.get("state"),
+                    "deterrent": telem.get("deterrent"),
+                },
+            })
+    except Exception as e:
+        stats["errors"] += 1
+        print(f"  ERROR writing robot telemetry: {e}")
+
+
 async def get_device_uuid(conn, device_id: int):
     """
     Resolve a numeric device ID to its PostgreSQL UUID, auto-registering if unknown.
@@ -362,6 +445,21 @@ def on_message(client, userdata, msg):
     global loop
 
     try:
+        # Herding-robot telemetry is JSON on lg/robot/{serial}/telemetry — handled
+        # separately from the binary device protocol below.
+        topic_parts = msg.topic.split("/")
+        if len(topic_parts) >= 4 and topic_parts[1] == "robot" and topic_parts[3] == "telemetry":
+            serial = topic_parts[2]
+            try:
+                telem = json.loads(msg.payload.decode())
+            except (ValueError, UnicodeDecodeError):
+                stats["errors"] += 1
+                return
+            asyncio.run_coroutine_threadsafe(
+                write_robot_telemetry(serial, telem), loop
+            )
+            return
+
         data = msg.payload
         if len(data) < 13:  # Minimum: header + CRC
             return
@@ -422,7 +520,8 @@ def on_connect(client, userdata, flags, reason_code, properties):
     print(f"Connected to MQTT broker (rc={reason_code})")
     client.subscribe("lg/up/+/telemetry", qos=1)
     client.subscribe("lg/up/+/alert", qos=2)
-    print("Subscribed to: lg/up/+/telemetry, lg/up/+/alert")
+    client.subscribe("lg/robot/+/telemetry", qos=1)
+    print("Subscribed to: lg/up/+/telemetry, lg/up/+/alert, lg/robot/+/telemetry")
 
 
 async def print_stats():

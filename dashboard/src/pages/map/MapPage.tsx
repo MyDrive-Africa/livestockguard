@@ -24,6 +24,9 @@ import { useAuthStore } from '@/stores/authStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { apiClient } from '@/api/client';
 import { useToastStore } from '@/stores/toastStore';
+import { RobotHerdingLayer } from '@/components/map/RobotHerdingLayer';
+import { HerdingPanel } from '@/components/map/HerdingPanel';
+import { AnimatePresence } from 'framer-motion';
 import type { Farm, BeamSensor } from '@/types';
 
 // Fallback centre (South Africa overview) — used only if no farm is selected
@@ -88,7 +91,7 @@ const DEMO_ANIMALS = [
 ];
 
 type TileSource = keyof typeof TILE_SOURCES;
-type LayerToggle = 'animals' | 'geofences' | 'trails' | 'markers' | 'beams';
+type LayerToggle = 'animals' | 'geofences' | 'trails' | 'markers' | 'beams' | 'robots' | 'boundary';
 
 export default function MapPage() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -102,7 +105,10 @@ export default function MapPage() {
   const [tileSource, setTileSource] = useState<TileSource>('satellite');
   const [layers, setLayers] = useState<Record<LayerToggle, boolean>>({
     animals: true, geofences: true, trails: false, markers: true, beams: true,
+    robots: true, boundary: true,
   });
+  const [showHerdingPanel, setShowHerdingPanel] = useState(false);
+  const [mapReadyTick, setMapReadyTick] = useState(false);
   const [selectedAnimal, setSelectedAnimal] = useState<string | null>(null);
   const [trailData, setTrailData] = useState<[number, number][]>([]);
   const [trailDate, setTrailDate] = useState<string>(''); // YYYY-MM-DD or '' for today
@@ -282,6 +288,7 @@ export default function MapPage() {
     map.on('load', () => {
       setLoading(false);
       mapReadyRef.current = true;
+      setMapReadyTick(true); // trigger re-render so overlay components receive the ready map
       // Data loading is handled by the selectedFarmId useEffect
     });
 
@@ -1275,6 +1282,33 @@ export default function MapPage() {
       {/* Map */}
       <div className="flex-1 min-h-0 relative" style={{ minHeight: 0 }}>
         <div ref={mapContainerRef} className="absolute inset-0" style={{ cursor: (drawingMode || markingMode) ? 'crosshair' : 'grab', width: '100%', height: '100%' }} />
+
+        {/* Robotic herdsman overlay (robot markers + containment boundary) */}
+        <RobotHerdingLayer
+          map={mapRef.current}
+          ready={mapReadyTick}
+          farmId={selectedFarmId}
+          showRobots={layers.robots}
+          showBoundary={layers.boundary}
+        />
+
+        {/* Herding fleet control panel */}
+        <AnimatePresence>
+          {showHerdingPanel && <HerdingPanel onClose={() => setShowHerdingPanel(false)} />}
+        </AnimatePresence>
+
+        {/* Toggle button for the herding panel */}
+        <button
+          onClick={() => setShowHerdingPanel((v) => !v)}
+          className={`absolute top-3 right-3 z-20 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-md transition-colors ${
+            showHerdingPanel
+              ? 'bg-purple-600 text-white'
+              : 'bg-white/90 dark:bg-gray-800/90 text-gray-700 dark:text-gray-200 hover:bg-purple-50 dark:hover:bg-gray-700'
+          }`}
+          title="Robotic herdsman fleet"
+        >
+          🤖 Herding
+        </button>
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-100/80 dark:bg-gray-900/80 z-10">
             <div className="text-center">
@@ -1455,6 +1489,32 @@ export default function MapPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
               </svg>
               <span className="map-control-tooltip">Beam Sensors</span>
+            </button>
+            <button
+              onClick={() => toggleLayer('robots')}
+              className={`map-control-btn relative p-2 rounded-md transition-colors ${
+                layers.robots
+                  ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400'
+                  : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+              aria-label="Toggle herding robots"
+            >
+              <span className="text-base leading-none">🤖</span>
+              <span className="map-control-tooltip">Herding Robots</span>
+            </button>
+            <button
+              onClick={() => toggleLayer('boundary')}
+              className={`map-control-btn relative p-2 rounded-md transition-colors ${
+                layers.boundary
+                  ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400'
+                  : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+              aria-label="Toggle containment boundary"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <circle cx="12" cy="12" r="9" strokeDasharray="3 2" />
+              </svg>
+              <span className="map-control-tooltip">Containment Boundary</span>
             </button>
             <button
               onClick={flyToHerdsman}

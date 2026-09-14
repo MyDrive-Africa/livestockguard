@@ -448,7 +448,7 @@ livestockguard/
 │   ├── run-demo.sh             # Legacy demo launcher (2 farms)
 │   ├── run-demo-full.sh        # Legacy full demo launcher (3 farms)
 │   ├── seed_data.sql           # Demo farm data (3 farms, 65 animals, devices, geofences)
-│   ├── seed_sibanyoni.sql      # Sibanyoni farm seed (50 cattle, BLE tags)
+│   ├── seed_robots.sql         # Robotic herdsman fleets + boundaries (Loch Vaal, Sibanyoni)
 │   ├── register_ble_tags.py    # Register BLE ear tags via API
 │   └── verify-features.sh     # API feature verification
 │

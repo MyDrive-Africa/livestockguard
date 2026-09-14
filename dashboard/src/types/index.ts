@@ -74,6 +74,13 @@ export interface Geofence {
   active: boolean;
   alert_on_breach: boolean;
   created_at: string;
+  // Boundary-shape support (migration 013). A circle stores centre + radius;
+  // rectangle/polygon use `geometry`. `buffer_m` is the inner warning band.
+  shape?: 'polygon' | 'rectangle' | 'circle';
+  center_latitude?: number | null;
+  center_longitude?: number | null;
+  radius_m?: number | null;
+  buffer_m?: number | null;
 }
 
 export interface Device {
@@ -124,4 +131,57 @@ export interface BeamSensor {
   status: 'active' | 'inactive' | 'maintenance' | 'fault';
   last_seen?: string | null;
   last_battery_pct?: number | null;
+}
+
+// Robotic herdsman layer
+export type RobotStatus =
+  | 'idle' | 'patrolling' | 'enroute' | 'shepherding' | 'charging' | 'fault' | 'offline';
+
+export interface Robot {
+  id: string;
+  farm_id: string;
+  serial_number: string;
+  name: string;
+  model: 'humanoid' | 'wheeled' | 'quadruped';
+  status: RobotStatus;
+  last_latitude?: number | null;
+  last_longitude?: number | null;
+  heading_deg?: number | null;
+  battery_pct?: number | null;
+  current_job_id?: string | null;
+  home_latitude?: number | null;
+  home_longitude?: number | null;
+  max_speed_mps: number;
+  last_seen?: string | null;
+}
+
+export interface HerdingJob {
+  id: string;
+  farm_id: string;
+  robot_id?: string | null;
+  job_type: 'intercept' | 'shepherd' | 'patrol' | 'return_kraal' | 'investigate';
+  target_animal_id?: string | null;
+  target_latitude?: number | null;
+  target_longitude?: number | null;
+  priority: number;
+  status: 'pending' | 'assigned' | 'active' | 'completed' | 'failed' | 'cancelled';
+  reason?: string | null;
+  created_at?: string | null;
+}
+
+export interface HerdingStatus {
+  farm_id: string;
+  robots_total: number;
+  robots_active: number;   // enroute or shepherding
+  robots_charging: number;
+  active_jobs: number;
+}
+
+/** Real-time robot telemetry payload (WS event `robot.update`). */
+export interface RobotUpdatePayload {
+  serial: string;
+  position: { latitude: number; longitude: number; heading?: number; speed?: number };
+  batteryLevel?: number;
+  state?: RobotStatus;
+  deterrent?: string | null;
 }
