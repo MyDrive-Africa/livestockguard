@@ -362,6 +362,17 @@ SIM1_LOG="$ROOT_DIR/logs/run-all-sim-boschhoek.log"
 : > "$SIM1_LOG"
 
 cd tools/simulator
+# Bootstrap a local venv with the simulator deps if it isn't there yet, so a
+# fresh machine can `make demo` without a separate pip step. Falls back to the
+# system python3 if venv creation fails.
+if [ ! -d ".venv" ]; then
+  log_detail "Creating simulator venv (tools/simulator/.venv)..."
+  python3 -m venv .venv >> "$SIM1_LOG" 2>&1 || true
+  if [ -d ".venv" ]; then
+    .venv/bin/pip install --quiet -r requirements.txt >> "$SIM1_LOG" 2>&1 || \
+      log_warn "Simulator dependency install had warnings — see $SIM1_LOG"
+  fi
+fi
 if [ -d ".venv" ]; then
   source .venv/bin/activate 2>/dev/null || true
   log_detail "Activated Python venv: tools/simulator/.venv"

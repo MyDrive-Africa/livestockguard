@@ -29,6 +29,14 @@ NIGHT_MOVEMENT_END_HOUR = int(os.getenv("NIGHT_MOVEMENT_END_HOUR", "4"))
 # Herd cohesion
 COHESION_COMPANION_THRESHOLD = float(os.getenv("COHESION_COMPANION_THRESHOLD", "0.6"))
 
+# Missing-animal alerting (undetected animal -> major alert via alert_engine)
+MISSING_ALERT_CHECK_INTERVAL_MINUTES = int(os.getenv("MISSING_ALERT_CHECK_INTERVAL_MINUTES", "15"))
+MISSING_ALERT_THRESHOLD_HOURS = float(os.getenv("MISSING_ALERT_THRESHOLD_HOURS", "6"))
+MISSING_ALERT_SEVERITY = os.getenv("MISSING_ALERT_SEVERITY", "critical")
+# When true, alert even on farms/animals that have never recorded a sighting.
+# Default false so a freshly-seeded stack (no simulator yet) stays quiet.
+MISSING_ALERT_ON_NEVER_SEEN = os.getenv("MISSING_ALERT_ON_NEVER_SEEN", "false").lower() in ("true", "1", "yes")
+
 # Suggestions
 SUGGESTION_EXPIRY_DAYS = int(os.getenv("SUGGESTION_EXPIRY_DAYS", "7"))
 

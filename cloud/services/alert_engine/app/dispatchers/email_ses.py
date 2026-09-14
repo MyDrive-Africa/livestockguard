@@ -68,6 +68,20 @@ EMAIL_TEMPLATES = {
             "Please schedule a battery replacement or recharge.\n"
         ),
     },
+    "animal_missing": {
+        "subject": "🚨 LivestockGuard: Animal Missing Alert",
+        "body_template": (
+            "ANIMAL NOT DETECTED\n\n"
+            "Animal: {animal_id}\n"
+            "Farm: {farm_id}\n"
+            "Time: {timestamp}\n\n"
+            "Details: {message}\n\n"
+            "This animal has not been detected by any gateway within the expected\n"
+            "window. It may have strayed, lost its ear tag, or been removed.\n"
+            "Please verify against the LivestockGuard dashboard.\n"
+            "https://app.livestockguard.co.za/alerts"
+        ),
+    },
     "default": {
         "subject": "LivestockGuard Alert: {alert_type}",
         "body_template": (

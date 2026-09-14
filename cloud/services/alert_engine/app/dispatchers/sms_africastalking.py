@@ -58,6 +58,7 @@ ALERT_TYPE_DISPLAY = {
     "unusual_activity": "Unusual Activity",
     "no_movement": "No Movement",
     "temperature_alert": "Temperature Alert",
+    "animal_missing": "Animal Missing",
 }
 
 
