@@ -191,8 +191,34 @@ DOCKER_LOG="$ROOT_DIR/logs/run-all-docker.log"
 
 log_detail "Checking Docker daemon..."
 if ! docker info >> "$DOCKER_LOG" 2>&1; then
-  log_error "Docker daemon not running. Start Docker Desktop first."
-  exit 1
+  log_warn "Docker daemon not running — attempting to start it..."
+
+  if command -v colima >/dev/null 2>&1; then
+    log_detail "Colima detected → 'colima start'"
+    colima start >> "$DOCKER_LOG" 2>&1 || true
+  elif [ -d "/Applications/Docker.app" ]; then
+    log_detail "Docker Desktop detected → 'open -a Docker'"
+    open -a Docker >> "$DOCKER_LOG" 2>&1 || true
+  else
+    log_error "No Docker runtime found. Install Colima ('brew install colima') or Docker Desktop, then retry."
+    exit 1
+  fi
+
+  # Wait for the daemon to become reachable (up to ~60s)
+  log_detail "Waiting for Docker daemon to become ready..."
+  DOCKER_READY=false
+  for _ in $(seq 1 30); do
+    if docker info >> "$DOCKER_LOG" 2>&1; then
+      DOCKER_READY=true
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "$DOCKER_READY" != true ]; then
+    log_error "Docker daemon did not start in time. Start it manually (Colima: 'colima start', or launch Docker Desktop) and retry."
+    exit 1
+  fi
 fi
 log_info "Docker daemon: running"
 

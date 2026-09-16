@@ -102,8 +102,33 @@ log "DEV MODE started | mobile=$([ "$SKIP_MOBILE" = true ] && echo off || echo o
 echo -e "${CYAN}[1/4] Starting cloud infrastructure...${RESET}"
 
 if ! docker info > /dev/null 2>&1; then
-  echo -e "  ${RED}Docker daemon not running. Start Docker Desktop first.${RESET}"
-  exit 1
+  echo -e "  ${YELLOW}Docker daemon not running — attempting to start it...${RESET}"
+
+  if command -v colima > /dev/null 2>&1; then
+    echo -e "  ${DIM}→ Colima detected: colima start${RESET}"
+    colima start >> "$LOG_FILE" 2>&1 || true
+  elif [ -d "/Applications/Docker.app" ]; then
+    echo -e "  ${DIM}→ Docker Desktop detected: open -a Docker${RESET}"
+    open -a Docker >> "$LOG_FILE" 2>&1 || true
+  else
+    echo -e "  ${RED}No Docker runtime found. Install Colima ('brew install colima') or Docker Desktop, then retry.${RESET}"
+    exit 1
+  fi
+
+  echo -e "  ${DIM}→ Waiting for Docker daemon to become ready...${RESET}"
+  DOCKER_READY=false
+  for _ in $(seq 1 30); do
+    if docker info > /dev/null 2>&1; then
+      DOCKER_READY=true
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "$DOCKER_READY" != true ]; then
+    echo -e "  ${RED}Docker daemon did not start in time. Start it manually (Colima: 'colima start', or launch Docker Desktop) and retry.${RESET}"
+    exit 1
+  fi
 fi
 
 cd cloud
