@@ -12,9 +12,11 @@
  *
  * Actions:
  * - `login(email, password)` — Authenticate and store tokens
+ * - `refresh()` — Exchange the stored refresh token for a fresh access token
  * - `logout()` — Clear all auth state
  * - `switchFarm(farmId)` — Change the active farm context
  */
+import axios from 'axios';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { apiClient } from '@/api/client';
@@ -32,13 +34,14 @@ interface AuthState {
   refreshToken: string | null;
   currentFarm: string | null;
   login: (email: string, password: string) => Promise<void>;
+  refresh: () => Promise<string>;
   logout: () => void;
   switchFarm: (farmId: string) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       token: null,
       refreshToken: null,
@@ -55,6 +58,23 @@ export const useAuthStore = create<AuthState>()(
           refreshToken: refresh_token,
           user: { id: '', email, fullName: '', role: 'user' },
         });
+      },
+
+      refresh: async (): Promise<string> => {
+        const currentRefreshToken = get().refreshToken;
+        if (!currentRefreshToken) {
+          throw new Error('No refresh token available');
+        }
+        // Use a bare axios instance (not apiClient) so the 401 response
+        // interceptor cannot recurse into this refresh call.
+        const response = await axios.post('/api/auth/refresh', {
+          refresh_token: currentRefreshToken,
+        });
+        const { access_token, refresh_token } = response.data;
+        // The backend rotates refresh tokens (old one is blacklisted), so we
+        // MUST store the newly issued refresh_token for the next refresh.
+        set({ token: access_token, refreshToken: refresh_token });
+        return access_token;
       },
 
       logout: () => {
