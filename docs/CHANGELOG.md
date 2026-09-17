@@ -1,4 +1,113 @@
-# Changelog
+# Changelog# Changelog
+
+## 2026-09-16 — Simulation Preflight Status + Dashboard "Simulation Mode" Banner
+
+### Problem
+
+The dashboard live view counts only *today's* BLE sightings and the current
+herdsman session. When a farm's simulator wasn't running (e.g. a demo left
+overnight), the farm showed zero detections and looked broken — even though the
+gateway, ear tags, seed data, and ingestion pipeline were all healthy. There was
+no at-a-glance way to tell "no data because nothing is running" from an actual
+scanning fault.
+
+### 1. Backend preflight endpoint (`api_gateway/app/routers/system.py`)
+
+Added `GET /api/v1/system/simulation-status` (public, mirrors the existing
+`/status`). In one query it reports, per farm that owns a BLE gateway:
+`registered_tags`, `sightings_today`, `animals_today`, `session_active`,
+`gateway_last_seen`, and a `stale` flag (has tags but zero sightings today). It
+also returns an `overall` verdict (`healthy` / `partial` / `idle` /
+`no_gateways`) plus active/stale farm counts for a banner headline.
+
+### 2. Dashboard "simulation mode" banner (`dashboard/`)
+
+- `src/hooks/useSimulationHealth.ts` — TanStack Query hook polling the preflight
+  endpoint every 10s.
+- `src/components/SimulationBanner.tsx` — a slim global banner that detects
+  "simulation mode" by probing the dev-only `GET /dev/simulator/status` control
+  plane (renders nothing in production). Shows a per-farm status chip (green =
+  reporting, amber = idle/stale) and a **Restart everything** button.
+- Mounted in `src/components/layout/AppLayout.tsx` as a strip above the routed
+  content (main is now a flex column).
+
+### 3. One-click "Restart everything" (`dashboard/vite-simulator-plugin.ts`)
+
+Extended the dev-server simulator control plugin with `POST /dev/simulator/restart`
+(refactored shared `spawnLoopSimulators` / `stopSimulators` helpers). It stops any
+running sims and re-spawns both farm loop simulators on the host. This lives in
+the Vite dev server (host, localhost-only, dev-only, hardcoded commands) because
+the API gateway runs in a container and cannot orchestrate the host stack.
+
+### Verification
+
+Live: the endpoint returns `healthy` with both farms; the restart action
+re-spawns `gateway_daily_sim.py` + `sibanyoni_daily_sim.py` and the DB receives
+fresh sightings from both gateways within seconds; stop cleans up. Dashboard
+`tsc --noEmit` and `npm run build` both pass. The banner is hidden entirely when
+the dev control plane is unreachable (production).
+
+## 2026-09-16 — Unseen-Cow Recovery Sim, Honest Herd Count & Backend Hot-Reload
+
+### 1. "Unseen cow" recovery simulator (`tools/simulator/lostcow_sim.py`)
+
+Loch Vaal has 10 BLE-tagged cattle, but a cow that strays beyond the herdsman's
+normal sweep is never scanned and shows as "not seen today". Added a standalone,
+separately-runnable simulator that models the herdsman making a dedicated trip to
+find and BLE-track one such cow (default `LV-010`), flipping it from missing to
+seen. It reuses the existing gateway API flow (`sessions/start` → repeated
+`/api/gateway/batch` → `sessions/end`), matches the seeded ear-tag MACs, and
+follows the project's `click` + `--seed` + `--offline` conventions.
+
+New Makefile targets (and a `pkill` line in `stop-all`):
+
+- `make simulate-lostcow` — find & track LV-010 for one trip
+- `make simulate-lostcow-strays` — herdsman searches but never gets it in range
+- `make simulate-lostcow-offline` — no API, print only
+
+### 2. Herd-count reconciliation made consistent (`api_gateway/app/routers/gateway.py`)
+
+`GET /api/v1/gateway/herd-count/{farm_id}` promised a daily "are all my cattle
+accounted for today?" check, but `missing` used a rolling 24h window while
+`seen_today` used the calendar day. That let the endpoint report `seen_today: 1/10`
+with `missing_count: 0` — internally inconsistent for a stock check.
+
+- **Default is now today-based**: `missing` is the exact complement of
+  `seen_today`, so `seen_today + missing_count == total_registered` always holds.
+- **Backward compatible**: pass `?missing_threshold_hours=N` to use the old
+  rolling-window behaviour; `hours_missing` still reports true elapsed time.
+- **Hardened**: `last_row.time` is now coerced to a timezone-aware `datetime`
+  before `.isoformat()` / delta math, so a string timestamp (e.g. from SQLite in
+  tests) can no longer raise `AttributeError`.
+
+Added a `TestHerdCount` suite in `tests/test_gateway.py` (never-seen, seen-today,
+and rolling-window cases); all 18 gateway tests pass.
+
+### 3. Backend hot-reload for local development (`cloud/docker-compose.yml`)
+
+All four Python services now hot-reload on file save — no rebuild, no restart.
+`api_gateway` uses `uvicorn --reload`; the plain workers (`mqtt_writer`,
+`alert_engine`, `analytics_engine`) are wrapped with the `watchfiles` CLI. Source
+is bind-mounted over the baked-in copies, and `WATCHFILES_FORCE_POLLING=true` is
+set because macOS bind mounts don't forward inotify events into the Docker Linux
+VM. Dockerfiles are unchanged for production (mounts/commands live only in
+compose). `watchfiles` was added to the three workers' `requirements.txt`.
+Full guide: `docs/LOCAL_HOT_RELOAD.md`.
+
+### 4. pip build resilience (all Python Dockerfiles)
+
+Backend image builds now use `pip install --timeout 120 --retries 10` so slow
+mirrors or large wheels (numpy, shapely, boto3, firebase-admin) don't abort the
+build on a transient network hiccup.
+
+### Verification
+
+- 18/18 `api_gateway` gateway tests pass on in-memory SQLite.
+- Live: recovering a cow moves `seen_today` up and drops it from `missing`, with
+  the `seen_today + missing_count == total` invariant holding.
+- Live: edited a source file in `api_gateway` and `mqtt_writer` and observed
+  `WatchFiles detected changes … Reloading` / `changes detected` in the logs,
+  then reverted — no rebuild needed.
 
 ## 2026-09-14 — Migration Ordering Fix (fresh-DB reliability)
 

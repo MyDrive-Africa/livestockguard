@@ -16,6 +16,8 @@ import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from datetime import datetime, timedelta, timezone
+
 from tests.conftest import (
     TEST_ORG_ID, TEST_FARM_ID, TEST_ANIMAL_ID,
     test_session_factory,
@@ -297,3 +299,107 @@ class TestSessions:
             json={"latitude": -29.12, "longitude": 26.21},
         )
         assert response.status_code == 404
+
+
+# ─── Herd Count Reconciliation ────────────────────────
+
+
+class TestHerdCount:
+    """The daily stock-check: seen_today vs missing must stay consistent.
+
+    Regression guard for the reconciliation fix — by default 'missing' is the
+    exact complement of 'seen_today', so seen_today + missing_count == total.
+    """
+
+    @pytest_asyncio.fixture
+    async def seed_two_tagged_animals(self, db_session: AsyncSession, seed_gateway, seed_animal):
+        """Two BLE-tagged animals: 'Bella' (seed_animal) and a second one."""
+        second_id = uuid.UUID("44444444-4444-4444-4444-4444444444a2")
+        second = Animal(
+            id=second_id,
+            farm_id=TEST_FARM_ID,
+            name="Nandi",
+            tag_id="LG-002",
+            species="cattle",
+            breed="Nguni",
+            status="active",
+        )
+        db_session.add(second)
+        db_session.add(BleEarTag(
+            id=uuid.UUID("99999999-9999-9999-9999-9999999999a1"),
+            farm_id=TEST_FARM_ID, animal_id=TEST_ANIMAL_ID,
+            mac_address="AA:BB:CC:DD:EE:01", tag_name="Tag-Bella", status="active",
+        ))
+        db_session.add(BleEarTag(
+            id=uuid.UUID("99999999-9999-9999-9999-9999999999a2"),
+            farm_id=TEST_FARM_ID, animal_id=second_id,
+            mac_address="AA:BB:CC:DD:EE:02", tag_name="Tag-Nandi", status="active",
+        ))
+        await db_session.commit()
+        return second_id
+
+    @pytest.mark.asyncio
+    async def test_all_missing_when_never_seen(self, client: AsyncClient, seed_two_tagged_animals):
+        """With no sightings, every tagged animal is missing (complement holds)."""
+        response = await client.get(f"/api/v1/gateway/herd-count/{TEST_FARM_ID}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_registered"] == 2
+        assert data["seen_today"] == 0
+        assert data["missing_count"] == 2
+        assert data["seen_today"] + data["missing_count"] == data["total_registered"]
+        assert sorted(m["name"] for m in data["missing"]) == ["Bella", "Nandi"]
+
+    @pytest.mark.asyncio
+    async def test_seen_today_removes_from_missing(
+        self, client: AsyncClient, seed_two_tagged_animals, db_session: AsyncSession
+    ):
+        """A sighting today flips that animal to seen; the other stays missing."""
+        db_session.add(BleSighting(
+            time=datetime.now(timezone.utc),
+            gateway_id=TEST_GATEWAY_ID,
+            ble_tag_id=uuid.UUID("99999999-9999-9999-9999-9999999999a1"),
+            mac_address="AA:BB:CC:DD:EE:01",
+            animal_id=TEST_ANIMAL_ID,
+            rssi=-70,
+            gateway_latitude=-29.12,
+            gateway_longitude=26.21,
+        ))
+        await db_session.commit()
+
+        response = await client.get(f"/api/v1/gateway/herd-count/{TEST_FARM_ID}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["seen_today"] == 1
+        assert data["missing_count"] == 1
+        assert data["seen_today"] + data["missing_count"] == data["total_registered"]
+        # Only the un-sighted animal remains in the missing list.
+        assert [m["name"] for m in data["missing"]] == ["Nandi"]
+        assert data["coverage_pct"] == 50.0
+
+    @pytest.mark.asyncio
+    async def test_rolling_window_ignores_calendar_day(
+        self, client: AsyncClient, seed_two_tagged_animals, db_session: AsyncSession
+    ):
+        """With missing_threshold_hours, a recent-but-not-today sighting counts as seen."""
+        # Bella seen ~5 hours ago (yesterday-ish, but within a 24h window).
+        db_session.add(BleSighting(
+            time=datetime.now(timezone.utc) - timedelta(hours=5),
+            gateway_id=TEST_GATEWAY_ID,
+            ble_tag_id=uuid.UUID("99999999-9999-9999-9999-9999999999a1"),
+            mac_address="AA:BB:CC:DD:EE:01",
+            animal_id=TEST_ANIMAL_ID,
+            rssi=-70,
+            gateway_latitude=-29.12,
+            gateway_longitude=26.21,
+        ))
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/v1/gateway/herd-count/{TEST_FARM_ID}?missing_threshold_hours=24"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # Bella's 5h-old sighting is inside the 24h window → not missing.
+        assert "Bella" not in [m["name"] for m in data["missing"]]
+        assert "Nandi" in [m["name"] for m in data["missing"]]

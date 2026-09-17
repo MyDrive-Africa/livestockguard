@@ -169,6 +169,18 @@ simulate-day-sibanyoni: ## Simulate full herdsman day at Sibanyoni (50 cattle, 1
 	@echo "$(GREEN)Starting Sibanyoni Farm daily routine simulation (50 cattle)...$(RESET)"
 	cd tools/simulator && python3 sibanyoni_daily_sim.py --speed 120
 
+simulate-lostcow: ## Find & BLE-track the normally-unseen Loch Vaal cow (LV-010) for one trip
+	@echo "$(GREEN)Starting unseen-cow recovery sim (Loch Vaal, LV-010 found)...$(RESET)"
+	cd tools/simulator && python3 lostcow_sim.py --cow LV-010 --outcome found
+
+simulate-lostcow-strays: ## Unseen cow: herdsman searches but never gets LV-010 in range
+	@echo "$(YELLOW)Starting unseen-cow sim (Loch Vaal, LV-010 strays)...$(RESET)"
+	cd tools/simulator && python3 lostcow_sim.py --cow LV-010 --outcome strays
+
+simulate-lostcow-offline: ## Unseen-cow recovery sim without API (print only)
+	@echo "$(GREEN)Starting unseen-cow recovery sim (offline)...$(RESET)"
+	cd tools/simulator && python3 lostcow_sim.py --cow LV-010 --outcome found --offline
+
 simulate-loop: ## Run both simulators in continuous loop (random days, never stops)
 	@echo "$(GREEN)Starting LOOP simulation (both farms, Ctrl+C to stop)...$(RESET)"
 	@cd tools/simulator && python3 gateway_daily_sim.py --speed 120 --loop &
@@ -297,6 +309,7 @@ mobile-android: ## Build and launch mobile app on Android emulator
 stop-all: ## Stop all running processes (Docker stays up)
 	@echo "$(YELLOW)Stopping simulators, dashboard, mobile...$(RESET)"
 	-pkill -f "gateway_daily_sim" 2>/dev/null || true
+	-pkill -f "lostcow_sim" 2>/dev/null || true
 	-pkill -f "simulator.py" 2>/dev/null || true
 	-pkill -f "vite.*5173" 2>/dev/null || true
 	-pkill -f "expo.*8082" 2>/dev/null || true

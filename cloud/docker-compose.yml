@@ -52,6 +52,16 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production}
       MQTT_HOST: emqx
       MQTT_PORT: 1883
+      # macOS bind mounts don't forward inotify events into the Linux VM, so
+      # WatchFiles must poll for changes to detect edits reliably.
+      WATCHFILES_FORCE_POLLING: "true"
+    # Dev hot-reload: mount source over the baked-in copies and enable --reload
+    # so code edits take effect without rebuilding the image. The Dockerfile
+    # still bakes the source in for production (where these mounts are absent).
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app", "--reload-dir", "/app/livestockguard_common"]
+    volumes:
+      - ./services/api_gateway/app:/app/app
+      - ./shared/livestockguard_common:/app/livestockguard_common
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,6 +77,17 @@ services:
       MQTT_PORT: 1883
       DATABASE_URL: postgresql://livestockguard:${POSTGRES_PASSWORD:-livestockguard_dev}@postgres:5432/livestockguard
       REDIS_URL: redis://redis:6379/0
+      # macOS bind mounts don't forward inotify events into the Linux VM, so
+      # watchfiles must poll to detect edits reliably.
+      WATCHFILES_FORCE_POLLING: "true"
+    # Dev hot-reload: watchfiles restarts the process when the mounted source
+    # changes. This is a plain (non-uvicorn) worker, so we wrap it with the
+    # watchfiles CLI rather than using --reload. The Dockerfile still bakes the
+    # source in for production (where these mounts and command are absent).
+    command: ["watchfiles", "python mqtt_writer.py", "/app/mqtt_writer.py", "/app/livestockguard_common"]
+    volumes:
+      - ./services/mqtt_writer/mqtt_writer.py:/app/mqtt_writer.py
+      - ./shared/livestockguard_common:/app/livestockguard_common
     depends_on:
       postgres:
         condition: service_healthy
@@ -86,8 +107,16 @@ services:
       ALERT_EMAIL_RECIPIENTS: ${ALERT_EMAIL_RECIPIENTS:-}
       FIREBASE_CREDENTIALS_PATH: /app/config/firebase-credentials.json
       WEBHOOK_URLS: ${WEBHOOK_URLS:-}
+      # macOS bind mounts don't forward inotify events into the Linux VM, so
+      # watchfiles must poll to detect edits reliably.
+      WATCHFILES_FORCE_POLLING: "true"
+    # Dev hot-reload: watchfiles restarts the worker when the mounted source
+    # changes. The Dockerfile still bakes the source in for production.
+    command: ["watchfiles", "python -m app.main", "/app/app", "/app/livestockguard_common"]
     volumes:
       - ${FIREBASE_CREDENTIALS_FILE:-./config/firebase-credentials.json}:/app/config/firebase-credentials.json:ro
+      - ./services/alert_engine/app:/app/app
+      - ./shared/livestockguard_common:/app/livestockguard_common
     depends_on:
       redis:
         condition: service_healthy
@@ -110,6 +139,15 @@ services:
       MISSING_ALERT_THRESHOLD_HOURS: "6"
       MISSING_ALERT_SEVERITY: "critical"
       MISSING_ALERT_ON_NEVER_SEEN: "false"
+      # macOS bind mounts don't forward inotify events into the Linux VM, so
+      # watchfiles must poll to detect edits reliably.
+      WATCHFILES_FORCE_POLLING: "true"
+    # Dev hot-reload: watchfiles restarts the scheduler when the mounted source
+    # changes. This service vendors only its own app/ (no livestockguard_common).
+    # The Dockerfile still bakes the source in for production.
+    command: ["watchfiles", "python -m app.main", "/app/app"]
+    volumes:
+      - ./services/analytics_engine/app:/app/app
     depends_on:
       postgres:
         condition: service_healthy
