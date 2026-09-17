@@ -150,6 +150,7 @@ export default function MapPage() {
   const connectionStatus = useRealtimeStore((state) => state.connectionStatus);
   const positions = useRealtimeStore((state) => state.positions);
   const currentFarm = useAuthStore((state) => state.currentFarm);
+  const switchFarm = useAuthStore((state) => state.switchFarm);
   const resolved = useThemeStore((state) => state.resolved);
   const addToast = useToastStore((state) => state.addToast);
 
@@ -158,6 +159,16 @@ export default function MapPage() {
   const [selectedFarmId, setSelectedFarmId] = useState<string>(currentFarm || '');
   const [geofenceIds, setGeofenceIds] = useState<string[]>([]);
   const geofenceIdsRef = useRef<string[]>([]);
+
+  // Keep the auth store's active farm in sync with the map's selected farm.
+  // Store-scoped hooks (e.g. useRobots via useActiveFarmId) resolve their farm
+  // from currentFarm, so without this the robot markers would stay on the
+  // previous farm even after switching the map to another farm (e.g. Sibanyoni).
+  useEffect(() => {
+    if (selectedFarmId && selectedFarmId !== currentFarm) {
+      switchFarm(selectedFarmId);
+    }
+  }, [selectedFarmId, currentFarm, switchFarm]);
 
   // Fetch available farms on mount
   useEffect(() => {
