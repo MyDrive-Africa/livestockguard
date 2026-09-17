@@ -106,12 +106,27 @@ export default function SimulationBanner() {
       if (resp.ok && body.status === 'restarted') {
         addToast({
           title: 'Simulators restarted',
-          message: 'Loch Vaal and Sibanyoni simulators are running. Data should resume shortly.',
+          message: `Loch Vaal and Sibanyoni simulators are running${
+            body.using_venv === false ? ' (host python3)' : ''
+          }. Data should resume shortly.`,
           severity: 'success',
           duration: 6000,
         });
         // Give the sims a moment to emit their first batch, then refresh.
         setTimeout(() => refetch(), 5000);
+      } else if (body.status === 'failed') {
+        // The control plane was reached but the sims failed to launch
+        // (e.g. missing Python deps). Surface the real reason.
+        addToast({
+          title: 'Simulators failed to start',
+          message:
+            body.error ||
+            'The simulators exited on launch. Run `make setup` to build the simulator venv, then try again.',
+          severity: 'high',
+          duration: 10000,
+        });
+        // eslint-disable-next-line no-console
+        console.error('Simulator restart failed:', body.error);
       } else {
         throw new Error(body.error || 'Restart failed');
       }

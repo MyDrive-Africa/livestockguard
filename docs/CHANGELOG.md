@@ -39,11 +39,33 @@ running sims and re-spawns both farm loop simulators on the host. This lives in
 the Vite dev server (host, localhost-only, dev-only, hardcoded commands) because
 the API gateway runs in a container and cannot orchestrate the host stack.
 
+### 4. Robust interpreter selection + no more silent failures (`dashboard/vite-simulator-plugin.ts`)
+
+Originally the sims were spawned with bare `python3` and `stdio: 'ignore'`, so a
+host Python missing `click`/`requests` would crash instantly with no trace and
+the banner would still claim "data should resume". Fixed:
+
+- **Prefer the simulator venv**: `resolvePythonBin()` uses
+  `tools/simulator/.venv/bin/python3` (or `Scripts/python.exe` on Windows) when
+  present — the env `make setup` builds with the sim deps — and only falls back
+  to host `python3` otherwise.
+- **Capture stderr + detect early exit**: a sim that exits non-zero within
+  `CRASH_WINDOW_MS` (3s) is treated as a launch failure; the stderr tail (e.g. an
+  `ImportError`) is recorded in `lastError`.
+- **Report the truth**: start/restart wait just past the crash window before
+  responding, so a launch failure returns `{status:"failed", error, using_venv}`
+  (HTTP 500) instead of a false success; `GET /dev/simulator/status` now also
+  exposes `using_venv` and `error`. The banner surfaces the real reason and
+  suggests `make setup` rather than the misleading "data should resume" toast.
+
 ### Verification
 
 Live: the endpoint returns `healthy` with both farms; the restart action
-re-spawns `gateway_daily_sim.py` + `sibanyoni_daily_sim.py` and the DB receives
-fresh sightings from both gateways within seconds; stop cleans up. Dashboard
+re-spawns `gateway_daily_sim.py` + `sibanyoni_daily_sim.py` under the venv
+interpreter (`status: restarted, using_venv: true`) and the DB receives fresh
+sightings from both gateways within seconds; stop cleans up. The early-exit
+detection was verified against a forced `ModuleNotFoundError` (exit 1 in ~2.4s,
+correctly flagged as a failure with the traceback captured). Dashboard
 `tsc --noEmit` and `npm run build` both pass. The banner is hidden entirely when
 the dev control plane is unreachable (production).
 
