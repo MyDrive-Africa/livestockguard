@@ -20,6 +20,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import ThemeToggle from '@/components/ThemeToggle';
 import ToastContainer from '@/components/ToastContainer';
+import SimulationBanner from '@/components/SimulationBanner';
 
 const navItems = [
   { path: '/map', label: 'Map', icon: '🗺️' },
@@ -145,9 +146,13 @@ export default function AppLayout() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-hidden relative">
-        <div className="absolute inset-0">
-          <Outlet />
+      <main className="flex-1 overflow-hidden flex flex-col">
+        {/* Simulation-mode banner (dev/sim only; renders nothing in production) */}
+        <SimulationBanner />
+        <div className="flex-1 relative overflow-hidden">
+          <div className="absolute inset-0">
+            <Outlet />
+          </div>
         </div>
       </main>
 

@@ -7,7 +7,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY services/api_gateway/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Increase pip network resilience (slow mirrors / large wheels like shapely, boto3)
+RUN pip install --no-cache-dir --timeout 120 --retries 10 -r requirements.txt
 
 COPY services/api_gateway/app/ ./app/
 COPY shared/livestockguard_common/ ./livestockguard_common/

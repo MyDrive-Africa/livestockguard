@@ -719,15 +719,27 @@ class HerdCountResponse(BaseModel):
 @router.get("/herd-count/{farm_id}", response_model=HerdCountResponse)
 async def get_herd_count(
     farm_id: UUID,
-    missing_threshold_hours: int = Query(default=24, description="Hours without sighting to be considered missing"),
+    missing_threshold_hours: Optional[int] = Query(
+        default=None,
+        description="Rolling window (hours) for the missing check. If omitted, "
+        "reconciliation is today-based: any animal not seen since the start of "
+        "today counts as missing, matching 'seen_today'.",
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Cattle count reconciliation for a farm.
 
     Returns total registered animals (with BLE tags), how many were seen today,
-    and identifies which specific animals are MISSING (not seen within threshold).
-    This is the herdsman's daily stock check — "are all my cattle accounted for?"
+    and identifies which specific animals are MISSING. This is the herdsman's
+    daily stock check — "are all my cattle accounted for today?"
+
+    By default `missing` is the exact complement of `seen_today`: an animal is
+    missing if it has no sighting since the start of the current day, so
+    `seen_today + missing_count == total_registered`. Pass
+    `missing_threshold_hours` to instead use a rolling time window (e.g. 24 for
+    "not seen in the last day") regardless of calendar date. `hours_missing`
+    always reports the true elapsed time since the last sighting.
     """
     from livestockguard_common.db_models import Farm
 
@@ -812,15 +824,32 @@ async def get_herd_count(
         hours_missing = None
 
         if last_row:
-            last_seen_iso = last_row.time.isoformat()
+            # last_row.time is a datetime on PostgreSQL but may come back as an
+            # ISO string on other drivers (e.g. SQLite in tests) — coerce it.
+            last_time = last_row.time
+            if isinstance(last_time, str):
+                last_time = datetime.fromisoformat(last_time.replace("Z", "+00:00"))
+            if last_time.tzinfo is None:
+                last_time = last_time.replace(tzinfo=timezone.utc)
+
+            last_seen_iso = last_time.isoformat()
             last_seen_by = last_row.gateway_name
-            hours_missing = round((now - last_row.time).total_seconds() / 3600, 1)
+            hours_missing = round((now - last_time).total_seconds() / 3600, 1)
         else:
             # Never been seen by any gateway
             hours_missing = None  # Unknown — never detected
 
-        # Missing if: never seen OR not seen within threshold
-        is_missing = (last_row is None) or (hours_missing and hours_missing > missing_threshold_hours)
+        # Determine "missing".
+        if missing_threshold_hours is not None:
+            # Rolling-window mode: missing if never seen, or last sighting is
+            # older than the requested number of hours.
+            is_missing = (last_row is None) or (
+                hours_missing is not None and hours_missing > missing_threshold_hours
+            )
+        else:
+            # Default: today-based reconciliation. Missing is the exact
+            # complement of seen_today, so the two always add up to the total.
+            is_missing = animal_id_str not in seen_today_ids
 
         if is_missing:
             missing_animals.append(MissingAnimalInfo(

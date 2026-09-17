@@ -88,3 +88,106 @@ async def system_status(db: AsyncSession = Depends(get_db)):
             "size": size_row.db_size if size_row else "unknown",
         },
     }
+
+
+@router.get("/simulation-status")
+async def simulation_status(db: AsyncSession = Depends(get_db)):
+    """
+    Per-farm simulation preflight.
+
+    For each farm that has a BLE gateway, report whether data is actually
+    flowing right now: how many sightings landed today, how many distinct
+    animals were seen, whether a herdsman session is currently active, and when
+    the farm's gateway was last heard from. Powers the dashboard "simulation
+    mode" banner so an idle/stopped simulator is obvious at a glance instead of
+    looking like a scanning failure.
+
+    A farm is considered `stale` when it has registered BLE tags but zero
+    sightings today (the classic "nothing is being detected" symptom).
+    """
+    now = datetime.now(timezone.utc)
+
+    # One pass over farms that own a gateway. Left-join today's sightings and
+    # any active session so farms with no activity still appear (as stale).
+    query = text("""
+        SELECT
+            f.id::text                                   AS farm_id,
+            f.name                                       AS farm_name,
+            g.serial_number                              AS gateway_serial,
+            g.last_seen                                  AS gateway_last_seen,
+            COALESCE(tags.tag_count, 0)                  AS registered_tags,
+            COALESCE(today.sightings, 0)                 AS sightings_today,
+            COALESCE(today.animals, 0)                   AS animals_today,
+            (sess.session_id IS NOT NULL)                AS session_active
+        FROM gateway_devices g
+        JOIN farms f ON f.id = g.farm_id
+        LEFT JOIN (
+            SELECT bt.farm_id, COUNT(*) AS tag_count
+            FROM ble_ear_tags bt
+            WHERE bt.status = 'active'
+            GROUP BY bt.farm_id
+        ) tags ON tags.farm_id = g.farm_id
+        LEFT JOIN (
+            SELECT s.gateway_id,
+                   COUNT(*) AS sightings,
+                   COUNT(DISTINCT s.animal_id) AS animals
+            FROM ble_sightings s
+            WHERE s.time >= CURRENT_DATE
+            GROUP BY s.gateway_id
+        ) today ON today.gateway_id = g.id
+        LEFT JOIN LATERAL (
+            SELECT hs.id AS session_id
+            FROM herdsman_sessions hs
+            WHERE hs.gateway_id = g.id AND hs.status = 'active'
+            ORDER BY hs.started_at DESC
+            LIMIT 1
+        ) sess ON true
+        WHERE g.status = 'active'
+        ORDER BY f.name
+    """)
+
+    try:
+        rows = (await db.execute(query)).fetchall()
+    except Exception as e:
+        return {"status": "error", "detail": str(e), "farms": []}
+
+    farms = []
+    any_active = False
+    any_stale = False
+    for r in rows:
+        # "stale" = has tags to detect but nothing seen today.
+        stale = r.registered_tags > 0 and r.sightings_today == 0
+        active = r.sightings_today > 0 or r.session_active
+        any_active = any_active or active
+        any_stale = any_stale or stale
+        farms.append({
+            "farm_id": r.farm_id,
+            "farm_name": r.farm_name,
+            "gateway_serial": r.gateway_serial,
+            "gateway_last_seen": r.gateway_last_seen.isoformat() if r.gateway_last_seen else None,
+            "registered_tags": r.registered_tags,
+            "sightings_today": r.sightings_today,
+            "animals_today": r.animals_today,
+            "session_active": bool(r.session_active),
+            "stale": stale,
+        })
+
+    # Overall verdict for the banner headline.
+    if not farms:
+        overall = "no_gateways"
+    elif any_active and not any_stale:
+        overall = "healthy"
+    elif any_active and any_stale:
+        overall = "partial"
+    else:
+        overall = "idle"
+
+    return {
+        "status": "ok",
+        "overall": overall,
+        "timestamp": now.isoformat(),
+        "farm_count": len(farms),
+        "active_farm_count": sum(1 for f in farms if not f["stale"] and (f["sightings_today"] > 0 or f["session_active"])),
+        "stale_farm_count": sum(1 for f in farms if f["stale"]),
+        "farms": farms,
+    }

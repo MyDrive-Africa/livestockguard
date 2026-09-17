@@ -138,6 +138,27 @@ python3 sibanyoni_daily_sim.py --speed 360 --scenario breach
 | `make simulate-day-theft` | Theft scenario |
 | `make simulate-day-breach` | Geofence breach scenario |
 | `make simulate-day-offline` | Offline (no API) |
+| `make simulate-lostcow` | Find & BLE-track a normally-unseen cow (LV-010) |
+| `make simulate-lostcow-strays` | Herdsman searches but never gets LV-010 in range |
+| `make simulate-lostcow-offline` | Unseen-cow recovery, offline (no API) |
+
+#### Unseen-cow recovery (`lostcow_sim.py`)
+
+Loch Vaal has 10 BLE-tagged cattle, but a cow that strays beyond the herdsman's
+normal sweep is never scanned and shows as "not seen today" in the herd count.
+`lostcow_sim.py` is a standalone, separately-runnable simulator that models the
+herdsman making a dedicated trip to find and track one such cow — flipping it
+from missing to seen. Run it on the days you want to demonstrate recovery.
+
+```bash
+cd tools/simulator
+
+python3 lostcow_sim.py                    # find & track LV-010
+python3 lostcow_sim.py --cow LV-003       # a different animal
+python3 lostcow_sim.py --outcome strays   # searches but never finds it
+python3 lostcow_sim.py --offline          # no API, print only
+python3 lostcow_sim.py --seed 42          # reproducible run
+```
 
 ### Boschhoek Farm (Free State) — GPS Collar (MQTT)
 
@@ -181,6 +202,37 @@ The simulation hasn't sent any BLE scans yet. Wait for the herdsman to be within
 ### WebSocket not connecting
 
 The dashboard expects the API at `localhost:8000`. Check `docker compose ps` to confirm the API container is healthy.
+
+### "Nothing is being detected/scanned" for a farm
+
+The live view counts **today's** sightings and the current session. If a farm
+shows zero detections, the usual cause is simply that **its simulator isn't
+running** (e.g. a demo left overnight — yesterday's data doesn't count today).
+
+Confirm with the preflight endpoint, which reports per farm whether data is
+flowing today:
+
+```bash
+curl -s http://localhost:8000/api/v1/system/simulation-status | python3 -m json.tool
+```
+
+A farm with `"stale": true` (registered tags but `sightings_today: 0`) just
+needs its simulator started:
+
+```bash
+make simulate-day-sibanyoni    # or simulate-day (Loch Vaal), or simulate-loop
+```
+
+In the dashboard, "simulation mode" surfaces this automatically: a banner at the
+top of every page shows a per-farm status chip (green = reporting, amber =
+idle/stale) and a **Restart everything** button that stops and re-launches both
+farm simulators via the Vite dev server. The banner only appears when the dev
+simulator control plane is reachable (it renders nothing in production builds).
+
+> Note: mid-day detections legitimately drop toward 0 during the grazing phase,
+> when cattle scatter 150–250 m out and most fall outside the 100 m BLE range.
+> That's realistic behaviour, not a fault — coverage returns when the herd
+> regroups for the return leg.
 
 ---
 
