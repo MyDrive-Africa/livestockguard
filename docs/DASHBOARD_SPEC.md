@@ -39,6 +39,13 @@
 - View animals currently inside/outside each fence
 - Geofence templates for common shapes (paddock, kraal)
 
+### Boundary Planner (`/boundary-planner`)
+- Standalone, read-only planning tool for comparing candidate farm-boundary options (currently Sibanyoni)
+- Draws candidate boundary options over verified exclusion structures (houses, compounds, fields) with per-structure and per-cluster buffer rings
+- Isolation guarantee: writes nothing to the `geofences` table, generates no alerts, runs no breach detection, and does not affect the live map or simulators
+- Live geofences may be shown for reference only via read-only `GET /api/geofences`
+- Promoting a chosen option into a real geofence is a separate, deliberate step handled outside this page
+
 ### Alerts (`/alerts`)
 - Real-time feed with severity badges (critical, warning, info)
 - Filter by type: breach, low-battery, no-signal, health, panic

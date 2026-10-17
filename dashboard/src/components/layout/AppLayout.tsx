@@ -26,6 +26,7 @@ const navItems = [
   { path: '/map', label: 'Map', icon: '🗺️' },
   { path: '/animals', label: 'Animals', icon: '🐄' },
   { path: '/geofences', label: 'Geofences', icon: '📍' },
+  { path: '/boundary-planner', label: 'Boundary Planner', icon: '📐' },
   { path: '/alerts', label: 'Alerts', icon: '🔔' },
   { path: '/analytics', label: 'Analytics', icon: '📊' },
   { path: '/devices', label: 'Devices', icon: '📡' },

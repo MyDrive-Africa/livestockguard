@@ -3,6 +3,7 @@ import { useAuthStore } from '@/stores/authStore';
 import AppLayout from '@/components/layout/AppLayout';
 import LoginPage from '@/pages/auth/LoginPage';
 import MapPage from '@/pages/map/MapPage';
+import BoundaryPlannerPage from '@/pages/boundary/BoundaryPlannerPage';
 import AnimalsPage from '@/pages/animals/AnimalsPage';
 import ImportPage from '@/pages/animals/ImportPage';
 import GeofencesPage from '@/pages/geofences/GeofencesPage';
@@ -34,6 +35,7 @@ export default function App() {
       >
         <Route index element={<Navigate to="/map" replace />} />
         <Route path="map" element={<MapPage />} />
+        <Route path="boundary-planner" element={<BoundaryPlannerPage />} />
         <Route path="animals" element={<AnimalsPage />} />
         <Route path="geofences" element={<GeofencesPage />} />
         <Route path="alerts" element={<AlertsPage />} />
