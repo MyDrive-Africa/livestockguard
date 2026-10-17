@@ -1,9 +1,44 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import { login } from '../services/api';
+import { login, apiBaseUrl } from '../services/api';
 
 interface Props {
   onLogin: (role: string) => void;
+}
+
+/**
+ * Translate a login failure into a clear title + message.
+ *
+ * Distinguishes the three cases that previously all showed "Invalid credentials":
+ *  - 401                  → the credentials really are wrong.
+ *  - no response / network → the server can't be reached (down, wrong host, offline).
+ *  - anything else         → surface the server's detail or a generic fallback.
+ */
+function describeLoginError(err: any): { title: string; message: string } {
+  const status = err?.response?.status;
+
+  if (status === 401) {
+    return { title: 'Login Failed', message: 'Incorrect email or password.' };
+  }
+
+  // Axios sets no `response` for connection failures; code is ERR_NETWORK / ECONNABORTED (timeout).
+  const isNetwork = !err?.response && (err?.code === 'ERR_NETWORK' || err?.code === 'ECONNABORTED' || err?.message === 'Network Error');
+  if (isNetwork) {
+    const timedOut = err?.code === 'ECONNABORTED';
+    return {
+      title: timedOut ? 'Server Timed Out' : "Can't Reach Server",
+      message:
+        `${timedOut ? 'The server did not respond in time' : 'Could not connect to the server'} at ${apiBaseUrl}.\n\n` +
+        'Check that the backend is running and reachable from this device, then try again.',
+    };
+  }
+
+  // Other HTTP errors: prefer the server's detail message if present.
+  const detail = err?.response?.data?.detail;
+  return {
+    title: 'Login Failed',
+    message: detail || `Something went wrong (status ${status ?? 'unknown'}). Please try again.`,
+  };
 }
 
 export default function LoginScreen({ onLogin }: Props) {
@@ -21,7 +56,8 @@ export default function LoginScreen({ onLogin }: Props) {
       const data = await login(email, password);
       onLogin(data.user?.role || 'viewer');
     } catch (err: any) {
-      Alert.alert('Login Failed', err.response?.data?.detail || 'Invalid credentials');
+      const { title, message } = describeLoginError(err);
+      Alert.alert(title, message);
     } finally {
       setLoading(false);
     }

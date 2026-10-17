@@ -16,6 +16,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
+import { describeAuthError } from '@/utils/authError';
 import ThemeToggle from '@/components/ThemeToggle';
 
 export default function LoginPage() {
@@ -34,8 +35,8 @@ export default function LoginPage() {
     try {
       await login(email, password);
       navigate('/map');
-    } catch {
-      setError('Invalid email or password');
+    } catch (err) {
+      setError(describeAuthError(err).message);
     } finally {
       setLoading(false);
     }
