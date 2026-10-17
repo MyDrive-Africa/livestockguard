@@ -34,6 +34,9 @@ function getApiBaseUrl(): string {
 
 const API_BASE_URL = getApiBaseUrl();
 
+/** The resolved API base URL. Exported so the UI can surface it in network-error messages. */
+export const apiBaseUrl = API_BASE_URL;
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
